@@ -41,13 +41,13 @@ void main() {
       expect(cache.get('key3'), equals('value3'));
     });
 
-    test('同じキーを set し直しても順番は変更されない', () {
+    test('同じキーを set し直すとそのキーが最新の位置に配置される', () {
       final cache = SimpleEphemeralFIFOCache<String, String>(2);
       cache.set('key1', 'value1');
       cache.set('key2', 'value2');
-      cache.set('key1', 'new_value1'); // 順番は変更されない
+      cache.set('key1', 'new_value1'); // key1 は最も新しい位置に配置される
 
-      cache.set('key3', 'value3'); // key2 が削除される（FIFO のまま）
+      cache.set('key3', 'value3'); // 最も古い key2 が削除される
 
       expect(cache.get('key2'), isNull); // key2 は削除されたはず
       expect(cache.get('key1'), equals('new_value1'));
