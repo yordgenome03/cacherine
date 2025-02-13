@@ -1,3 +1,7 @@
+## 1.0.1 - Fix description in pubspec.yaml
+
+- Updated the `description` field in `pubspec.yaml` to provide a more specific and accurate explanation of the package's functionality.
+
 ## 1.0.0 - Initial release
 
 - First release of `cacherine` package on pub.dev
