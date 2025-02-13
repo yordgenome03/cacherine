@@ -3,44 +3,45 @@ import 'package:synchronized/synchronized.dart';
 
 import '../interfaces/thread_safe_cache.dart';
 
-/// **スレッドセーフな MRU（Most Recently Used）キャッシュ**
+/// **Thread-safe MRU (Most Recently Used) Cache**
 ///
-/// **複数スレッドや非同期タスクから安全にキャッシュへアクセス** できるように、
-/// `Lock` を使用してスレッドセーフ性を確保しています。
+/// This class ensures **thread safety using `Lock`**,
+/// allowing **safe access to the cache from multiple threads or asynchronous tasks**
+/// while preventing data race conditions.
 ///
-/// **MRU 方式（最も最近使用されたアイテムを削除）** を採用しており、
-/// **キャッシュのサイズが `maxSize` を超えた場合、直近でアクセスされた要素を削除** します。
+/// **Adopts the MRU (Most Recently Used) eviction policy**,
+/// meaning **when the cache exceeds `maxSize`, the most recently accessed element is removed**.
 class MRUCache<K, V> extends ThreadSafeCache<K, V> {
   final int maxSize;
   final LinkedHashMap<K, V> _cache = LinkedHashMap();
   final _lock = Lock();
 
-  /// **指定された最大サイズで [MRUCache] のインスタンスを作成します。**
+  /// **Creates an instance of [MRUCache] with the specified maximum size.**
   ///
-  /// - **[maxSize]**: キャッシュの最大サイズ。
-  ///   このサイズを超えると、MRU ポリシーに基づき **最も最近使用された要素** が削除されます。
+  /// - **[maxSize]**: The maximum number of entries in the cache.
+  ///   If the cache exceeds this size, **the most recently used element is removed** following the MRU policy.
   ///
-  /// **[maxSize] が 0 以下の場合、 [ArgumentError] をスローします。**
+  /// **Throws [ArgumentError] if [maxSize] is 0 or less.**
   MRUCache(this.maxSize) {
     if (maxSize <= 0) {
-      throw ArgumentError('maxSize は 0 より大きい必要があります。');
+      throw ArgumentError('maxSize must be greater than 0.');
     }
   }
 
-  /// 現在キャッシュに格納されているすべてのキーを返します。
+  /// Returns all keys currently stored in the cache.
   ///
-  /// **このメソッドはスレッドセーフです**。
+  /// **This method is thread-safe.**
   @override
   Iterable<K> getKeys() {
     return Map<K, V>.of(_cache).keys;
   }
 
-  /// **指定したキーに対応する値を取得します。**
+  /// **Retrieves the value associated with the specified key.**
   ///
-  /// - **キーが存在する場合、そのキーを削除し、再追加することで「最近使用された」とマーク** します。
-  /// - **キーが存在しない場合は `null` を返します。**
+  /// - **If the key exists, it is removed and reinserted to mark it as "recently used."**
+  /// - **Returns `null` if the key does not exist.**
   ///
-  /// **このメソッドはスレッドセーフです**。
+  /// **This method is thread-safe.**
   @override
   Future<V?> get(K key) async {
     return await _lock.synchronized(() {
@@ -48,53 +49,54 @@ class MRUCache<K, V> extends ThreadSafeCache<K, V> {
 
       final value = _cache.remove(key);
       if (value != null) {
-        _cache[key] = value; // MRU: 再追加して「最近使用された」ことを記録
+        _cache[key] = value; // MRU: Reinsert to record "recently used" status
       }
       return value;
     });
   }
 
-  /// **指定したキーと値をキャッシュに保存します。**
+  /// **Stores the specified key-value pair in the cache.**
   ///
-  /// - 既存のキーに対して `set()` を呼び出すと、**その値を更新** しますが、**順番は変更されません**。
-  /// - キャッシュのサイズが **[maxSize]** を超えた場合、MRUポリシーに基づき、**最も最近使用された要素が削除** されます。
+  /// - If `set()` is called on an existing key, **its value is updated**,
+  ///   but **its order remains unchanged**.
+  /// - If the cache exceeds **[maxSize]**, the **most recently used element is removed** following the MRU policy.
   ///
-  /// **このメソッドはスレッドセーフです**。
+  /// **This method is thread-safe.**
   @override
   Future<void> set(K key, V value) async {
     await _lock.synchronized(() {
       if (_cache.length >= maxSize) {
-        _evictMRUEntry(); // MRU方式でエビクション
+        _evictMRUEntry(); // Evict using MRU policy
       }
       _cache[key] = value;
     });
   }
 
-  /// **MRU（最も最近使用された）方式でエビクション（削除）を行う**
+  /// **Evicts the most recently used (MRU) entry.**
   Future<void> _evictMRUEntry() async {
     if (_cache.isEmpty) return;
 
-    // 最後に追加されたキー（最近使用されたキー）を削除
+    // Remove the last added key (most recently used key)
     final K mruKey = _cache.keys.last;
     _cache.remove(mruKey);
   }
 
-  /// キャッシュをクリアし、すべてのデータを削除します。
+  /// Clears the cache, removing all stored data.
   ///
-  /// **このメソッドはスレッドセーフです**。
+  /// **This method is thread-safe.**
   @override
   Future<void> clear() async {
     await _lock.synchronized(_cache.clear);
   }
 
-  /// キャッシュの現在の状態を文字列で返します。
+  /// Returns a string representation of the current cache state.
   ///
-  /// - キャッシュ内に格納されている **キーと値のペア** を文字列形式で出力します。
+  /// - Outputs **key-value pairs** currently stored in the cache as a string.
   ///
-  /// **このメソッドはスレッドセーフです**。
+  /// **This method is thread-safe.**
   @override
   String toString() {
-    final snapshot = Map.of(_cache); // キャッシュのスナップショットを取得
+    final snapshot = Map.of(_cache); // Take a snapshot of the cache
     return snapshot.toString();
   }
 }

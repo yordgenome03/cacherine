@@ -2,13 +2,13 @@ import 'package:test/test.dart';
 import 'package:cacherine/src/caches/lfu_cache.dart';
 
 void main() {
-  group('LFUCache - 基本動作', () {
-    test('空のキャッシュから get() すると null を返す', () async {
+  group('LFUCache - Basic Functionality', () {
+    test('get() from an empty cache returns null', () async {
       final cache = LFUCache<String, String>(3);
       expect(await cache.get('key1'), isNull);
     });
 
-    test('set() したデータが get() で取得できる', () async {
+    test('Data set with set() can be retrieved with get()', () async {
       final cache = LFUCache<String, String>(3);
       await cache.set('key1', 'value1');
       await cache.set('key2', 'value2');
@@ -17,7 +17,7 @@ void main() {
       expect(await cache.get('key2'), equals('value2'));
     });
 
-    test('clear() でキャッシュが空になる', () async {
+    test('clear() empties the cache', () async {
       final cache = LFUCache<String, String>(3);
       await cache.set('key1', 'value1');
       await cache.set('key2', 'value2');
@@ -29,41 +29,48 @@ void main() {
     });
   });
 
-  group('LFUCache - LFU エビクションのテスト', () {
-    test('キャッシュが maxSize を超えたら LFU で削除される', () async {
+  group('LFUCache - LFU Eviction Tests', () {
+    test(
+        'When the cache exceeds maxSize, LFU eviction removes the least frequently used item',
+        () async {
       final cache = LFUCache<String, String>(2);
 
-      // key1, key2 を追加
+      // Adding key1 and key2
       await cache.set('key1', 'value1');
       await cache.set('key2', 'value2');
 
-      // key1 の使用回数を増やす
+      // Increasing the usage count for key1
       await cache.get('key1');
 
-      // key3 を追加して maxSize を超える
-      await cache.set('key3', 'value3'); // key2 が削除される（使用回数が低いため）
+      // Adding key3 and exceeding maxSize
+      await cache.set(
+          'key3', 'value3'); // key2 will be evicted (lower usage count)
 
-      expect(await cache.get('key2'), isNull); // key2 は削除されたはず
-      expect(await cache.get('key1'), equals('value1')); // key1 は使用頻度が高いので残る
-      expect(await cache.get('key3'), equals('value3')); // key3 は新しく追加されたので残る
+      expect(await cache.get('key2'), isNull); // key2 should be evicted
+      expect(await cache.get('key1'),
+          equals('value1')); // key1 remains as it has higher usage
+      expect(await cache.get('key3'),
+          equals('value3')); // key3 is newly added and should remain
     });
   });
 
-  group('LFUCache - スレッドセーフ性のテスト', () {
-    test('並列 set() / get() が安全に動作する', () async {
+  group('LFUCache - Thread-safety Tests', () {
+    test('Parallel set() / get() operations work safely', () async {
       final cache = LFUCache<int, String>(5);
 
-      // 並列で 1000 回 set & get を実行
+      // Performing 1000 parallel set & get operations
       final futures = List.generate(1000, (i) async {
-        await cache.set(i % 5, 'value$i'); // key0 ~ key4 の値が更新され続ける
-        return await cache.get(i % 5);
+        await cache.set(i % 5,
+            'value$i'); // values for keys 0 to 4 will be continuously updated
+        return await cache.get(i % 5); // Check if value can be retrieved
       });
 
       await Future.wait(futures);
-      expect(cache.getKeys().length, lessThanOrEqualTo(5));
+      expect(cache.getKeys().length,
+          lessThanOrEqualTo(5)); // Only 5 keys should remain
     });
 
-    test('並列 clear() でキャッシュが完全にクリアされる', () async {
+    test('Parallel clear() completely clears the cache', () async {
       final cache = LFUCache<String, String>(5);
       await cache.set('key1', 'value1');
       await cache.set('key2', 'value2');
@@ -82,8 +89,8 @@ void main() {
     });
   });
 
-  group('LFUCache - エラーハンドリング', () {
-    test('maxSize が 0 以下の時に ArgumentError をスローする', () {
+  group('LFUCache - Error Handling', () {
+    test('Throws ArgumentError when maxSize is 0 or less', () {
       expect(() => LFUCache<String, String>(0), throwsArgumentError);
       expect(() => LFUCache<String, String>(-1), throwsArgumentError);
     });

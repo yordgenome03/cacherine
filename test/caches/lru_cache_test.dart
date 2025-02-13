@@ -2,13 +2,13 @@ import 'package:test/test.dart';
 import 'package:cacherine/src/caches/lru_cache.dart';
 
 void main() {
-  group('LRUCache - 基本動作', () {
-    test('空のキャッシュから get() すると null を返す', () async {
+  group('LRUCache - Basic Functionality', () {
+    test('get() from an empty cache returns null', () async {
       final cache = LRUCache<String, String>(3);
       expect(await cache.get('key1'), isNull);
     });
 
-    test('set() したデータが get() で取得できる', () async {
+    test('Data set with set() can be retrieved with get()', () async {
       final cache = LRUCache<String, String>(3);
       await cache.set('key1', 'value1');
       await cache.set('key2', 'value2');
@@ -17,7 +17,7 @@ void main() {
       expect(await cache.get('key2'), equals('value2'));
     });
 
-    test('clear() でキャッシュが空になる', () async {
+    test('clear() empties the cache', () async {
       final cache = LRUCache<String, String>(3);
       await cache.set('key1', 'value1');
       await cache.set('key2', 'value2');
@@ -29,61 +29,66 @@ void main() {
     });
   });
 
-  group('LRUCache - LRU エビクションのテスト', () {
-    test('キャッシュが maxSize を超えたら LRU で削除される', () async {
+  group('LRUCache - LRU Eviction Tests', () {
+    test(
+        'When the cache exceeds maxSize, LRU eviction removes the least recently used item',
+        () async {
       final cache = LRUCache<String, String>(2);
 
-      // key1 と key2 を追加
+      // Adding key1 and key2
       await cache.set('key1', 'value1');
       await cache.set('key2', 'value2');
 
-      // key1 をアクセスして最近使用された状態にする
+      // Access key1 to mark it as recently used
       await cache.get('key1');
 
-      // key3 を追加（key2 が削除されるはず）
+      // Adding key3 will cause key2 to be evicted
       await cache.set('key3', 'value3');
 
-      expect(await cache.get('key2'), isNull); // key2 は削除されたはず
-      expect(await cache.get('key1'), equals('value1')); // key1 は残る
-      expect(await cache.get('key3'), equals('value3')); // key3 は残る
+      expect(await cache.get('key2'), isNull); // key2 should be evicted
+      expect(await cache.get('key1'), equals('value1')); // key1 should remain
+      expect(await cache.get('key3'), equals('value3')); // key3 should remain
     });
 
-    test('同じキーを set し直すとそのキーが最新の位置に配置される', () async {
+    test('Re-setting the same key places it at the most recent position',
+        () async {
       final cache = LRUCache<String, String>(2);
       await cache.set('key1', 'value1');
       await cache.set('key2', 'value2');
-      await cache.set('key1', 'new_value1'); // key1 を再設定
+      await cache.set('key1', 'new_value1'); // Re-set key1
 
-      // key3 を追加（最も長く使用されていない key2 が削除される）
+      // Adding key3 will cause the least recently used key (key2) to be evicted
       await cache.set('key3', 'value3');
 
-      expect(await cache.get('key2'), isNull); // key2 は削除されたはず
-      expect(await cache.get('key1'), equals('new_value1')); // key1 は新しい値で残る
-      expect(await cache.get('key3'), equals('value3')); // key3 は残る
+      expect(await cache.get('key2'), isNull); // key2 should be evicted
+      expect(await cache.get('key1'),
+          equals('new_value1')); // key1 should remain with the new value
+      expect(await cache.get('key3'), equals('value3')); // key3 should remain
     });
   });
 
-  group('LRUCache - スレッドセーフ性のテスト', () {
-    test('並列 set() / get() が安全に動作する', () async {
+  group('LRUCache - Thread-safety Tests', () {
+    test('Parallel set() / get() operations work safely', () async {
       final cache = LRUCache<int, String>(5);
 
-      // 並列で 1000 回 set & get を実行
+      // Perform 1000 parallel set & get operations
       final futures = List.generate(1000, (i) async {
-        await cache.set(i % 5, 'value$i'); // key0 ~ key4 の値が更新され続ける
-        return await cache.get(i % 5); // 値が取得できるか
+        await cache.set(i % 5,
+            'value$i'); // Values for keys 0 to 4 will be continuously updated
+        return await cache.get(i % 5); // Check if value can be retrieved
       });
 
       await Future.wait(futures);
 
-      // キャッシュに 5 件だけ残っていることを確認
+      // Ensure only 5 items remain in the cache
       expect(cache.getKeys().length, equals(5));
 
-      // key0 ~ key4 のいずれかがキャッシュに存在する
+      // At least one key from 0 to 4 should be present in the cache
       final keys = cache.getKeys();
       expect(keys, containsAll([0, 1, 2, 3, 4]));
     });
 
-    test('並列で clear() すると全て削除される', () async {
+    test('Parallel clear() calls completely clear the cache', () async {
       final cache = LRUCache<String, String>(5);
       await cache.set('key1', 'value1');
       await cache.set('key2', 'value2');
@@ -102,8 +107,8 @@ void main() {
     });
   });
 
-  group('LRUCache - エラーハンドリング', () {
-    test('maxSize が 0 以下の時に ArgumentError をスローする', () {
+  group('LRUCache - Error Handling', () {
+    test('Throws ArgumentError when maxSize is 0 or less', () {
       expect(() => LRUCache<String, String>(0), throwsArgumentError);
       expect(() => LRUCache<String, String>(-1), throwsArgumentError);
     });
