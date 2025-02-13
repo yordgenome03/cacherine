@@ -2,7 +2,7 @@ include: package:lints/recommended.yaml
 
 analyzer:
   exclude:
-    - "**/*.g.dart" # 自動生成ファイルを解析対象から除外
+    - "**/*.g.dart"
     - "**/*.freezed.dart"
     - "**/*.mocks.dart"
     - "**/*.config.dart"

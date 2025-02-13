@@ -1,9 +1,11 @@
-name: run lint and tests
+name: Run Tests
 
 on:
   pull_request:
-    branches: [main, develop]
-
+    branches:
+      - main
+      - develop
+      - release/**
 jobs:
   test:
     runs-on: ubuntu-latest
