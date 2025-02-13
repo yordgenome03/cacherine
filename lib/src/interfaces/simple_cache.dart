@@ -1,33 +1,33 @@
-/// **シンプルなキャッシュのインターフェース**
+/// **Simple Cache Interface**
 ///
-/// **非スレッドセーフなキャッシュの基本機能** を定義する抽象クラス。
-/// - 単一スレッド環境での使用を想定。
-/// - **キーの取得・保存・削除** の基本操作を提供。
+/// An abstract class defining the **basic operations of a non-thread-safe cache**.
+/// - Designed for use in **single-threaded environments**.
+/// - Provides basic operations for **getting, saving, and deleting keys**.
 abstract class SimpleCache<K, V> {
-  /// **キャッシュに格納されているすべてのキーを取得する。**
+  /// **Retrieves all keys stored in the cache.**
   ///
-  /// **戻り値:** キャッシュに含まれるすべてのキーのリスト。
+  /// **Returns:** A list of all keys in the cache.
   Iterable<K> getKeys();
 
-  /// **指定したキーに対応する値を取得する。**
+  /// **Retrieves the value associated with the specified key.**
   ///
-  /// - **キーが存在しない場合は `null` を返す。**
+  /// - **Returns `null` if the key does not exist.**
   ///
-  /// **引数:**
-  /// - `key`: 取得したいデータのキー。
+  /// **Arguments:**
+  /// - `key`: The key for the data to retrieve.
   ///
-  /// **戻り値:** キーに対応する値、または `null`。
+  /// **Returns:** The value associated with the key, or `null`.
   V? get(K key);
 
-  /// **指定したキーと値をキャッシュに保存する。**
+  /// **Stores the specified key-value pair in the cache.**
   ///
-  /// - 既存のキーを設定すると、対応する値を更新する。
+  /// - If the key already exists, its corresponding value is updated.
   ///
-  /// **引数:**
-  /// - `key`: 保存するデータのキー。
-  /// - `value`: 保存するデータの値。
+  /// **Arguments:**
+  /// - `key`: The key for the data to store.
+  /// - `value`: The value of the data to store.
   void set(K key, V value);
 
-  /// **キャッシュ内のすべてのデータを削除する。**
+  /// **Removes all data stored in the cache.**
   void clear();
 }

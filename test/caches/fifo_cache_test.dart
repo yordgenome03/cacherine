@@ -2,13 +2,13 @@ import 'package:cacherine/src/caches/fifo_cache.dart';
 import 'package:test/test.dart';
 
 void main() {
-  group('FIFOCache - 基本動作', () {
-    test('空のキャッシュから get() すると null を返す', () async {
+  group('FIFOCache - Basic Functionality', () {
+    test('get() from an empty cache returns null', () async {
       final cache = FIFOCache<String, String>(3);
       expect(await cache.get('key1'), isNull);
     });
 
-    test('set() したデータが get() で取得できる', () async {
+    test('Data set with set() can be retrieved with get()', () async {
       final cache = FIFOCache<String, String>(3);
       await cache.set('key1', 'value1');
       await cache.set('key2', 'value2');
@@ -17,7 +17,7 @@ void main() {
       expect(await cache.get('key2'), equals('value2'));
     });
 
-    test('clear() でキャッシュが空になる', () async {
+    test('clear() empties the cache', () async {
       final cache = FIFOCache<String, String>(3);
       await cache.set('key1', 'value1');
       await cache.set('key2', 'value2');
@@ -28,7 +28,7 @@ void main() {
       expect(cache.getKeys(), isEmpty);
     });
 
-    test('getKeys() の動作（現在のキーを正しく返す）', () async {
+    test('getKeys() works correctly (returns current keys)', () async {
       final cache = FIFOCache<String, String>(3);
       await cache.set('key1', 'value1');
       await cache.set('key2', 'value2');
@@ -36,12 +36,12 @@ void main() {
 
       expect(cache.getKeys(), containsAll(['key1', 'key2', 'key3']));
 
-      await cache.set('key4', 'value4'); // 'key1' が削除される
+      await cache.set('key4', 'value4'); // 'key1' will be removed
       expect(cache.getKeys(), containsAll(['key2', 'key3', 'key4']));
-      expect(cache.getKeys(), isNot(contains('key1'))); // 'key1' は削除済み
+      expect(cache.getKeys(), isNot(contains('key1'))); // 'key1' is removed
     });
 
-    test('キャッシュの文字列表現（toString() のテスト）', () async {
+    test('Cache string representation (testing toString())', () async {
       final cache = FIFOCache<String, String>(3);
       await cache.set('key1', 'value1');
       await cache.set('key2', 'value2');
@@ -54,61 +54,65 @@ void main() {
     });
   });
 
-  group('FIFOCache - FIFO エビクションのテスト', () {
-    test('キャッシュが maxSize を超えたら FIFO で削除される', () async {
+  group('FIFOCache - FIFO Eviction Tests', () {
+    test(
+        'When the cache exceeds maxSize, FIFO eviction removes the oldest item',
+        () async {
       final cache = FIFOCache<String, String>(2);
       await cache.set('key1', 'value1');
       await cache.set('key2', 'value2');
-      await cache.set('key3', 'value3'); // key1 は削除される
+      await cache.set('key3', 'value3'); // key1 should be evicted
 
-      expect(await cache.get('key1'), isNull); // 削除されたはず
+      expect(await cache.get('key1'), isNull); // key1 should be removed
       expect(await cache.get('key2'), equals('value2'));
       expect(await cache.get('key3'), equals('value3'));
     });
 
-    test('同じキーを set し直しても順番は変更されない', () async {
+    test('Setting the same key again with set() does not change the order',
+        () async {
       final cache = FIFOCache<String, String>(2);
       await cache.set('key1', 'value1');
       await cache.set('key2', 'value2');
-      await cache.set('key1', 'new_value1'); // 順番は変更されない
+      await cache.set('key1', 'new_value1'); // Order does not change
 
-      await cache.set('key3', 'value3'); // key2 が削除される（FIFO のまま）
+      await cache.set('key3', 'value3'); // key2 will be evicted (FIFO order)
 
-      expect(await cache.get('key2'), isNull); // key2 は削除されているはず
-      expect(
-          await cache.get('key1'), equals('new_value1')); // key1 は新しい値で残っているはず
-      expect(await cache.get('key3'), equals('value3')); // key3 はセットされているはず
+      expect(await cache.get('key2'), isNull); // key2 should be removed
+      expect(await cache.get('key1'),
+          equals('new_value1')); // key1 should remain with new value
+      expect(await cache.get('key3'), equals('value3')); // key3 should be set
     });
   });
 
-  group('FIFOCache - スレッドセーフ性のテスト', () {
-    test('並列 set() / get() が安全に動作する', () async {
+  group('FIFOCache - Thread-safety Tests', () {
+    test('Parallel set() / get() operations work safely', () async {
       final cache = FIFOCache<int, String>(5);
 
-      // 並列で 1000 回 set & get を実行
+      // Perform 1000 parallel set & get operations
       final futures = List.generate(1000, (i) async {
-        await cache.set(i % 5, 'value$i'); // key0 ~ key4 の値が更新され続ける
-        return await cache.get(i % 5); // 値が取得できるか
+        await cache.set(i % 5,
+            'value$i'); // values for keys 0 to 4 will be continuously updated
+        return await cache.get(i % 5); // Check if value can be retrieved
       });
 
-      // すべての非同期処理が完了するのを待つ
+      // Wait for all async operations to complete
       await Future.wait(futures);
 
-      // キャッシュに 5 件だけ残っていることを確認
+      // Confirm that only 5 items remain in the cache
       expect(cache.getKeys().length, equals(5));
 
-      // key0 ~ key4 のいずれかがキャッシュに存在する
+      // keys 0 to 4 should exist in the cache
       final keys = cache.getKeys();
       expect(keys, containsAll([0, 1, 2, 3, 4]));
     });
 
-    test('並列で clear() すると全て削除される', () async {
+    test('Parallel clear() calls remove all data', () async {
       final cache = FIFOCache<String, String>(5);
       await cache.set('key1', 'value1');
       await cache.set('key2', 'value2');
       await cache.set('key3', 'value3');
 
-      // 並列で clear() を実行
+      // Perform parallel clear() calls
       await Future.wait([
         cache.clear(),
         cache.clear(),
@@ -122,8 +126,8 @@ void main() {
     });
   });
 
-  group('FIFOCache - エラーハンドリング', () {
-    test('maxSize が 0 以下の時に ArgumentError をスローする', () {
+  group('FIFOCache - Error Handling', () {
+    test('Throws ArgumentError when maxSize is 0 or less', () {
       expect(() => FIFOCache<String, String>(0), throwsArgumentError);
       expect(() => FIFOCache<String, String>(-1), throwsArgumentError);
     });

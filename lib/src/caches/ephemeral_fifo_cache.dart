@@ -3,93 +3,94 @@ import 'package:synchronized/synchronized.dart';
 
 import '../interfaces/thread_safe_cache.dart';
 
-/// **スレッドセーフなエフェメラル FIFO（First In, First Out）キャッシュ**
+/// **Thread-safe Ephemeral FIFO (First In, First Out) Cache**
 ///
-/// このクラスは **FIFO 方式のキャッシュ** に加えて、
-/// **値を取得すると即座に削除するエフェメラル特性** を持っています。
+/// This class implements a **FIFO-based cache** with an **ephemeral property**,
+/// meaning that **values are immediately removed after being retrieved**.
 ///
-/// このクラスは [ThreadSafeCache] を継承し、**`Lock` を使用してスレッドセーフ性を確保** しています。
-/// **複数スレッドや非同期タスクから安全にキャッシュへアクセス** でき、データ競合を防ぎます。
+/// It extends [ThreadSafeCache] and ensures **thread safety using `Lock`**,
+/// allowing safe access from multiple threads or asynchronous tasks while preventing race conditions.
 ///
-/// - **FIFO（先入れ先出し）方式のエビクションポリシーを採用**
-/// - **キャッシュのサイズが `maxSize` を超えた場合、最も古い要素を削除**
-/// - **キーに対応する値を取得すると、そのキーはキャッシュから削除される**
+/// - **Adopts FIFO (First In, First Out) eviction policy**
+/// - **Removes the oldest element when the cache exceeds `maxSize`**
+/// - **Removes the key from the cache upon retrieval**
 ///
-/// ### **注意**
-/// - **取得したデータは再利用できません（取得後に削除されるため）**
-/// - **キーの存在を保持したい場合は `FIFOCache` を使用してください**
+/// ### **Note**
+/// - **Retrieved data cannot be reused (as it is deleted upon access)**
+/// - **If you need to retain keys after access, use `FIFOCache` instead**
 class EphemeralFIFOCache<K, V> extends ThreadSafeCache<K, V> {
   final int maxSize;
   final LinkedHashMap<K, V> _cache = LinkedHashMap();
   final _lock = Lock();
 
-  /// **指定された最大サイズで [EphemeralFIFOCache] のインスタンスを作成します。**
+  /// **Creates an instance of [EphemeralFIFOCache] with the specified maximum size.**
   ///
-  /// - **[maxSize]**: キャッシュの最大サイズ。
-  ///   このサイズを超えると、FIFO ポリシーに基づき **最も古い要素** から削除されます。
+  /// - **[maxSize]**: The maximum number of entries in the cache.
+  ///   If the cache exceeds this size, **the oldest element is removed** following the FIFO policy.
   ///
-  /// **[maxSize] が 0 以下の場合、 [ArgumentError] をスローします。**
+  /// **Throws [ArgumentError] if [maxSize] is 0 or less.**
   EphemeralFIFOCache(this.maxSize) {
     if (maxSize <= 0) {
-      throw ArgumentError('maxSize は 0 より大きい必要があります。');
+      throw ArgumentError('maxSize must be greater than 0.');
     }
   }
 
-  /// 現在キャッシュに格納されているすべてのキーを返します。
+  /// Returns all keys currently stored in the cache.
   ///
-  /// **このメソッドはスレッドセーフです**。
+  /// **This method is thread-safe.**
   @override
   Iterable<K> getKeys() {
     return Map<K, V>.of(_cache).keys;
   }
 
-  /// 指定したキーに対応する値を取得し、**そのキーをキャッシュから削除します。**
+  /// Retrieves the value associated with the specified key and **removes the key from the cache**.
   ///
-  /// - **キーが存在しない場合は `null` を返します。**
+  /// - **Returns `null` if the key does not exist.**
   ///
-  /// **このメソッドはスレッドセーフです**。
+  /// **This method is thread-safe.**
   @override
   Future<V?> get(K key) async {
     return await _lock.synchronized(() {
-      return _cache.remove(key); // 取得後に削除
+      return _cache.remove(key); // Remove after retrieval
     });
   }
 
-  /// 指定したキーと値をキャッシュに保存します。
+  /// Stores the specified key-value pair in the cache.
   ///
-  /// - 既存のキーに対して `set()` を呼び出すと、**その値を更新** します。
-  /// - 更新されたキーは、**最も新しいデータ** として扱われ、順番が更新されます。
-  /// - キャッシュのサイズが **[maxSize]** を超えた場合、FIFOポリシーに基づき、**最も古い要素が削除** されます。
+  /// - If the key already exists, **the value is updated**.
+  /// - The updated key is treated as the **most recently added data**, but its order remains unchanged.
+  /// - If the cache exceeds **[maxSize]**, the **oldest element is removed** according to the FIFO policy.
   ///
-  /// **このメソッドはスレッドセーフです**。
+  /// **This method is thread-safe.**
   @override
   Future<void> set(K key, V value) async {
     await _lock.synchronized(() {
       if (_cache.length >= maxSize) {
-        _cache.remove(_cache.keys.first); // FIFO に基づき最も古い要素を削除
+        _cache.remove(
+            _cache.keys.first); // Remove the oldest element following FIFO
       }
-      _cache[key] = value; // 値の更新（順番変更なし）
+      _cache[key] = value; // Update value (order remains unchanged)
     });
   }
 
-  /// キャッシュ内のすべてのデータをクリアします。
+  /// Clears all data stored in the cache.
   ///
-  /// - キャッシュ内のすべてのキーと値を削除します。
+  /// - Removes all keys and values from the cache.
   ///
-  /// **このメソッドはスレッドセーフです**。
+  /// **This method is thread-safe.**
   @override
   Future<void> clear() async {
     await _lock.synchronized(_cache.clear);
   }
 
-  /// キャッシュの現在の状態を文字列で返します。
+  /// Returns a string representation of the current cache state.
   ///
-  /// - キャッシュ内に格納されている **キーと値のペア** を文字列形式で出力します。
+  /// - Outputs **key-value pairs** currently stored in the cache as a string.
   ///
-  /// **このメソッドはスレッドセーフです**。
+  /// **This method is thread-safe.**
   @override
   String toString() {
-    final snapshot = Map.of(_cache); // キャッシュのスナップショットを取得
+    final snapshot = Map.of(_cache); // Take a snapshot of the cache
     return snapshot.toString();
   }
 }

@@ -2,13 +2,13 @@ import 'package:test/test.dart';
 import 'package:cacherine/src/caches/mru_cache.dart';
 
 void main() {
-  group('MRUCache - 基本動作', () {
-    test('空のキャッシュから get() すると null を返す', () async {
+  group('MRUCache - Basic Functionality', () {
+    test('get() from an empty cache returns null', () async {
       final cache = MRUCache<String, String>(3);
       expect(await cache.get('key1'), isNull);
     });
 
-    test('set() したデータが get() で取得できる', () async {
+    test('Data set with set() can be retrieved with get()', () async {
       final cache = MRUCache<String, String>(3);
       await cache.set('key1', 'value1');
       await cache.set('key2', 'value2');
@@ -17,7 +17,7 @@ void main() {
       expect(await cache.get('key2'), equals('value2'));
     });
 
-    test('clear() でキャッシュが空になる', () async {
+    test('clear() empties the cache', () async {
       final cache = MRUCache<String, String>(3);
       await cache.set('key1', 'value1');
       await cache.set('key2', 'value2');
@@ -29,24 +29,26 @@ void main() {
     });
   });
 
-  group('MRUCache - MRU エビクションのテスト', () {
-    test('キャッシュが maxSize を超えたら MRU で削除される', () async {
+  group('MRUCache - MRU Eviction Tests', () {
+    test(
+        'When the cache exceeds maxSize, MRU eviction removes the most recently used item',
+        () async {
       final cache = MRUCache<String, String>(2);
 
       await cache.set('key1', 'value1');
       await cache.set('key2', 'value2');
-      await cache.get('key2'); // key2 を最近使用
+      await cache.get('key2'); // Mark key2 as recently used
 
-      await cache.set('key3', 'value3'); // key2 が削除される
+      await cache.set('key3', 'value3'); // key2 should be evicted
 
       expect(await cache.get('key1'), equals('value1'));
-      expect(await cache.get('key2'), isNull);
-      expect(await cache.get('key3'), equals('value3'));
+      expect(await cache.get('key2'), isNull); // key2 should be evicted
+      expect(await cache.get('key3'), equals('value3')); // key3 should remain
     });
   });
 
-  group('MRUCache - スレッドセーフ性のテスト', () {
-    test('並列 set() / get() が安全に動作する', () async {
+  group('MRUCache - Thread-safety Tests', () {
+    test('Parallel set() / get() operations work safely', () async {
       final cache = MRUCache<int, String>(5);
 
       final futures = List.generate(1000, (i) async {
@@ -61,8 +63,8 @@ void main() {
     });
   });
 
-  group('MRUCache - エラーハンドリング', () {
-    test('maxSize が 0 以下の時に ArgumentError をスローする', () {
+  group('MRUCache - Error Handling', () {
+    test('Throws ArgumentError when maxSize is 0 or less', () {
       expect(() => MRUCache<String, String>(0), throwsArgumentError);
       expect(() => MRUCache<String, String>(-1), throwsArgumentError);
     });

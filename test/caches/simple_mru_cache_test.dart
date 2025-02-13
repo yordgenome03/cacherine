@@ -2,13 +2,13 @@ import 'package:test/test.dart';
 import 'package:cacherine/src/caches/simple_mru_cache.dart';
 
 void main() {
-  group('SimpleMRUCache - 基本動作', () {
-    test('空のキャッシュから get() すると null を返す', () {
+  group('SimpleMRUCache - Basic Functionality', () {
+    test('get() from an empty cache returns null', () {
       final cache = SimpleMRUCache<String, String>(3);
       expect(cache.get('key1'), isNull);
     });
 
-    test('set() したデータが get() で取得できる', () {
+    test('Data set with set() can be retrieved using get()', () {
       final cache = SimpleMRUCache<String, String>(3);
       cache.set('key1', 'value1');
       cache.set('key2', 'value2');
@@ -17,7 +17,7 @@ void main() {
       expect(cache.get('key2'), equals('value2'));
     });
 
-    test('clear() でキャッシュが空になる', () {
+    test('clear() empties the cache', () {
       final cache = SimpleMRUCache<String, String>(3);
       cache.set('key1', 'value1');
       cache.set('key2', 'value2');
@@ -29,42 +29,53 @@ void main() {
     });
   });
 
-  group('SimpleMRUCache - MRU エビクションのテスト', () {
-    test('キャッシュが maxSize を超えたら MRU で削除される', () {
+  group('SimpleMRUCache - MRU Eviction Tests', () {
+    test(
+        'When the cache exceeds maxSize, MRU eviction removes the most recently used item',
+        () {
       final cache = SimpleMRUCache<String, String>(2);
 
-      // まずは key1 と key2 を追加
+      // Add key1 and key2
       cache.set('key1', 'value1');
       cache.set('key2', 'value2');
 
-      // key1 を使ってアクセス回数を増やす
+      // Access key1 to increase its usage count
       cache.get('key1');
 
-      // key3 を追加してキャッシュサイズを超える
-      cache.set('key3', 'value3'); // key1 は最も最近使用されたため削除される
+      // Add key3, causing the cache to exceed maxSize
+      cache.set('key3',
+          'value3'); // key1 is the most recently used and should be evicted
 
-      // key2 が削除されたか確認
-      expect(cache.get('key1'), isNull); // key1 は削除されたはず
-      expect(cache.get('key2'), equals('value2')); // key2 は使用されているので残る
-      expect(cache.get('key3'), equals('value3')); // key3 は新しく追加されたので残る
+      // Verify that key1 is evicted
+      expect(cache.get('key1'), isNull); // key1 should be evicted
+      expect(cache.get('key2'),
+          equals('value2')); // key2 should remain as it was used
+      expect(cache.get('key3'),
+          equals('value3')); // key3 should remain as it was newly added
     });
 
-    test('同じキーを set し直すとそのキーが最新の位置に配置される', () {
+    test(
+        'When the same key is set again, it is placed at the most recent position',
+        () {
       final cache = SimpleMRUCache<String, String>(2);
       cache.set('key1', 'value1');
       cache.set('key2', 'value2');
-      cache.set('key1', 'new_value1'); // key1 は最も新しい位置に配置される
+      cache.set(
+          'key1', 'new_value1'); // key1 is placed at the most recent position
 
-      cache.set('key3', 'value3'); // 最も古い 'key2' が削除される
+      cache.set(
+          'key3', 'value3'); // The least recently used 'key2' will be evicted
 
-      expect(cache.get('key2'), isNull); // key2 は削除されたはず
-      expect(cache.get('key1'), equals('new_value1')); // key1 は最新の値で残っているはず
-      expect(cache.get('key3'), equals('value3')); // key3 は新しく追加されたので残っているはず
+      expect(cache.get('key2'), isNull); // key2 should be evicted
+      expect(cache.get('key1'),
+          equals('new_value1')); // key1 should remain with the new value
+      expect(cache.get('key3'),
+          equals('value3')); // key3 should remain as it was newly added
     });
   });
 
-  group('SimpleMRUCache - エラーハンドリング', () {
-    test('maxSize が 0 以下の時に ArgumentError をスローする', () {
+  group('SimpleMRUCache - Error Handling', () {
+    test('Throws ArgumentError when maxSize is 0 or less', () {
       expect(() => SimpleMRUCache<String, String>(0), throwsArgumentError);
       expect(() => SimpleMRUCache<String, String>(-1), throwsArgumentError);
     });

@@ -1,33 +1,34 @@
-/// **スレッドセーフなキャッシュのインターフェース**
+/// **Thread-safe Cache Interface**
 ///
-/// **マルチスレッド環境や非同期処理** に対応したキャッシュの基本機能を定義する抽象クラス。
-/// - **非同期処理（`Future`）を利用してスレッドセーフなキャッシュ操作** を提供。
-/// - **複数スレッドからのアクセスを安全に処理できるよう設計。**
+/// An abstract class defining the basic cache operations for **multi-threaded environments**
+/// and **asynchronous processing**.
+/// - Provides **thread-safe cache operations** using **asynchronous processing (`Future`)**.
+/// - Designed to **safely handle access from multiple threads**.
 abstract class ThreadSafeCache<K, V> {
-  /// **キャッシュに格納されているすべてのキーを取得する。**
+  /// **Retrieves all keys stored in the cache.**
   ///
-  /// **戻り値:** キャッシュに含まれるすべてのキーのリスト。
+  /// **Returns:** A list of all keys in the cache.
   Iterable<K> getKeys();
 
-  /// **指定したキーに対応する値を取得する（非同期）。**
+  /// **Retrieves the value associated with the specified key (asynchronously).**
   ///
-  /// - **キーが存在しない場合は `null` を返す。**
+  /// - **Returns `null` if the key does not exist.**
   ///
-  /// **引数:**
-  /// - `key`: 取得したいデータのキー。
+  /// **Arguments:**
+  /// - `key`: The key for the data to retrieve.
   ///
-  /// **戻り値:** `Future<V?>`（キーに対応する値、または `null`）。
+  /// **Returns:** `Future<V?>` (The value associated with the key, or `null`).
   Future<V?> get(K key);
 
-  /// **指定したキーと値をキャッシュに保存する（非同期）。**
+  /// **Stores the specified key-value pair in the cache (asynchronously).**
   ///
-  /// - 既存のキーを設定すると、対応する値を更新する。
+  /// - If the key already exists, its corresponding value is updated.
   ///
-  /// **引数:**
-  /// - `key`: 保存するデータのキー。
-  /// - `value`: 保存するデータの値。
+  /// **Arguments:**
+  /// - `key`: The key for the data to store.
+  /// - `value`: The value of the data to store.
   Future<void> set(K key, V value);
 
-  /// **キャッシュ内のすべてのデータを削除する（非同期）。**
+  /// **Removes all data stored in the cache (asynchronously).**
   Future<void> clear();
 }

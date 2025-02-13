@@ -1,48 +1,48 @@
 import 'dart:collection';
 import '../interfaces/simple_cache.dart';
 
-/// **非スレッドセーフな MRU（Most Recently Used）キャッシュ**
+/// **Non-thread-safe MRU (Most Recently Used) Cache**
 ///
-/// **単一スレッド環境** での使用を想定した **MRU（最も最近使用された）方式** のキャッシュです。
-/// - **最も最近使用されたアイテムを削除する方式を採用。**
-/// - **スレッドセーフではないため、並行処理環境では `MRUCache` を使用してください。**
+/// This class is designed for use in **single-threaded environments**
+/// or scenarios where **concurrent access is not required**.
+/// Since it is not thread-safe and does not perform synchronization,
+/// **use `MRUCache` if thread safety is needed.**
 ///
-/// ### **特徴**
-/// - **キーの取得時にアクセス履歴を更新。**
-/// - **キャッシュが最大サイズを超えた場合、最も最近使用されたアイテムを削除。**
+/// It follows the MRU (Most Recently Used) eviction policy,
+/// meaning **when the cache exceeds `maxSize`, the most recently used item is removed.**
 class SimpleMRUCache<K, V> extends SimpleCache<K, V> {
   final int maxSize;
   final LinkedHashMap<K, V> _cache = LinkedHashMap();
 
-  /// **指定された最大サイズで [SimpleMRUCache] のインスタンスを作成します。**
+  /// **Creates an instance of [SimpleMRUCache] with the specified maximum size.**
   ///
-  /// - **[maxSize]**: キャッシュの最大サイズ。
-  ///   このサイズを超えると、MRUポリシーに基づき **最も最近使用されたアイテム** から削除されます。
+  /// - **[maxSize]**: The maximum number of entries in the cache.
+  ///   If the cache exceeds this size, **the most recently used item** is removed following the MRU policy.
   ///
-  /// **[maxSize] が 0 以下の場合、 [ArgumentError] をスローします。**
+  /// **Throws [ArgumentError] if [maxSize] is 0 or less.**
   SimpleMRUCache(this.maxSize) {
     if (maxSize <= 0) {
-      throw ArgumentError('maxSize は 0 より大きい必要があります。');
+      throw ArgumentError('maxSize must be greater than 0.');
     }
   }
 
-  /// **キャッシュに格納されているすべてのキーを取得する。**
+  /// Returns all keys stored in the cache.
   ///
-  /// **このメソッドはスレッドセーフではありません。**
+  /// **This method is not thread-safe.**
   @override
   Iterable<K> getKeys() => _cache.keys;
 
-  /// **指定したキーに対応する値を取得する。**
+  /// Retrieves the value associated with the specified key.
   ///
-  /// - キーが存在する場合、そのキーを削除して再追加することで **「最近使用された」とマーク** する。
-  /// - **キーが存在しない場合は `null` を返す。**
+  /// - If the key exists, it is **marked as "most recently used"** by removing and reinserting it.
+  /// - **Returns `null` if the key does not exist.**
   ///
-  /// **このメソッドはスレッドセーフではありません。**
+  /// **This method is not thread-safe.**
   @override
   V? get(K key) {
     if (!_cache.containsKey(key)) return null;
 
-    // MRUのため、キーを削除し、再追加する（最も最近使用されたことを記録）
+    // MRU: Remove and reinsert the key to mark it as the most recently used
     final value = _cache.remove(key);
     if (value != null) {
       _cache[key] = value;
@@ -50,44 +50,45 @@ class SimpleMRUCache<K, V> extends SimpleCache<K, V> {
     return value;
   }
 
-  /// **指定したキーと値をキャッシュに保存する。**
+  /// Stores the specified key-value pair in the cache.
   ///
-  /// - 既存のキーに対して `set()` を呼び出すと、**その値を更新** しますが、**順番は変更されません**。
-  /// - キャッシュのサイズが **[maxSize]** を超えた場合、MRUポリシーに基づき、**最も最近使用された要素が削除** されます。
+  /// - If `set()` is called on an existing key, **its value is updated**,
+  ///   but **its order remains unchanged**.
+  /// - If the cache exceeds **[maxSize]**, the **most recently used element is removed** following the MRU policy.
   ///
-  /// **このメソッドはスレッドセーフではありません。**
+  /// **This method is not thread-safe.**
   @override
   void set(K key, V value) {
     if (_cache.length >= maxSize) {
-      _evictMRUEntry(); // MRU方式でエビクション
+      _evictMRUEntry(); // Evict using MRU policy
     }
     _cache[key] = value;
   }
 
-  /// **MRU（最も最近使用された）方式でエビクション（削除）を行う**
+  /// Evicts the most recently used (MRU) entry.
   void _evictMRUEntry() {
     if (_cache.isEmpty) return;
 
-    // 最後に追加されたキー（最近使用されたキー）を削除
+    // Remove the last added key (most recently used key)
     final K mruKey = _cache.keys.last;
     _cache.remove(mruKey);
   }
 
-  /// **キャッシュ内のすべてのデータをクリアします。**
+  /// Clears all data stored in the cache.
   ///
-  /// - キャッシュ内のすべてのキーと値を削除します。
+  /// - Removes all keys and values from the cache.
   ///
-  /// **このメソッドはスレッドセーフではありません。**
+  /// **This method is not thread-safe.**
   @override
   void clear() {
     _cache.clear();
   }
 
-  /// **キャッシュの現在の状態を文字列で返します。**
+  /// Returns a string representation of the current cache state.
   ///
-  /// - キャッシュ内に格納されている **キーと値のペア** を文字列形式で出力します。
+  /// - Outputs **key-value pairs** currently stored in the cache as a string.
   ///
-  /// **このメソッドはスレッドセーフではありません。**
+  /// **This method is not thread-safe.**
   @override
   String toString() {
     return _cache.toString();

@@ -1,79 +1,81 @@
 import 'dart:collection';
 import '../interfaces/simple_cache.dart';
 
-/// **非スレッドセーフなキャッシュ（FIFO 方式 + 取得時削除）**
+/// **Non-thread-safe Cache (FIFO + Removal on Retrieval)**
 ///
-/// このクラスは **単一スレッド環境** や **並行アクセスが不要な場面** での使用を想定しています。
-/// スレッドセーフではなく、同期処理も行わないため、
-/// **スレッドセーフな実装が必要な場合は `ThreadSafeEphemeralFIFOCache` を使用してください。**
+/// This class is designed for use in **single-threaded environments**
+/// or scenarios where **concurrent access is not required**.
+/// Since it is not thread-safe and does not perform synchronization,
+/// **use `EphemeralFIFOCache` if thread safety is needed.**
 ///
-/// 一度取得したキーはキャッシュから削除されます。
-/// **取得したキーを削除したくない場合は、`SimpleFIFOCache`を使用してください。**
+/// Once a key is retrieved, it is removed from the cache.
+/// **If you want to retain keys after retrieval, use `SimpleFIFOCache` instead.**
 ///
-/// FIFO 方式のエビクション（削除）ポリシーを採用しており、
-/// **キャッシュのサイズが `maxSize` を超えた場合、最も古い要素を削除** します。
+/// It follows the FIFO (First In, First Out) eviction policy,
+/// meaning **when the cache exceeds `maxSize`, the oldest element is removed**.
 class SimpleEphemeralFIFOCache<K, V> extends SimpleCache<K, V> {
   final int maxSize;
   final LinkedHashMap<K, V> _cache = LinkedHashMap();
 
-  /// 指定された最大サイズで [SimpleEphemeralFIFOCache] のインスタンスを作成します。
+  /// Creates an instance of [SimpleEphemeralFIFOCache] with the specified maximum size.
   ///
-  /// - **[maxSize]**: キャッシュの最大サイズ。
-  ///   このサイズを超えると、FIFO ポリシーに基づき最も古いアイテムが削除されます。
+  /// - **[maxSize]**: The maximum number of entries in the cache.
+  ///   If the cache exceeds this size, the FIFO policy ensures the oldest item is removed.
   ///
-  /// **[maxSize] が 0 以下の場合、 [ArgumentError] をスローします。**
+  /// **Throws [ArgumentError] if [maxSize] is 0 or less.**
   SimpleEphemeralFIFOCache(this.maxSize) {
     if (maxSize <= 0) {
-      throw ArgumentError('maxSize は 0 より大きい必要があります。');
+      throw ArgumentError('maxSize must be greater than 0.');
     }
   }
 
-  /// キャッシュに現在格納されているすべてのキーを返します。
+  /// Returns all keys currently stored in the cache.
   ///
-  /// **このメソッドはスレッドセーフではありません。**
+  /// **This method is not thread-safe.**
   @override
   Iterable<K> getKeys() => _cache.keys;
 
-  /// 指定したキーに対応する値を取得し、**そのキーをキャッシュから削除します。**
+  /// Retrieves the value associated with the specified key and **removes the key from the cache**.
   ///
-  /// - **キーが存在しない場合は `null` を返します。**
+  /// - **Returns `null` if the key does not exist.**
   ///
-  /// **このメソッドはスレッドセーフではありません。**
+  /// **This method is not thread-safe.**
   @override
   V? get(K key) {
-    return _cache.remove(key); // 取得後に削除
+    return _cache.remove(key); // Remove after retrieval
   }
 
-  /// 指定したキーと値をキャッシュに保存します。
+  /// Stores the specified key-value pair in the cache.
   ///
-  /// - 既存のキーに対して `set()` を呼び出すと、**その値を更新** します。
-  /// - 更新されたキーは、**最も新しいデータ** として扱われ、順番が更新されます。
-  /// - キャッシュのサイズが **[maxSize]** を超えた場合、FIFOポリシーに基づき、**最も古い要素が削除** されます。
+  /// - If `set()` is called on an existing key, **its value is updated**.
+  /// - The updated key is treated as **the most recent data**, but its order remains unchanged.
+  /// - If the cache exceeds **[maxSize]**, the **oldest element is removed** following the FIFO policy.
   ///
-  /// **このメソッドはスレッドセーフではありません。**
+  /// **This method is not thread-safe.**
   @override
   void set(K key, V value) {
     if (_cache.length >= maxSize) {
-      _cache.remove(_cache.keys.first); // FIFO に基づき最も古い要素を削除
+      _cache.remove(
+          _cache.keys.first); // Remove the oldest element following FIFO
     }
-    _cache[key] = value; // 値の更新（順番変更なし）
+    _cache[key] = value; // Update value (order remains unchanged)
   }
 
-  /// キャッシュ内のすべてのデータをクリアします。
+  /// Clears all data stored in the cache.
   ///
-  /// - キャッシュ内のすべてのキーと値を削除します。
+  /// - Removes all keys and values from the cache.
   ///
-  /// **このメソッドはスレッドセーフではありません。**
+  /// **This method is not thread-safe.**
   @override
   void clear() {
     _cache.clear();
   }
 
-  /// キャッシュの現在の状態を文字列で返します。
+  /// Returns a string representation of the current cache state.
   ///
-  /// - キャッシュ内に格納されている **キーと値のペア** を文字列形式で出力します。
+  /// - Outputs **key-value pairs** currently stored in the cache as a string.
   ///
-  /// **このメソッドはスレッドセーフではありません。**
+  /// **This method is not thread-safe.**
   @override
   String toString() {
     return _cache.toString();
