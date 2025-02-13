@@ -1,5 +1,5 @@
 name: cacherine
-description: A Dart library for efficient cache management.
+description: A Dart library that provides flexible in-memory cache implementations including FIFO, LRU, MRU, and LFU, with both single-threaded and async-enabled options for concurrent environments.
 version: 1.0.1
 repository: https://github.com/yordgenome03/cacherine
 
