@@ -1,0 +1,58 @@
+name: Run Tests
+
+on:
+  pull_request:
+    branches:
+      - main
+      - develop
+      - release/**
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v3
+        timeout-minutes: 5
+
+      - name: Setup Dart
+        uses: dart-lang/setup-dart@v1
+        with:
+          sdk: "3.5.3"
+        timeout-minutes: 5
+
+      - name: Cache Dart dependencies
+        uses: actions/cache@v3
+        with:
+          path: ~/.pub-cache
+          key: ${{ runner.os }}-pub-${{ hashFiles('**/pubspec.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-pub-
+        timeout-minutes: 5
+
+      - name: Install dependencies
+        run: dart pub get
+        timeout-minutes: 10
+
+      - name: Verify formatting
+        run: dart format --output=none --set-exit-if-changed .
+        timeout-minutes: 5
+
+      - name: Analyze project source
+        run: dart analyze
+        timeout-minutes: 5
+
+      - name: Run tests with coverage
+        run: dart test --coverage=coverage/
+        timeout-minutes: 20
+
+      - name: Convert coverage to lcov
+        run: dart run coverage:format_coverage --lcov --in=coverage --out=coverage/lcov.info --report-on=lib
+        timeout-minutes: 5
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v5
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          files: ./coverage/lcov.info
+          fail_ci_if_error: true
+        timeout-minutes: 5

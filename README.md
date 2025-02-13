@@ -1,39 +1,95 @@
-<!-- 
-This README describes the package. If you publish this package to pub.dev,
-this README's contents appear on the landing page for your package.
+# cacherine
 
-For information about how to write a good package README, see the guide for
-[writing package pages](https://dart.dev/tools/pub/writing-package-pages). 
+[![Pub Version](https://img.shields.io/pub/v/cacherine.svg)](https://pub.dev/packages/cacherine)
 
-For general information about developing packages, see the Dart guide for
-[creating packages](https://dart.dev/guides/libraries/create-packages)
-and the Flutter guide for
-[developing packages and plugins](https://flutter.dev/to/develop-packages). 
--->
+`cacherine` is a simple and flexible memory cache library for Dart. It provides basic caching algorithms such as FIFO, LRU, MRU, and LFU. Both single-threaded and async-enabled versions are available to handle different usage scenarios.
 
-TODO: Put a short description of the package here that helps potential users
-know whether this package might be useful for them.
+## Why cacherine?
+
+Dart/Flutter does not have a built-in caching solution similar to `NSCache` in Swift.  
+`cacherine` was created to provide a lightweight and flexible in-memory cache with common caching strategies like FIFO, LRU, MRU, and LFU.
+
+Whether you need a simple single-threaded cache or an async-compatible solution for concurrent environments, `cacherine` offers an easy-to-use API.
 
 ## Features
 
-TODO: List what your package can do. Maybe include images, gifs, or videos.
+- **FIFO** (First In, First Out)
+- **EphemeralFIFO** (FIFO-based cache where keys are removed after being accessed)
+- **LRU** (Least Recently Used)
+- **MRU** (Most Recently Used)
+- **LFU** (Least Frequently Used)
+- **Simple versions (e.g., SimpleFIFOCache) for single-threaded usage, and standard versions for multi-threaded environments**
 
-## Getting started
+## Installation
 
-TODO: List prerequisites and provide or point to information on how to
-start using the package.
+Check the latest version on [pub.dev](https://pub.dev/packages/cacherine) and add it to your `pubspec.yaml`:
+
+```yaml
+dependencies:
+  cacherine: ^latest_version
+```
+
+Then, run the following command in your terminal:
+
+```bash
+dart pub get
+```
 
 ## Usage
 
-TODO: Include short and useful examples for package users. Add longer examples
-to `/example` folder. 
+### Basic Usage (Single-threaded)
 
-```dart
-const like = 'sample';
+```Dart
+import 'package:cacherine/cacherine.dart';
+
+void main() {
+  final cache = SimpleFIFOCache<String, String>(maxSize: 5);
+  cache.set('key1', 'value1');
+  print(cache.get('key1')); // 'value1'
+}
 ```
 
-## Additional information
+### Async Usage (Async support)
 
-TODO: Tell users more about the package: where to find more information, how to 
-contribute to the package, how to file issues, what response they can expect 
-from the package authors, and more.
+```Dart
+import 'package:cacherine/cacherine.dart';
+
+void main() async {
+  final cache = FIFOCache<String, String>(maxSize: 5);
+  await cache.set('key1', 'value1');
+  print(await cache.get('key1')); // 'value1'
+}
+```
+
+## API Reference
+
+[FIFOCache<K, V>](lib/src/caches/fifo_cache.dart): FIFO-based cache
+[EphemeralFIFOCache<K, V>](lib/src/caches/ephemeral_fifo_cache.dart): FIFO-based cache where the key is removed after being accessed (One-Time Read Cache)
+[LRUCache<K, V>](lib/src/caches/lru_cache.dart): Cache that retains the least recently used items
+[MRUCache<K, V>](lib/src/caches/mru_cache.dart): Cache that retains the most recently used items
+[LFUCache<K, V>](lib/src/caches/lfu_cache.dart): Cache that removes the least frequently used items
+
+## Contributing
+
+Contributions are welcome! If you find a bug, have a feature request, or want to improve the code, feel free to open an issue or submit a pull request.
+
+### How to Contribute
+
+1. Fork the repository and create a new branch.
+2. Make your changes and write tests if necessary.
+3. Ensure the code passes all checks (`dart analyze`, `dart test`).
+4. Open a pull request and describe your changes.
+
+For major changes, please open an issue first to discuss your proposal.
+
+We appreciate your support in making `cacherine` better! 🚀
+
+## Changelog
+
+All notable changes to this project will be documented in the [CHANGELOG](CHANGELOG.md) file.
+
+See the full changelog [here](CHANGELOG.md).
+
+## License
+
+This project is licensed under the BSD-3-Clause License - see the [LICENSE](LICENSE) file for details.
