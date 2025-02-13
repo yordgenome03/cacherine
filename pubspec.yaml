@@ -1,5 +1,5 @@
 name: cacherine
-description: A starting point for Dart libraries or applications.
+description: A Dart library for efficient cache management.
 version: 1.0.0
 repository: https://github.com/yordgenome03/cacherine
 
