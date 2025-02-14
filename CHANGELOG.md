@@ -1,3 +1,8 @@
+## 1.0.2 - Improve package description
+
+- Updated the `description` field in `pubspec.yaml` to meet `pub.dev` requirements.
+- Expanded the package description to provide a clearer explanation of its functionality and target use cases.
+
 ## 1.0.1 - Fix description in pubspec.yaml
 
 - Updated the `description` field in `pubspec.yaml` to provide a more specific and accurate explanation of the package's functionality.
