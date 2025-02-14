@@ -4,6 +4,8 @@
 
 `cacherine` is a simple and flexible memory cache library for Dart. It provides basic caching algorithms such as FIFO, LRU, MRU, and LFU. Both single-threaded and async-enabled versions are available to handle different usage scenarios.
 
+If you want to choose the best cache algorithm for your app, you can use **MonitoredCache** in your development environment. It helps you monitor performance metrics (such as hit/miss rates, latency, and eviction alerts) so you can make data-driven decisions and optimize the algorithm you use.
+
 ## Why cacherine?
 
 Dart/Flutter does not have a built-in caching solution similar to `NSCache` in Swift.  
@@ -18,6 +20,7 @@ Whether you need a simple single-threaded cache or an async-compatible solution 
 - **LRU** (Least Recently Used)
 - **MRU** (Most Recently Used)
 - **LFU** (Least Frequently Used)
+- **MonitoredCache** (Includes performance monitoring with hit/miss rates, latency, and eviction alerts) — [Learn more](docs/monitored_cache.md)
 - **Simple versions (e.g., SimpleFIFOCache) for single-threaded usage, and standard versions for multi-threaded environments**
 
 ## Installation
@@ -61,6 +64,11 @@ void main() async {
 }
 ```
 
+### Monitoring Usage
+
+If you want to monitor the performance of your cache and optimize the algorithm, use MonitoredCache.
+[Learn more about MonitoredCache and performance monitoring.](docs/monitored_cache.md)
+
 ## API Reference
 
 - [FIFOCache<K, V>](lib/src/caches/fifo_cache.dart): FIFO-based cache
@@ -68,6 +76,12 @@ void main() async {
 - [LRUCache<K, V>](lib/src/caches/lru_cache.dart): Cache that retains the least recently used items
 - [MRUCache<K, V>](lib/src/caches/mru_cache.dart): Cache that retains the most recently used items
 - [LFUCache<K, V>](lib/src/caches/lfu_cache.dart): Cache that removes the least frequently used items
+
+- [MonitoredFIFOCache<K, V>](lib/src/caches/monitored_ephemeral_fifo_cache.dart): FIFO-based cache with monitoring
+- [MonitoredEphemeralFIFOCache<K, V>](lib/src/caches/monitored_fifo_cache.dart): Ephemeral FIFO cache with monitoring
+- [MonitoredLRUCache<K, V>](lib/src/caches/monitored_lru_cache.dart): LRU-based cache with monitoring
+- [MonitoredMRUCache<K, V>](lib/src/caches/monitored_mru_cache.dart): MRU-based cache with monitoring
+- [MonitoredLFUCache<K, V>](lib/src/caches/monitored_lfu_cache.dart): LFU-based cache with monitoring
 
 ## Contributing
 
@@ -92,4 +106,4 @@ See the full changelog [here](CHANGELOG.md).
 
 ## License
 
-This project is licensed under the BSD-3-Clause License - see the [LICENSE](LICENSE) file for details.
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
