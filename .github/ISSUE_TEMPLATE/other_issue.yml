@@ -1,0 +1,32 @@
+name: "📌 Other Issue"
+description: Ask a general question or report something else
+title: "[Other]: "
+labels: ["question"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        ## 📌 Other Issue
+        If you have a general question or another issue that doesn't fit into bug reports or feature requests, please describe it here.
+
+  - type: textarea
+    id: issue-description
+    attributes:
+      label: Issue Description
+      description: Describe your issue or question.
+      placeholder: I have a question about...
+
+  - type: input
+    id: related-links
+    attributes:
+      label: Related Links (if any)
+      description: Provide any related links, references, or documentation.
+
+  - type: checkboxes
+    id: terms
+    attributes:
+      label: Code of Conduct
+      description: By submitting this issue, you agree to follow our [Code of Conduct](https://github.com/YOUR_REPO/CODE_OF_CONDUCT.md)
+      options:
+        - label: I agree to follow this project's Code of Conduct
+          required: true

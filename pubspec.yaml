@@ -1,6 +1,6 @@
 name: cacherine
-description: A Dart library that provides flexible in-memory cache implementations including FIFO, LRU, MRU, and LFU, with both single-threaded and async-enabled options for concurrent environments.
-version: 1.0.2
+description: A Dart library offering flexible in-memory cache implementations (FIFO, LRU, MRU, LFU) with both single-threaded and async options for concurrent environments.
+version: 1.1.0
 repository: https://github.com/yordgenome03/cacherine
 
 dependencies:
