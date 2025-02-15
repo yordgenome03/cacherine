@@ -1,3 +1,11 @@
+## 1.1.2 - Add Badges to README
+
+- Added the following badges to the README:
+  - Dart CI Badge
+  - OpenSSF Scorecard Badge
+  - Codecov Badge
+  - Documentation Badge
+
 ## 1.1.1 - Maintenance and Dependency Updates
 
 - Renamed `docs` directory to `doc` to comply with pub.dev package layout convention.
