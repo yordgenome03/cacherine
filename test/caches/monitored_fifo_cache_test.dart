@@ -1,5 +1,4 @@
 import 'package:cacherine/cacherine.dart';
-import 'package:cacherine/src/caches/monitored_fifo_cache.dart';
 import 'package:test/test.dart';
 
 void main() {

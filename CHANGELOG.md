@@ -1,3 +1,11 @@
+## 1.1.1 - Maintenance and Dependency Updates
+
+- Renamed `docs` directory to `doc` to comply with pub.dev package layout convention.
+- Updated dependencies:
+  - Resolved version constraints for `lints`, `synchronized`, and `js` packages.
+- Refactored project structure for improved consistency across environments.
+- No functionality changes; preparation for release and ongoing maintenance.
+
 ## 1.1.0 - Introduce MonitoredCache with Performance Metrics
 
 ### New Features

@@ -20,7 +20,7 @@ Whether you need a simple single-threaded cache or an async-compatible solution 
 - **LRU** (Least Recently Used)
 - **MRU** (Most Recently Used)
 - **LFU** (Least Frequently Used)
-- **MonitoredCache** (Includes performance monitoring with hit/miss rates, latency, and eviction alerts) — [Learn more](docs/monitored_cache.md)
+- **MonitoredCache** (Includes performance monitoring with hit/miss rates, latency, and eviction alerts) — [Learn more](doc/monitored_cache.md)
 - **Simple versions (e.g., SimpleFIFOCache) for single-threaded usage, and standard versions for multi-threaded environments**
 
 ## Installation
@@ -67,7 +67,7 @@ void main() async {
 ### Monitoring Usage
 
 If you want to monitor the performance of your cache and optimize the algorithm, use MonitoredCache.
-[Learn more about MonitoredCache and performance monitoring.](docs/monitored_cache.md)
+[Learn more about MonitoredCache and performance monitoring.](doc/monitored_cache.md)
 
 ## API Reference
 
