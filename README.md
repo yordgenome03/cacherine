@@ -1,6 +1,12 @@
 # cacherine
 
 [![Pub Version](https://img.shields.io/pub/v/cacherine.svg)](https://pub.dev/packages/cacherine)
+[![Dart CI](https://github.com/yordgenome03/cacherine/actions/workflows/ci.yaml/badge.svg)](https://github.com/yordgenome03/cacherine/actions/workflows/ci.yaml)
+[![OpenSSF Scorecard](https://api.securityscorecards.dev/projects/github.com/yordgenome03/cacherine/badge)](https://deps.dev/project/github/yordgenome03%2Fcacherine)
+[![codecov](https://codecov.io/gh/yordgenome03/cacherine/branch/main/graph/badge.svg)](https://codecov.io/gh/yordgenome03/cacherine)
+[![Dart Documentation](https://img.shields.io/badge/dartdoc-latest-blue)](https://pub.dev/documentation/cacherine/latest/)
+[![GitHub issues](https://img.shields.io/github/issues/yordgenome03/cacherine)](https://github.com/yordgenome03/cacherine/issues)
+[![GitHub pull requests](https://img.shields.io/github/issues-pr/yordgenome03/cacherine)](https://github.com/yordgenome03/cacherine/pulls)
 
 `cacherine` is a simple and flexible memory cache library for Dart. It provides basic caching algorithms such as FIFO, LRU, MRU, and LFU. Both single-threaded and async-enabled versions are available to handle different usage scenarios.
 
