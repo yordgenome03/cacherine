@@ -1,3 +1,27 @@
+## 1.1.1 - Maintenance and Dependency Updates
+
+- Renamed `docs` directory to `doc` to comply with pub.dev package layout convention.
+- Updated dependencies:
+  - Resolved version constraints for `lints`, `synchronized`, and `js` packages.
+- Refactored project structure for improved consistency across environments.
+- No functionality changes; preparation for release and ongoing maintenance.
+
+## 1.1.0 - Introduce MonitoredCache with Performance Metrics
+
+### New Features
+
+- **MonitoredCache**: Added a new cache variant with built-in performance monitoring.
+  - Tracks **hit rate, miss rate, request latency, and eviction events**.
+  - Provides percentile-based latency insights (e.g., **p95, p99**).
+  - Includes an **alert system** that triggers warnings when performance thresholds are exceeded.
+  - Supports **FIFO, LRU, MRU, LFU**, and **EphemeralFIFO** strategies.
+- **Updated README**:
+  - Introduced MonitoredCache as a tool for **debugging and optimizing cache selection**.
+  - Added **API references** and **usage instructions** for monitored caches.
+  - Provided a link to **detailed documentation** in `docs/monitored_cache.md`.
+
+This update enables developers to **analyze cache performance in real-time** and choose the optimal caching strategy based on actual usage patterns.
+
 ## 1.0.2 - Improve package description
 
 - Updated the `description` field in `pubspec.yaml` to meet `pub.dev` requirements.
