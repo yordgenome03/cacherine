@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: ❓ General Questions
+    url: https://github.com/yordgenome03/cacherine/discussions
+    about: Ask general questions or seek support in Discussions.
+  - name: GitHub Security Bug Bounty
+    url: https://bounty.github.com/
+    about: Please report security vulnerabilities here.

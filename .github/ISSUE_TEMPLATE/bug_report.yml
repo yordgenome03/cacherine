@@ -1,0 +1,64 @@
+name: "🐞 Bug Report"
+description: Report a problem with cacherine
+title: "[Bug]: "
+labels: ["bug", "triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        ## 🐞 Bug Report
+        Thank you for taking the time to fill out this bug report!
+
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: Describe the issue and what you expected to happen.
+      placeholder: A bug occurred when I tried to...
+    validations:
+      required: true
+
+  - type: input
+    id: reproduction-steps
+    attributes:
+      label: Steps to Reproduce
+      description: Provide clear steps to reproduce the issue.
+      placeholder: "1. Run `dart example.dart`"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: cacherine-version
+    attributes:
+      label: Cacherine Version
+      description: Which version of `cacherine` are you using?
+      options:
+        - latest
+        - 1.1.0
+        - 1.0.2
+        - older
+    validations:
+      required: true
+
+  - type: input
+    id: environment
+    attributes:
+      label: Environment
+      description: Dart/Flutter version or relevant system details.
+      placeholder: Dart 3.1.0, Flutter 3.16.0, macOS 14.3
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs or Error Messages
+      description: Paste relevant logs or error messages.
+      render: shell
+
+  - type: checkboxes
+    id: terms
+    attributes:
+      label: Code of Conduct
+      description: By submitting this issue, you agree to follow our [Code of Conduct](https://github.com/YOUR_REPO/CODE_OF_CONDUCT.md)
+      options:
+        - label: I agree to follow this project's Code of Conduct
+          required: true
