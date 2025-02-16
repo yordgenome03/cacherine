@@ -1,4 +1,4 @@
-name: Run Tests
+name: Run Tests and Static Analysis
 
 on:
   pull_request:
@@ -7,7 +7,25 @@ on:
       - develop
       - release/**
 
+permissions:
+  contents: read
+  pull-requests: write
+  actions: write
+
 jobs:
+  static-analysis:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+      - name: Install CodeQL
+        uses: github/codeql-action/init@v2
+        with:
+          languages: dart
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@v2
+
   test:
     runs-on: ubuntu-latest
     timeout-minutes: 30
@@ -44,6 +62,10 @@ jobs:
 
       - name: Analyze project source with strict mode
         run: dart analyze --fatal-infos
+        timeout-minutes: 5
+
+      - name: Run Dart Code Metrics (SAST)
+        run: dart run dart_code_metrics:metrics analyze lib
         timeout-minutes: 5
 
       - name: Run tests with coverage
