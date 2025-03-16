@@ -1,3 +1,8 @@
+## 1.1.3 - Add Cache Algorithm Documentation
+
+- Added documentation for Cache algorithms to the README.
+- Updated Dart SDK constraints to require version 3.7.2 or higher in `pubspec.yaml`.
+
 ## 1.1.2 - Add Badges to README
 
 - Added the following badges to the README:

@@ -61,7 +61,8 @@ class FIFOCache<K, V> extends ThreadSafeCache<K, V> {
     await _lock.synchronized(() {
       if (_cache.length >= maxSize) {
         _cache.remove(
-            _cache.keys.first); // Remove the oldest element following FIFO
+          _cache.keys.first,
+        ); // Remove the oldest element following FIFO
       }
       _cache[key] = value; // Update value (order remains unchanged)
     });

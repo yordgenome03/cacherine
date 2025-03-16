@@ -3,9 +3,7 @@ import 'package:test/test.dart';
 
 void main() {
   group('MonitoredLFUCache Tests', () {
-    final CacheAlertConfig config = CacheAlertConfig(
-      notifyCallback: (_) {},
-    );
+    final CacheAlertConfig config = CacheAlertConfig(notifyCallback: (_) {});
 
     test('Stored data should be retrievable', () async {
       final cache = MonitoredLFUCache<String, String>(
@@ -15,47 +13,56 @@ void main() {
 
       await cache.set('key1', 'value1');
       expect(
-          await cache.get('key1'), equals('value1')); // Retrieved successfully
+        await cache.get('key1'),
+        equals('value1'),
+      ); // Retrieved successfully
     });
 
     test(
-        'LFU eviction should remove the least frequently used element when maxSize is exceeded',
-        () async {
-      final cache = MonitoredLFUCache<String, String>(
-        maxSize: 2,
-        alertConfig: config,
-      );
+      'LFU eviction should remove the least frequently used element when maxSize is exceeded',
+      () async {
+        final cache = MonitoredLFUCache<String, String>(
+          maxSize: 2,
+          alertConfig: config,
+        );
 
-      await cache.set('key1', 'value1');
-      await cache.set('key2', 'value2');
-      await cache.get('key1'); // Increase usage count for key1
-      await cache.set(
-          'key3', 'value3'); // 'key2' should be removed (least used)
+        await cache.set('key1', 'value1');
+        await cache.set('key2', 'value2');
+        await cache.get('key1'); // Increase usage count for key1
+        await cache.set(
+          'key3',
+          'value3',
+        ); // 'key2' should be removed (least used)
 
-      expect(await cache.get('key2'), isNull); // 'key2' should be evicted
-      expect(await cache.get('key1'),
-          equals('value1')); // Still exists due to usage count
-      expect(await cache.get('key3'), equals('value3'));
-    });
-
-    test('Cache should maintain data integrity under concurrent access',
-        () async {
-      final cache = MonitoredLFUCache<int, int>(
-        maxSize: 10,
-        alertConfig: config,
-      );
-
-      final futures = List.generate(100, (i) async {
-        await cache.set(i, i * 10);
-        final value = await cache.get(i);
+        expect(await cache.get('key2'), isNull); // 'key2' should be evicted
         expect(
-            value,
-            anyOf(
-                isNull, equals(i * 10))); // Either retrieved or already removed
-      });
+          await cache.get('key1'),
+          equals('value1'),
+        ); // Still exists due to usage count
+        expect(await cache.get('key3'), equals('value3'));
+      },
+    );
 
-      await Future.wait(futures);
-    });
+    test(
+      'Cache should maintain data integrity under concurrent access',
+      () async {
+        final cache = MonitoredLFUCache<int, int>(
+          maxSize: 10,
+          alertConfig: config,
+        );
+
+        final futures = List.generate(100, (i) async {
+          await cache.set(i, i * 10);
+          final value = await cache.get(i);
+          expect(
+            value,
+            anyOf(isNull, equals(i * 10)),
+          ); // Either retrieved or already removed
+        });
+
+        await Future.wait(futures);
+      },
+    );
 
     test('Cache hit/miss rates should be correctly recorded', () async {
       final cache = MonitoredLFUCache<String, String>(
@@ -93,11 +100,10 @@ void main() {
 
     test('Should throw an exception if maxSize is 0 or negative', () {
       expect(
-          () => MonitoredLFUCache<String, String>(
-                maxSize: 0,
-                alertConfig: config,
-              ),
-          throwsArgumentError);
+        () =>
+            MonitoredLFUCache<String, String>(maxSize: 0, alertConfig: config),
+        throwsArgumentError,
+      );
     });
   });
 }

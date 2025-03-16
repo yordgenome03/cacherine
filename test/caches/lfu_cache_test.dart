@@ -31,27 +31,34 @@ void main() {
 
   group('LFUCache - LFU Eviction Tests', () {
     test(
-        'When the cache exceeds maxSize, LFU eviction removes the least frequently used item',
-        () async {
-      final cache = LFUCache<String, String>(2);
+      'When the cache exceeds maxSize, LFU eviction removes the least frequently used item',
+      () async {
+        final cache = LFUCache<String, String>(2);
 
-      // Adding key1 and key2
-      await cache.set('key1', 'value1');
-      await cache.set('key2', 'value2');
+        // Adding key1 and key2
+        await cache.set('key1', 'value1');
+        await cache.set('key2', 'value2');
 
-      // Increasing the usage count for key1
-      await cache.get('key1');
+        // Increasing the usage count for key1
+        await cache.get('key1');
 
-      // Adding key3 and exceeding maxSize
-      await cache.set(
-          'key3', 'value3'); // key2 will be evicted (lower usage count)
+        // Adding key3 and exceeding maxSize
+        await cache.set(
+          'key3',
+          'value3',
+        ); // key2 will be evicted (lower usage count)
 
-      expect(await cache.get('key2'), isNull); // key2 should be evicted
-      expect(await cache.get('key1'),
-          equals('value1')); // key1 remains as it has higher usage
-      expect(await cache.get('key3'),
-          equals('value3')); // key3 is newly added and should remain
-    });
+        expect(await cache.get('key2'), isNull); // key2 should be evicted
+        expect(
+          await cache.get('key1'),
+          equals('value1'),
+        ); // key1 remains as it has higher usage
+        expect(
+          await cache.get('key3'),
+          equals('value3'),
+        ); // key3 is newly added and should remain
+      },
+    );
   });
 
   group('LFUCache - Thread-safety Tests', () {
@@ -60,14 +67,18 @@ void main() {
 
       // Performing 1000 parallel set & get operations
       final futures = List.generate(1000, (i) async {
-        await cache.set(i % 5,
-            'value$i'); // values for keys 0 to 4 will be continuously updated
+        await cache.set(
+          i % 5,
+          'value$i',
+        ); // values for keys 0 to 4 will be continuously updated
         return await cache.get(i % 5); // Check if value can be retrieved
       });
 
       await Future.wait(futures);
-      expect(cache.getKeys().length,
-          lessThanOrEqualTo(5)); // Only 5 keys should remain
+      expect(
+        cache.getKeys().length,
+        lessThanOrEqualTo(5),
+      ); // Only 5 keys should remain
     });
 
     test('Parallel clear() completely clears the cache', () async {
@@ -76,11 +87,7 @@ void main() {
       await cache.set('key2', 'value2');
       await cache.set('key3', 'value3');
 
-      await Future.wait([
-        cache.clear(),
-        cache.clear(),
-        cache.clear(),
-      ]);
+      await Future.wait([cache.clear(), cache.clear(), cache.clear()]);
 
       expect(await cache.get('key1'), isNull);
       expect(await cache.get('key2'), isNull);

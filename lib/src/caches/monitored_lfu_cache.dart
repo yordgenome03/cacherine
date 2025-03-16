@@ -107,11 +107,8 @@ class MonitoredLFUCache<K, V> extends ThreadSafeCache<K, V>
   Future<void> _evictLFUEntry() async {
     if (_cache.isEmpty) return;
 
-    final K lfuKey = _usageCounts.entries
-        .reduce(
-          (a, b) => a.value < b.value ? a : b,
-        )
-        .key;
+    final K lfuKey =
+        _usageCounts.entries.reduce((a, b) => a.value < b.value ? a : b).key;
 
     _cache.remove(lfuKey);
     _usageCounts.remove(lfuKey);

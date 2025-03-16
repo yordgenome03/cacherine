@@ -76,11 +76,8 @@ class LFUCache<K, V> extends ThreadSafeCache<K, V> {
     if (_cache.isEmpty) return;
 
     // Find the key with the lowest usage count
-    final K lfuKey = _usageCounts.entries
-        .reduce(
-          (a, b) => a.value < b.value ? a : b,
-        )
-        .key;
+    final K lfuKey =
+        _usageCounts.entries.reduce((a, b) => a.value < b.value ? a : b).key;
 
     // Remove the key
     _cache.remove(lfuKey);

@@ -31,20 +31,21 @@ void main() {
 
   group('MRUCache - MRU Eviction Tests', () {
     test(
-        'When the cache exceeds maxSize, MRU eviction removes the most recently used item',
-        () async {
-      final cache = MRUCache<String, String>(2);
+      'When the cache exceeds maxSize, MRU eviction removes the most recently used item',
+      () async {
+        final cache = MRUCache<String, String>(2);
 
-      await cache.set('key1', 'value1');
-      await cache.set('key2', 'value2');
-      await cache.get('key2'); // Mark key2 as recently used
+        await cache.set('key1', 'value1');
+        await cache.set('key2', 'value2');
+        await cache.get('key2'); // Mark key2 as recently used
 
-      await cache.set('key3', 'value3'); // key2 should be evicted
+        await cache.set('key3', 'value3'); // key2 should be evicted
 
-      expect(await cache.get('key1'), equals('value1'));
-      expect(await cache.get('key2'), isNull); // key2 should be evicted
-      expect(await cache.get('key3'), equals('value3')); // key3 should remain
-    });
+        expect(await cache.get('key1'), equals('value1'));
+        expect(await cache.get('key2'), isNull); // key2 should be evicted
+        expect(await cache.get('key3'), equals('value3')); // key3 should remain
+      },
+    );
   });
 
   group('MRUCache - Thread-safety Tests', () {

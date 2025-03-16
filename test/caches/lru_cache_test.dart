@@ -31,40 +31,45 @@ void main() {
 
   group('LRUCache - LRU Eviction Tests', () {
     test(
-        'When the cache exceeds maxSize, LRU eviction removes the least recently used item',
-        () async {
-      final cache = LRUCache<String, String>(2);
+      'When the cache exceeds maxSize, LRU eviction removes the least recently used item',
+      () async {
+        final cache = LRUCache<String, String>(2);
 
-      // Adding key1 and key2
-      await cache.set('key1', 'value1');
-      await cache.set('key2', 'value2');
+        // Adding key1 and key2
+        await cache.set('key1', 'value1');
+        await cache.set('key2', 'value2');
 
-      // Access key1 to mark it as recently used
-      await cache.get('key1');
+        // Access key1 to mark it as recently used
+        await cache.get('key1');
 
-      // Adding key3 will cause key2 to be evicted
-      await cache.set('key3', 'value3');
+        // Adding key3 will cause key2 to be evicted
+        await cache.set('key3', 'value3');
 
-      expect(await cache.get('key2'), isNull); // key2 should be evicted
-      expect(await cache.get('key1'), equals('value1')); // key1 should remain
-      expect(await cache.get('key3'), equals('value3')); // key3 should remain
-    });
+        expect(await cache.get('key2'), isNull); // key2 should be evicted
+        expect(await cache.get('key1'), equals('value1')); // key1 should remain
+        expect(await cache.get('key3'), equals('value3')); // key3 should remain
+      },
+    );
 
-    test('Re-setting the same key places it at the most recent position',
-        () async {
-      final cache = LRUCache<String, String>(2);
-      await cache.set('key1', 'value1');
-      await cache.set('key2', 'value2');
-      await cache.set('key1', 'new_value1'); // Re-set key1
+    test(
+      'Re-setting the same key places it at the most recent position',
+      () async {
+        final cache = LRUCache<String, String>(2);
+        await cache.set('key1', 'value1');
+        await cache.set('key2', 'value2');
+        await cache.set('key1', 'new_value1'); // Re-set key1
 
-      // Adding key3 will cause the least recently used key (key2) to be evicted
-      await cache.set('key3', 'value3');
+        // Adding key3 will cause the least recently used key (key2) to be evicted
+        await cache.set('key3', 'value3');
 
-      expect(await cache.get('key2'), isNull); // key2 should be evicted
-      expect(await cache.get('key1'),
-          equals('new_value1')); // key1 should remain with the new value
-      expect(await cache.get('key3'), equals('value3')); // key3 should remain
-    });
+        expect(await cache.get('key2'), isNull); // key2 should be evicted
+        expect(
+          await cache.get('key1'),
+          equals('new_value1'),
+        ); // key1 should remain with the new value
+        expect(await cache.get('key3'), equals('value3')); // key3 should remain
+      },
+    );
   });
 
   group('LRUCache - Thread-safety Tests', () {
@@ -73,8 +78,10 @@ void main() {
 
       // Perform 1000 parallel set & get operations
       final futures = List.generate(1000, (i) async {
-        await cache.set(i % 5,
-            'value$i'); // Values for keys 0 to 4 will be continuously updated
+        await cache.set(
+          i % 5,
+          'value$i',
+        ); // Values for keys 0 to 4 will be continuously updated
         return await cache.get(i % 5); // Check if value can be retrieved
       });
 
@@ -94,11 +101,7 @@ void main() {
       await cache.set('key2', 'value2');
       await cache.set('key3', 'value3');
 
-      await Future.wait([
-        cache.clear(),
-        cache.clear(),
-        cache.clear(),
-      ]);
+      await Future.wait([cache.clear(), cache.clear(), cache.clear()]);
 
       expect(await cache.get('key1'), isNull);
       expect(await cache.get('key2'), isNull);
