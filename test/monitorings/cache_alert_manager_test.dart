@@ -21,8 +21,9 @@ void main() {
         p99LatencyThreshold: 300,
         evictionsPerMinuteThreshold: 1000,
         averageLatencyThreshold: 100,
-        alertCheckInterval:
-            const Duration(milliseconds: 100), // Fast check for test
+        alertCheckInterval: const Duration(
+          milliseconds: 100,
+        ), // Fast check for test
       );
 
       alertManager = CacheAlertManager(metrics, config);
@@ -43,8 +44,9 @@ void main() {
 
       // Check if the alert for low hit rate was triggered, allowing the 'Actual' part
       expect(
-        receivedAlerts
-            .any((alert) => alert.contains('Warning: Low hit rate detected')),
+        receivedAlerts.any(
+          (alert) => alert.contains('Warning: Low hit rate detected'),
+        ),
         isTrue,
       );
     });
@@ -66,8 +68,9 @@ void main() {
 
       // Check if the alert for high miss rate was triggered
       expect(
-        receivedAlerts
-            .any((alert) => alert.contains('Warning: High miss rate detected')),
+        receivedAlerts.any(
+          (alert) => alert.contains('Warning: High miss rate detected'),
+        ),
         isTrue,
       );
     });
@@ -85,7 +88,8 @@ void main() {
       // Check if the alert for high p95 latency was triggered
       expect(
         receivedAlerts.any(
-            (alert) => alert.contains('Warning: High p95 latency detected')),
+          (alert) => alert.contains('Warning: High p95 latency detected'),
+        ),
         isTrue,
       );
     });
@@ -94,7 +98,8 @@ void main() {
       // Increase latencies to ensure p99 latency exceeds threshold (300ms)
       for (int i = 0; i < 15; i++) {
         metrics.recordHit(
-            Duration(milliseconds: i * 40)); // Latencies: 0, 40, ..., 560
+          Duration(milliseconds: i * 40),
+        ); // Latencies: 0, 40, ..., 560
       }
 
       // Run the monitor
@@ -106,7 +111,8 @@ void main() {
       // Check if the alert for high p99 latency was triggered
       expect(
         receivedAlerts.any(
-            (alert) => alert.contains('Warning: High p99 latency detected')),
+          (alert) => alert.contains('Warning: High p99 latency detected'),
+        ),
         isTrue,
       );
     });
@@ -115,7 +121,8 @@ void main() {
       // Increase latencies to ensure average latency exceeds threshold (100ms)
       for (int i = 0; i < 10; i++) {
         metrics.recordHit(
-            const Duration(milliseconds: 200)); // Constant high latency (200ms)
+          const Duration(milliseconds: 200),
+        ); // Constant high latency (200ms)
       }
 
       // Run the monitor
@@ -126,8 +133,9 @@ void main() {
 
       // Check if the alert for high average latency was triggered
       expect(
-        receivedAlerts.any((alert) =>
-            alert.contains('Warning: High average latency detected')),
+        receivedAlerts.any(
+          (alert) => alert.contains('Warning: High average latency detected'),
+        ),
         isTrue,
       );
     });
@@ -150,7 +158,8 @@ void main() {
       // Check if the alert for high eviction rate was triggered
       expect(
         receivedAlerts.any(
-            (alert) => alert.contains('Warning: High eviction rate detected')),
+          (alert) => alert.contains('Warning: High eviction rate detected'),
+        ),
         isTrue,
       );
     });
@@ -164,17 +173,21 @@ void main() {
       final config = CacheAlertConfig(
         notifyCallback: receivedAlerts.add,
         hitRateThreshold: 0.5,
-        alertCheckInterval:
-            const Duration(milliseconds: 100), // Fast for testing
+        alertCheckInterval: const Duration(
+          milliseconds: 100,
+        ), // Fast for testing
       );
 
       final alertManager = CacheAlertManager(metrics, config);
       alertManager.monitor();
 
       await Future.delayed(
-          const Duration(milliseconds: 350)); // Wait for multiple checks
-      expect(receivedAlerts.length,
-          greaterThanOrEqualTo(2)); // At least two alerts triggered
+        const Duration(milliseconds: 350),
+      ); // Wait for multiple checks
+      expect(
+        receivedAlerts.length,
+        greaterThanOrEqualTo(2),
+      ); // At least two alerts triggered
     });
   });
 }

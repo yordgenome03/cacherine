@@ -31,46 +31,50 @@ void main() {
 
   group('SimpleMRUCache - MRU Eviction Tests', () {
     test(
-        'When the cache exceeds maxSize, MRU eviction removes the most recently used item',
-        () {
-      final cache = SimpleMRUCache<String, String>(2);
+      'When the cache exceeds maxSize, MRU eviction removes the most recently used item',
+      () {
+        final cache = SimpleMRUCache<String, String>(2);
 
-      // Add key1 and key2
+        // Add key1 and key2
+        cache.set('key1', 'value1');
+        cache.set('key2', 'value2');
+
+        // Access key1 to increase its usage count
+        cache.get('key1');
+
+        // Add key3, causing the cache to exceed maxSize
+        cache.set(
+          'key3',
+          'value3',
+        ); // key1 is the most recently used and should be evicted
+
+        // Verify that key1 is evicted
+        expect(cache.get('key1'), isNull); // key1 should be evicted
+        expect(
+          cache.get('key2'),
+          equals('value2'),
+        ); // key2 should remain as it was used
+        expect(
+          cache.get('key3'),
+          equals('value3'),
+        ); // key3 should remain as it was newly added
+      },
+    );
+
+    test('', () {
+      final cache = SimpleMRUCache<String, String>(2);
       cache.set('key1', 'value1');
       cache.set('key2', 'value2');
+      cache.set('key1', 'new_value1');
 
-      // Access key1 to increase its usage count
-      cache.get('key1');
+      cache.set('key3', 'value3');
 
-      // Add key3, causing the cache to exceed maxSize
-      cache.set('key3',
-          'value3'); // key1 is the most recently used and should be evicted
-
-      // Verify that key1 is evicted
-      expect(cache.get('key1'), isNull); // key1 should be evicted
-      expect(cache.get('key2'),
-          equals('value2')); // key2 should remain as it was used
-      expect(cache.get('key3'),
-          equals('value3')); // key3 should remain as it was newly added
-    });
-
-    test(
-        'When the same key is set again, it is placed at the most recent position',
-        () {
-      final cache = SimpleMRUCache<String, String>(2);
-      cache.set('key1', 'value1');
-      cache.set('key2', 'value2');
-      cache.set(
-          'key1', 'new_value1'); // key1 is placed at the most recent position
-
-      cache.set(
-          'key3', 'value3'); // The least recently used 'key2' will be evicted
-
-      expect(cache.get('key2'), isNull); // key2 should be evicted
-      expect(cache.get('key1'),
-          equals('new_value1')); // key1 should remain with the new value
-      expect(cache.get('key3'),
-          equals('value3')); // key3 should remain as it was newly added
+      expect(cache.get('key1'), isNull); // key2 should be evicted
+      expect(cache.get('key2'), equals('value2'));
+      expect(
+        cache.get('key3'),
+        equals('value3'),
+      ); // key3 should remain as it was newly added
     });
   });
 

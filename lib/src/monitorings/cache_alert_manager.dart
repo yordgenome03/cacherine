@@ -26,31 +26,43 @@ class CacheAlertManager {
   /// Checks the cache statistics and triggers alerts if any thresholds are exceeded.
   void _checkAlerts(Map<String, dynamic> stats) {
     if (stats['hit_rate'] as double < config.hitRateThreshold) {
-      config.notifyCallback('Warning: Low hit rate detected. '
-          'Actual: ${stats['hit_rate']} (Threshold: ${config.hitRateThreshold})');
+      config.notifyCallback(
+        'Warning: Low hit rate detected. '
+        'Actual: ${stats['hit_rate']} (Threshold: ${config.hitRateThreshold})',
+      );
     }
     if (stats['miss_rate'] as double > config.missRateThreshold) {
-      config.notifyCallback('Warning: High miss rate detected. '
-          'Actual: ${stats['miss_rate']} (Threshold: ${config.missRateThreshold})');
+      config.notifyCallback(
+        'Warning: High miss rate detected. '
+        'Actual: ${stats['miss_rate']} (Threshold: ${config.missRateThreshold})',
+      );
     }
     if ((stats['p95_latency'] as num).toInt() > config.p95LatencyThreshold) {
-      config.notifyCallback('Warning: High p95 latency detected. '
-          'Actual: ${stats['p95_latency']}ms (Threshold: ${config.p95LatencyThreshold}ms)');
+      config.notifyCallback(
+        'Warning: High p95 latency detected. '
+        'Actual: ${stats['p95_latency']}ms (Threshold: ${config.p95LatencyThreshold}ms)',
+      );
     }
     if ((stats['p99_latency'] as num).toInt() > config.p99LatencyThreshold) {
-      config.notifyCallback('Warning: High p99 latency detected. '
-          'Actual: ${stats['p99_latency']}ms (Threshold: ${config.p99LatencyThreshold}ms)');
+      config.notifyCallback(
+        'Warning: High p99 latency detected. '
+        'Actual: ${stats['p99_latency']}ms (Threshold: ${config.p99LatencyThreshold}ms)',
+      );
     }
     if ((stats['average_latency'] as num).toInt() >
         config.averageLatencyThreshold) {
-      config.notifyCallback('Warning: High average latency detected. '
-          'Actual: ${stats['average_latency']}ms (Threshold: ${config.averageLatencyThreshold}ms)');
+      config.notifyCallback(
+        'Warning: High average latency detected. '
+        'Actual: ${stats['average_latency']}ms (Threshold: ${config.averageLatencyThreshold}ms)',
+      );
     }
     if ((stats['evictions_per_minute'] as num).toInt() >
         config.evictionsPerMinuteThreshold) {
-      config.notifyCallback('Warning: High eviction rate detected. '
-          'Actual: ${stats['evictions_per_minute']} evictions/min '
-          '(Threshold: ${config.evictionsPerMinuteThreshold} evictions/min)');
+      config.notifyCallback(
+        'Warning: High eviction rate detected. '
+        'Actual: ${stats['evictions_per_minute']} evictions/min '
+        '(Threshold: ${config.evictionsPerMinuteThreshold} evictions/min)',
+      );
     }
   }
 }
@@ -81,7 +93,8 @@ class CacheAlertConfig {
     this.p99LatencyThreshold = 300,
     this.evictionsPerMinuteThreshold = 1000,
     this.averageLatencyThreshold = 100,
-    this.alertCheckInterval =
-        const Duration(minutes: 1), // Default check every minute
+    this.alertCheckInterval = const Duration(
+      minutes: 1,
+    ), // Default check every minute
   });
 }

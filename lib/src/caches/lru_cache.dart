@@ -66,10 +66,12 @@ class LRUCache<K, V> extends ThreadSafeCache<K, V> {
     await _lock.synchronized(() {
       if (_cache.containsKey(key)) {
         _cache.remove(
-            key); // Remove the existing key before inserting the new value
+          key,
+        ); // Remove the existing key before inserting the new value
       } else if (_cache.length >= maxSize) {
         _cache.remove(
-            _cache.keys.first); // Remove the least recently used element
+          _cache.keys.first,
+        ); // Remove the least recently used element
       }
       _cache[key] = value;
     });

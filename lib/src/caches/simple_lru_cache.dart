@@ -59,10 +59,12 @@ class SimpleLRUCache<K, V> extends SimpleCache<K, V> {
   void set(K key, V value) {
     if (_cache.containsKey(key)) {
       _cache.remove(
-          key); // Remove the existing key before inserting the new value
+        key,
+      ); // Remove the existing key before inserting the new value
     } else if (_cache.length >= maxSize) {
-      _cache.remove(_cache
-          .keys.first); // Remove the least recently used element following LRU
+      _cache.remove(
+        _cache.keys.first,
+      ); // Remove the least recently used element following LRU
     }
     _cache[key] = value;
   }

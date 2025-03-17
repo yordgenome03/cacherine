@@ -37,12 +37,18 @@ void main() {
       metrics.recordHit(const Duration(milliseconds: 30));
       metrics.recordHit(const Duration(milliseconds: 40));
 
-      expect(metrics.averageLatency.inMilliseconds,
-          equals(25)); // (10+20+30+40) / 4 = 25
-      expect(metrics.getLatencyPercentile(50).inMilliseconds,
-          equals(25)); // 50th percentile = median
-      expect(metrics.getLatencyPercentile(100).inMilliseconds,
-          equals(40)); // 100th percentile = max value
+      expect(
+        metrics.averageLatency.inMilliseconds,
+        equals(25),
+      ); // (10+20+30+40) / 4 = 25
+      expect(
+        metrics.getLatencyPercentile(50).inMilliseconds,
+        equals(25),
+      ); // 50th percentile = median
+      expect(
+        metrics.getLatencyPercentile(100).inMilliseconds,
+        equals(40),
+      ); // 100th percentile = max value
     });
 
     test('Evictions are recorded correctly', () {
@@ -53,35 +59,42 @@ void main() {
       metrics.recordEviction();
 
       expect(
-          metrics.getRecentStats(
-              const Duration(minutes: 1))['evictions_per_minute'],
-          greaterThan(0));
+        metrics.getRecentStats(
+          const Duration(minutes: 1),
+        )['evictions_per_minute'],
+        greaterThan(0),
+      );
     });
   });
 
   group('CacheMetrics - Time Window Stats', () {
-    test('getRecentStats() filters events correctly based on time window',
-        () async {
-      final metrics = CacheMetrics();
+    test(
+      'getRecentStats() filters events correctly based on time window',
+      () async {
+        final metrics = CacheMetrics();
 
-      metrics.recordHit(const Duration(milliseconds: 15));
-      metrics.recordMiss();
-      metrics.recordEviction();
+        metrics.recordHit(const Duration(milliseconds: 15));
+        metrics.recordMiss();
+        metrics.recordEviction();
 
-      await Future.delayed(
-          const Duration(seconds: 2)); // Simulate passage of time
+        await Future.delayed(
+          const Duration(seconds: 2),
+        ); // Simulate passage of time
 
-      metrics.recordHit(const Duration(milliseconds: 25));
-      metrics.recordMiss();
-      metrics.recordEviction();
+        metrics.recordHit(const Duration(milliseconds: 25));
+        metrics.recordMiss();
+        metrics.recordEviction();
 
-      final recentStats = metrics.getRecentStats(const Duration(seconds: 1));
+        final recentStats = metrics.getRecentStats(const Duration(seconds: 1));
 
-      expect(recentStats['hit_rate'],
-          equals(0.5)); // Only the last hit/miss counts
-      expect(recentStats['miss_rate'], equals(0.5));
-      expect(recentStats['evictions_per_minute'], greaterThan(0));
-    });
+        expect(
+          recentStats['hit_rate'],
+          equals(0.5),
+        ); // Only the last hit/miss counts
+        expect(recentStats['miss_rate'], equals(0.5));
+        expect(recentStats['evictions_per_minute'], greaterThan(0));
+      },
+    );
   });
 
   group('CacheMetrics - Reset Functionality', () {
@@ -99,9 +112,11 @@ void main() {
       expect(metrics.totalRequests, equals(0));
       expect(metrics.averageLatency.inMilliseconds, equals(0));
       expect(
-          metrics.getRecentStats(
-              const Duration(minutes: 1))['evictions_per_minute'],
-          equals(0));
+        metrics.getRecentStats(
+          const Duration(minutes: 1),
+        )['evictions_per_minute'],
+        equals(0),
+      );
     });
   });
 }

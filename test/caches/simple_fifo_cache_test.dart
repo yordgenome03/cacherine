@@ -31,46 +31,58 @@ void main() {
 
   group('SimpleFIFOCache - FIFO Eviction Tests', () {
     test(
-        'When the cache exceeds maxSize, FIFO eviction removes the oldest item',
-        () {
-      final cache = SimpleFIFOCache<String, String>(2);
-      cache.set('key1', 'value1');
-      cache.set('key2', 'value2');
-      cache.set('key3', 'value3'); // key1 should be evicted
+      'When the cache exceeds maxSize, FIFO eviction removes the oldest item',
+      () {
+        final cache = SimpleFIFOCache<String, String>(2);
+        cache.set('key1', 'value1');
+        cache.set('key2', 'value2');
+        cache.set('key3', 'value3'); // key1 should be evicted
 
-      expect(cache.get('key1'), isNull); // key1 should be evicted
-      expect(cache.get('key2'), equals('value2'));
-      expect(cache.get('key3'), equals('value3'));
-    });
+        expect(cache.get('key1'), isNull); // key1 should be evicted
+        expect(cache.get('key2'), equals('value2'));
+        expect(cache.get('key3'), equals('value3'));
+      },
+    );
 
     test(
-        'When the same key is set again, it is placed at the most recent position',
-        () {
-      final cache = SimpleFIFOCache<String, String>(2);
-      cache.set('key1', 'value1');
-      cache.set('key2', 'value2');
-      cache.set('key1', 'new_value1'); // key1 is placed at the newest position
+      'When the same key is set again, it is placed at the most recent position',
+      () {
+        final cache = SimpleFIFOCache<String, String>(2);
+        cache.set('key1', 'value1');
+        cache.set('key2', 'value2');
+        cache.set(
+          'key1',
+          'new_value1',
+        ); // key1 is placed at the newest position
 
-      cache.set('key3', 'value3'); // key2, being the oldest, should be evicted
+        cache.set(
+          'key3',
+          'value3',
+        ); // key2, being the oldest, should be evicted
 
-      expect(cache.get('key2'), isNull); // key2 should be evicted
-      expect(cache.get('key1'), equals('new_value1'));
-      expect(cache.get('key3'), equals('value3'));
-    });
+        expect(cache.get('key2'), isNull); // key2 should be evicted
+        expect(cache.get('key1'), equals('new_value1'));
+        expect(cache.get('key3'), equals('value3'));
+      },
+    );
   });
 
   group('SimpleFIFOCache - Additional Behavior Validation', () {
-    test('Behavior with maxSize=1 (always keeps only the most recent item)',
-        () {
-      final cache = SimpleFIFOCache<String, String>(1);
-      cache.set('key1', 'value1');
-      expect(cache.get('key1'), equals('value1'));
+    test(
+      'Behavior with maxSize=1 (always keeps only the most recent item)',
+      () {
+        final cache = SimpleFIFOCache<String, String>(1);
+        cache.set('key1', 'value1');
+        expect(cache.get('key1'), equals('value1'));
 
-      cache.set(
-          'key2', 'value2'); // 'key1' should be evicted, only 'key2' remains
-      expect(cache.get('key1'), isNull);
-      expect(cache.get('key2'), equals('value2'));
-    });
+        cache.set(
+          'key2',
+          'value2',
+        ); // 'key1' should be evicted, only 'key2' remains
+        expect(cache.get('key1'), isNull);
+        expect(cache.get('key2'), equals('value2'));
+      },
+    );
 
     test('Retrieving a non-existing key returns null', () {
       final cache = SimpleFIFOCache<String, String>(3);
@@ -88,7 +100,9 @@ void main() {
       cache.set('key4', 'value4'); // 'key1' should be evicted
       expect(cache.getKeys(), containsAll(['key2', 'key3', 'key4']));
       expect(
-          cache.getKeys(), isNot(contains('key1'))); // 'key1' should be evicted
+        cache.getKeys(),
+        isNot(contains('key1')),
+      ); // 'key1' should be evicted
     });
 
     test('Cache string representation (toString() test)', () {

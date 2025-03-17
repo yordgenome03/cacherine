@@ -18,8 +18,10 @@ void main() {
       final cache = EphemeralFIFOCache<String, String>(3);
       await cache.set('key1', 'value1');
       expect(await cache.get('key1'), equals('value1'));
-      expect(await cache.get('key1'),
-          isNull); // It should be removed after retrieval
+      expect(
+        await cache.get('key1'),
+        isNull,
+      ); // It should be removed after retrieval
     });
 
     test('clear() empties the cache', () async {
@@ -36,27 +38,32 @@ void main() {
 
   group('EphemeralFIFOCache - FIFO Eviction Tests', () {
     test(
-        'When the cache exceeds maxSize, FIFO eviction removes the oldest item',
-        () async {
-      final cache = EphemeralFIFOCache<String, String>(2);
-      await cache.set('key1', 'value1');
-      await cache.set('key2', 'value2');
-      await cache.set('key3', 'value3'); // key1 should be evicted (FIFO)
+      'When the cache exceeds maxSize, FIFO eviction removes the oldest item',
+      () async {
+        final cache = EphemeralFIFOCache<String, String>(2);
+        await cache.set('key1', 'value1');
+        await cache.set('key2', 'value2');
+        await cache.set('key3', 'value3'); // key1 should be evicted (FIFO)
 
-      expect(await cache.get('key1'), isNull); // key1 should be removed
-      expect(await cache.get('key2'), equals('value2'));
-      expect(await cache.get('key3'), equals('value3'));
-    });
+        expect(await cache.get('key1'), isNull); // key1 should be removed
+        expect(await cache.get('key2'), equals('value2'));
+        expect(await cache.get('key3'), equals('value3'));
+      },
+    );
 
     test('Setting the same key with set() does not change the order', () async {
       final cache = EphemeralFIFOCache<String, String>(2);
       await cache.set('key1', 'value1');
       await cache.set('key2', 'value2');
       await cache.set(
-          'key1', 'new_value1'); // key1 is placed at the most recent position
+        'key1',
+        'new_value1',
+      ); // key1 is placed at the most recent position
 
       await cache.set(
-          'key3', 'value3'); // The oldest key, key2, should be evicted
+        'key3',
+        'value3',
+      ); // The oldest key, key2, should be evicted
 
       expect(await cache.get('key2'), isNull); // key2 should be removed
       expect(await cache.get('key1'), equals('new_value1'));
@@ -71,9 +78,12 @@ void main() {
       // Perform 1000 parallel set & get operations
       final futures = List.generate(1000, (i) async {
         await cache.set(
-            i % 5, 'value$i'); // keys 0 to 4 will be updated continuously
-        return await cache.get(i %
-            5); // Check if value can be retrieved (and is deleted immediately after)
+          i % 5,
+          'value$i',
+        ); // keys 0 to 4 will be updated continuously
+        return await cache.get(
+          i % 5,
+        ); // Check if value can be retrieved (and is deleted immediately after)
       });
 
       // Wait for all async operations to complete
@@ -90,11 +100,7 @@ void main() {
       await cache.set('key3', 'value3');
 
       // Perform parallel clear() calls
-      await Future.wait([
-        cache.clear(),
-        cache.clear(),
-        cache.clear(),
-      ]);
+      await Future.wait([cache.clear(), cache.clear(), cache.clear()]);
 
       expect(await cache.get('key1'), isNull);
       expect(await cache.get('key2'), isNull);
@@ -102,23 +108,27 @@ void main() {
       expect(cache.getKeys(), isEmpty);
     });
 
-    test('Calling toString() during parallel processing does not cause errors',
-        () async {
-      final cache = EphemeralFIFOCache<int, String>(5);
-      await cache.set(1, 'value1');
-      await cache.set(2, 'value2');
-      await cache.set(3, 'value3');
+    test(
+      'Calling toString() during parallel processing does not cause errors',
+      () async {
+        final cache = EphemeralFIFOCache<int, String>(5);
+        await cache.set(1, 'value1');
+        await cache.set(2, 'value2');
+        await cache.set(3, 'value3');
 
-      // Perform parallel get() and toString() calls
-      final futures = List.generate(1000, (i) async {
-        await cache.get(i % 3);
-        return cache.toString();
-      });
+        // Perform parallel get() and toString() calls
+        final futures = List.generate(1000, (i) async {
+          await cache.get(i % 3);
+          return cache.toString();
+        });
 
-      final results = await Future.wait(futures);
-      expect(results.length,
-          equals(1000)); // All toString() calls should work without errors
-    });
+        final results = await Future.wait(futures);
+        expect(
+          results.length,
+          equals(1000),
+        ); // All toString() calls should work without errors
+      },
+    );
   });
 
   group('EphemeralFIFOCache - Error Handling', () {

@@ -22,11 +22,17 @@ Whether you need a simple single-threaded cache or an async-compatible solution 
 ## Features
 
 - **FIFO** (First In, First Out)
+  — [Learn more](doc/fifo_cache.md)
 - **EphemeralFIFO** (FIFO-based cache where keys are removed after being accessed)
+  — [Learn more](doc/ephemeral_fifo_cache.md)
 - **LRU** (Least Recently Used)
+  — [Learn more](doc/lru_cache.md)
 - **MRU** (Most Recently Used)
+  — [Learn more](doc/mru_cache.md)
 - **LFU** (Least Frequently Used)
-- **MonitoredCache** (Includes performance monitoring with hit/miss rates, latency, and eviction alerts) — [Learn more](doc/monitored_cache.md)
+  — [Learn more](doc/lfu_cache.md)
+- **MonitoredCache** (Includes performance monitoring with hit/miss rates, latency, and eviction alerts)
+  — [Learn more](doc/monitored_cache.md)
 - **Simple versions (e.g., SimpleFIFOCache) for single-threaded usage, and standard versions for multi-threaded environments**
 
 ## Installation

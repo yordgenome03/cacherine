@@ -99,10 +99,12 @@ class MonitoredLRUCache<K, V> extends ThreadSafeCache<K, V>
     await _lock.synchronized(() {
       if (_cache.containsKey(key)) {
         _cache.remove(
-            key); // Remove existing key and reinsert it to update position
+          key,
+        ); // Remove existing key and reinsert it to update position
       } else if (_cache.length >= maxSize) {
         _cache.remove(
-            _cache.keys.first); // Remove the least recently used element
+          _cache.keys.first,
+        ); // Remove the least recently used element
       }
       _cache[key] = value;
     });

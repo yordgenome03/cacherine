@@ -56,32 +56,37 @@ void main() {
 
   group('FIFOCache - FIFO Eviction Tests', () {
     test(
-        'When the cache exceeds maxSize, FIFO eviction removes the oldest item',
-        () async {
-      final cache = FIFOCache<String, String>(2);
-      await cache.set('key1', 'value1');
-      await cache.set('key2', 'value2');
-      await cache.set('key3', 'value3'); // key1 should be evicted
+      'When the cache exceeds maxSize, FIFO eviction removes the oldest item',
+      () async {
+        final cache = FIFOCache<String, String>(2);
+        await cache.set('key1', 'value1');
+        await cache.set('key2', 'value2');
+        await cache.set('key3', 'value3'); // key1 should be evicted
 
-      expect(await cache.get('key1'), isNull); // key1 should be removed
-      expect(await cache.get('key2'), equals('value2'));
-      expect(await cache.get('key3'), equals('value3'));
-    });
+        expect(await cache.get('key1'), isNull); // key1 should be removed
+        expect(await cache.get('key2'), equals('value2'));
+        expect(await cache.get('key3'), equals('value3'));
+      },
+    );
 
-    test('Setting the same key again with set() does not change the order',
-        () async {
-      final cache = FIFOCache<String, String>(2);
-      await cache.set('key1', 'value1');
-      await cache.set('key2', 'value2');
-      await cache.set('key1', 'new_value1'); // Order does not change
+    test(
+      'Setting the same key again with set() does not change the order',
+      () async {
+        final cache = FIFOCache<String, String>(2);
+        await cache.set('key1', 'value1');
+        await cache.set('key2', 'value2');
+        await cache.set('key1', 'new_value1'); // Order does not change
 
-      await cache.set('key3', 'value3'); // key2 will be evicted (FIFO order)
+        await cache.set('key3', 'value3'); // key2 will be evicted (FIFO order)
 
-      expect(await cache.get('key2'), isNull); // key2 should be removed
-      expect(await cache.get('key1'),
-          equals('new_value1')); // key1 should remain with new value
-      expect(await cache.get('key3'), equals('value3')); // key3 should be set
-    });
+        expect(await cache.get('key2'), isNull); // key2 should be removed
+        expect(
+          await cache.get('key1'),
+          equals('new_value1'),
+        ); // key1 should remain with new value
+        expect(await cache.get('key3'), equals('value3')); // key3 should be set
+      },
+    );
   });
 
   group('FIFOCache - Thread-safety Tests', () {
@@ -90,8 +95,10 @@ void main() {
 
       // Perform 1000 parallel set & get operations
       final futures = List.generate(1000, (i) async {
-        await cache.set(i % 5,
-            'value$i'); // values for keys 0 to 4 will be continuously updated
+        await cache.set(
+          i % 5,
+          'value$i',
+        ); // values for keys 0 to 4 will be continuously updated
         return await cache.get(i % 5); // Check if value can be retrieved
       });
 
@@ -113,11 +120,7 @@ void main() {
       await cache.set('key3', 'value3');
 
       // Perform parallel clear() calls
-      await Future.wait([
-        cache.clear(),
-        cache.clear(),
-        cache.clear(),
-      ]);
+      await Future.wait([cache.clear(), cache.clear(), cache.clear()]);
 
       expect(await cache.get('key1'), isNull);
       expect(await cache.get('key2'), isNull);

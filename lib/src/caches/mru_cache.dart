@@ -58,16 +58,20 @@ class MRUCache<K, V> extends ThreadSafeCache<K, V> {
   /// **Stores the specified key-value pair in the cache.**
   ///
   /// - If `set()` is called on an existing key, **its value is updated**,
-  ///   but **its order remains unchanged**.
+  ///   and **its order is updated to mark it as "recently used."**
   /// - If the cache exceeds **[maxSize]**, the **most recently used element is removed** following the MRU policy.
   ///
   /// **This method is thread-safe.**
   @override
   Future<void> set(K key, V value) async {
     await _lock.synchronized(() {
-      if (_cache.length >= maxSize) {
+      // If the key already exists, remove it to update its order
+      if (_cache.containsKey(key)) {
+        _cache.remove(key);
+      } else if (_cache.length >= maxSize) {
         _evictMRUEntry(); // Evict using MRU policy
       }
+      // Insert the key to mark it as the most recently used
       _cache[key] = value;
     });
   }
