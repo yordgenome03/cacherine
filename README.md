@@ -8,6 +8,8 @@
 [![GitHub issues](https://img.shields.io/github/issues/yordgenome03/cacherine)](https://github.com/yordgenome03/cacherine/issues)
 [![GitHub pull requests](https://img.shields.io/github/issues-pr/yordgenome03/cacherine)](https://github.com/yordgenome03/cacherine/pulls)
 
+![cacherine_logo_x05](https://github.com/user-attachments/assets/b8e761b9-e88b-4ae0-9197-00a2203e9b9e)
+
 `cacherine` is a simple and flexible memory cache library for Dart. It provides basic caching algorithms such as FIFO, LRU, MRU, and LFU. Both single-threaded and async-enabled versions are available to handle different usage scenarios.
 
 If you want to choose the best cache algorithm for your app, you can use **MonitoredCache** in your development environment. It helps you monitor performance metrics (such as hit/miss rates, latency, and eviction alerts) so you can make data-driven decisions and optimize the algorithm you use.
