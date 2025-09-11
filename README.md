@@ -8,7 +8,9 @@
 [![GitHub issues](https://img.shields.io/github/issues/yordgenome03/cacherine)](https://github.com/yordgenome03/cacherine/issues)
 [![GitHub pull requests](https://img.shields.io/github/issues-pr/yordgenome03/cacherine)](https://github.com/yordgenome03/cacherine/pulls)
 
-![cacherine_logo_x05](https://github.com/user-attachments/assets/b8e761b9-e88b-4ae0-9197-00a2203e9b9e)
+<p align="center">
+  <img src="https://github.com/user-attachments/assets/2a42a018-61cb-4ef7-a3d8-a0cafe923328" alt="cacherine logo" width="300"/>
+</p>
 
 `cacherine` is a simple and flexible memory cache library for Dart. It provides basic caching algorithms such as FIFO, LRU, MRU, and LFU. Both single-threaded and async-enabled versions are available to handle different usage scenarios.
 
