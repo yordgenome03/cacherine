@@ -1,3 +1,7 @@
+## 1.1.4 - Add Project Logo to README
+
+- Added project logo to README header for improved visual branding.
+
 ## 1.1.3 - Add Cache Algorithm Documentation
 
 - Added documentation for Cache algorithms to the README.
