@@ -89,8 +89,8 @@ If you want to monitor the performance of your cache and optimize the algorithm,
 
 - [FIFOCache<K, V>](lib/src/caches/fifo_cache.dart): FIFO-based cache
 - [EphemeralFIFOCache<K, V>](lib/src/caches/ephemeral_fifo_cache.dart): FIFO-based cache where the key is removed after being accessed (One-Time Read Cache)
-- [LRUCache<K, V>](lib/src/caches/lru_cache.dart): Cache that retains the least recently used items
-- [MRUCache<K, V>](lib/src/caches/mru_cache.dart): Cache that retains the most recently used items
+- [LRUCache<K, V>](lib/src/caches/lru_cache.dart): Cache that removes the least recently used items
+- [MRUCache<K, V>](lib/src/caches/mru_cache.dart): Cache that removes the most recently used items
 - [LFUCache<K, V>](lib/src/caches/lfu_cache.dart): Cache that removes the least frequently used items
 
 - [MonitoredFIFOCache<K, V>](lib/src/caches/monitored_ephemeral_fifo_cache.dart): FIFO-based cache with monitoring
