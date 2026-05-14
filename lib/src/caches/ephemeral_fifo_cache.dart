@@ -65,7 +65,7 @@ class EphemeralFIFOCache<K, V> extends ThreadSafeCache<K, V> {
   @override
   Future<void> set(K key, V value) async {
     await _lock.synchronized(() {
-      if (_cache.length >= maxSize) {
+      if (!_cache.containsKey(key) && _cache.length >= maxSize) {
         _cache.remove(
           _cache.keys.first,
         ); // Remove the oldest element following FIFO

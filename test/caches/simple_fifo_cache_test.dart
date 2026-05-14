@@ -53,18 +53,31 @@ void main() {
         cache.set(
           'key1',
           'new_value1',
-        ); // key1 is placed at the newest position
+        ); // key1's value is updated; its FIFO position does not change
 
         cache.set(
           'key3',
           'value3',
-        ); // key2, being the oldest, should be evicted
+        ); // key1, being the oldest, should be evicted
 
-        expect(cache.get('key2'), isNull); // key2 should be evicted
-        expect(cache.get('key1'), equals('new_value1'));
+        expect(cache.get('key1'), isNull); // key1 should be evicted (oldest)
+        expect(cache.get('key2'), equals('value2')); // key2 should remain
         expect(cache.get('key3'), equals('value3'));
       },
     );
+
+    test('Updating an existing key at capacity does not evict any entry', () {
+      final cache = SimpleFIFOCache<String, String>(3);
+      cache.set('A', 'valueA');
+      cache.set('B', 'valueB');
+      cache.set('C', 'valueC');
+
+      cache.set('B', 'newValueB'); // update existing key — no eviction
+
+      expect(cache.getKeys().length, equals(3));
+      expect(cache.getKeys(), containsAll(['A', 'B', 'C']));
+      expect(cache.get('B'), equals('newValueB'));
+    });
   });
 
   group('SimpleFIFOCache - Additional Behavior Validation', () {

@@ -58,17 +58,33 @@ void main() {
       await cache.set(
         'key1',
         'new_value1',
-      ); // key1 is placed at the most recent position
+      ); // key1's value is updated; its FIFO position does not change
 
       await cache.set(
         'key3',
         'value3',
-      ); // The oldest key, key2, should be evicted
+      ); // key1, being the oldest, should be evicted
 
-      expect(await cache.get('key2'), isNull); // key2 should be removed
-      expect(await cache.get('key1'), equals('new_value1'));
+      expect(await cache.get('key1'), isNull); // key1 should be removed (oldest)
+      expect(await cache.get('key2'), equals('value2')); // key2 should remain
       expect(await cache.get('key3'), equals('value3'));
     });
+
+    test(
+      'Updating an existing key at capacity does not evict any entry',
+      () async {
+        final cache = EphemeralFIFOCache<String, String>(3);
+        await cache.set('A', 'valueA');
+        await cache.set('B', 'valueB');
+        await cache.set('C', 'valueC');
+
+        await cache.set('B', 'newValueB'); // update existing key — no eviction
+
+        expect(cache.getKeys().length, equals(3));
+        expect(cache.getKeys(), containsAll(['A', 'B', 'C']));
+        expect(await cache.get('B'), equals('newValueB'));
+      },
+    );
   });
 
   group('EphemeralFIFOCache - Thread-safety Tests', () {
