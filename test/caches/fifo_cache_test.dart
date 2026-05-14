@@ -77,9 +77,15 @@ void main() {
         await cache.set('key2', 'value2');
         await cache.set('key1', 'new_value1'); // Order does not change
 
-        await cache.set('key3', 'value3'); // key1 will be evicted (FIFO order, key1 is oldest)
+        await cache.set(
+          'key3',
+          'value3',
+        ); // key1 will be evicted (FIFO order, key1 is oldest)
 
-        expect(await cache.get('key1'), isNull); // key1 should be removed (oldest)
+        expect(
+          await cache.get('key1'),
+          isNull,
+        ); // key1 should be removed (oldest)
         expect(await cache.get('key2'), equals('value2')); // key2 should remain
         expect(await cache.get('key3'), equals('value3')); // key3 should be set
       },
