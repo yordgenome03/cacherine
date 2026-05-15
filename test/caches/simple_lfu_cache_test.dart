@@ -149,19 +149,22 @@ void main() {
       expect(cache.getKeys().length, equals(1));
     });
 
-    test('remove() discards frequency counter so LFU ordering is unaffected', () {
-      final cache = SimpleLFUCache<String, String>(2);
-      cache.set('key1', 'value1');
-      cache.set('key2', 'value2');
-      cache.get('key2'); // key2 freq=2, key1 freq=1
-      cache.remove('key1');
-      // Re-add key1 — should start fresh with freq=1
-      cache.set('key1', 'new1');
-      // key1 (freq=1) is LFU; inserting key3 should evict key1
-      cache.set('key3', 'value3');
-      expect(cache.get('key1'), isNull);
-      expect(cache.get('key2'), equals('value2'));
-      expect(cache.get('key3'), equals('value3'));
-    });
+    test(
+      'remove() discards frequency counter so LFU ordering is unaffected',
+      () {
+        final cache = SimpleLFUCache<String, String>(2);
+        cache.set('key1', 'value1');
+        cache.set('key2', 'value2');
+        cache.get('key2'); // key2 freq=2, key1 freq=1
+        cache.remove('key1');
+        // Re-add key1 — should start fresh with freq=1
+        cache.set('key1', 'new1');
+        // key1 (freq=1) is LFU; inserting key3 should evict key1
+        cache.set('key3', 'value3');
+        expect(cache.get('key1'), isNull);
+        expect(cache.get('key2'), equals('value2'));
+        expect(cache.get('key3'), equals('value3'));
+      },
+    );
   });
 }
