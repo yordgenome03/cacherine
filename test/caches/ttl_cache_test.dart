@@ -37,27 +37,33 @@ void main() {
       );
     });
 
-    test('set() throws ArgumentError for zero per-entry ttl override', () async {
-      final cache = TTLCache<String, String>(
-        ttl: const Duration(seconds: 10),
-        clock: fakeClock,
-      );
-      await expectLater(
-        () => cache.set('key', 'value', ttl: Duration.zero),
-        throwsArgumentError,
-      );
-    });
+    test(
+      'set() throws ArgumentError for zero per-entry ttl override',
+      () async {
+        final cache = TTLCache<String, String>(
+          ttl: const Duration(seconds: 10),
+          clock: fakeClock,
+        );
+        await expectLater(
+          () => cache.set('key', 'value', ttl: Duration.zero),
+          throwsArgumentError,
+        );
+      },
+    );
 
-    test('set() throws ArgumentError for negative per-entry ttl override', () async {
-      final cache = TTLCache<String, String>(
-        ttl: const Duration(seconds: 10),
-        clock: fakeClock,
-      );
-      await expectLater(
-        () => cache.set('key', 'value', ttl: const Duration(seconds: -1)),
-        throwsArgumentError,
-      );
-    });
+    test(
+      'set() throws ArgumentError for negative per-entry ttl override',
+      () async {
+        final cache = TTLCache<String, String>(
+          ttl: const Duration(seconds: 10),
+          clock: fakeClock,
+        );
+        await expectLater(
+          () => cache.set('key', 'value', ttl: const Duration(seconds: -1)),
+          throwsArgumentError,
+        );
+      },
+    );
   });
 
   group('TTLCache - Global TTL', () {
@@ -139,6 +145,46 @@ void main() {
       expect(keys, contains('c'));
       expect(keys, isNot(contains('a')));
       expect(keys, isNot(contains('b')));
+    });
+  });
+
+  group('TTLCache - remove() and clear()', () {
+    test('remove() deletes a specific entry', () async {
+      final cache = TTLCache<String, String>(
+        ttl: const Duration(seconds: 10),
+        clock: fakeClock,
+      );
+
+      await cache.set('a', '1');
+      await cache.set('b', '2');
+      await cache.remove('a');
+
+      expect(await cache.get('a'), isNull);
+      expect(await cache.get('b'), equals('2'));
+    });
+
+    test('remove() is a no-op for absent key', () async {
+      final cache = TTLCache<String, String>(
+        ttl: const Duration(seconds: 10),
+        clock: fakeClock,
+      );
+
+      await expectLater(() => cache.remove('missing'), returnsNormally);
+    });
+
+    test('clear() removes all entries', () async {
+      final cache = TTLCache<String, String>(
+        ttl: const Duration(seconds: 10),
+        clock: fakeClock,
+      );
+
+      await cache.set('a', '1');
+      await cache.set('b', '2');
+      await cache.clear();
+
+      expect(await cache.get('a'), isNull);
+      expect(await cache.get('b'), isNull);
+      expect(await cache.getKeys(), isEmpty);
     });
   });
 
