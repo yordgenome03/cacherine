@@ -9,6 +9,7 @@ export 'src/interfaces/thread_safe_cache.dart';
 export 'src/monitorings/cache_alert_manager.dart';
 export 'src/monitorings/cache_metrics.dart';
 export 'src/monitorings/cache_monitoring.dart';
+export 'src/monitorings/cache_stats_dashboard.dart';
 
 // Simple Caches
 export 'src/caches/simple_ephemeral_fifo_cache.dart';
