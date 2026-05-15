@@ -132,6 +132,19 @@ void main() {
     });
   });
 
+  group('SimpleLFUCache - toString()', () {
+    test('toString() returns key-value pairs as a string', () {
+      final cache = SimpleLFUCache<String, String>(3);
+      cache.set('a', '1');
+      cache.set('b', '2');
+      final result = cache.toString();
+      expect(result, contains('a'));
+      expect(result, contains('1'));
+      expect(result, contains('b'));
+      expect(result, contains('2'));
+    });
+  });
+
   group('SimpleLFUCache - remove()', () {
     test('remove() existing key makes get() return null', () {
       final cache = SimpleLFUCache<String, String>(3);

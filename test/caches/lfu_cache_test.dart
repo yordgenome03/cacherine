@@ -175,7 +175,38 @@ void main() {
     });
   });
 
+  group('LFUCache - toString()', () {
+    test('toString() returns key-value pairs as a string', () async {
+      final cache = LFUCache<String, String>(3);
+      await cache.set('a', '1');
+      await cache.set('b', '2');
+      final result = cache.toString();
+      expect(result, contains('a'));
+      expect(result, contains('1'));
+      expect(result, contains('b'));
+      expect(result, contains('2'));
+    });
+  });
+
   group('LFUCache - remove()', () {
+    test(
+      'remove() empties minFreq bucket while other items remain — minFreq recalculated',
+      () async {
+        final cache = LFUCache<String, String>(3);
+        await cache.set('key1', 'value1'); // freq=1
+        await cache.set('key2', 'value2'); // freq=1
+        await cache.get('key2'); // key2 freq=2, _minFreq still 1
+        // Remove key1: freq=1 bucket becomes empty and was _minFreq,
+        // but key2 (freq=2) remains → _minFreq must be recalculated to 2.
+        await cache.remove('key1');
+        expect(await cache.get('key1'), isNull);
+        expect(await cache.get('key2'), equals('value2'));
+        // A new insertion should work correctly (minFreq resets to 1).
+        await cache.set('key3', 'value3');
+        expect(await cache.get('key3'), equals('value3'));
+      },
+    );
+
     test('remove() existing key makes subsequent get() return null', () async {
       final cache = LFUCache<String, String>(3);
       await cache.set('key1', 'value1');
