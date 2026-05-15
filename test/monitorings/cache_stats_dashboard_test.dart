@@ -206,6 +206,41 @@ void main() {
       },
     );
 
+    test('does not throw when hitRate is greater than 1.0', () {
+      expect(
+        () => formatDashboard(_makeSnap(hitRate: 1.5)),
+        returnsNormally,
+      );
+    });
+
+    test('does not throw when hitRate is negative', () {
+      expect(
+        () => formatDashboard(_makeSnap(hitRate: -0.5)),
+        returnsNormally,
+      );
+    });
+
+    test('does not throw when hitRate is NaN', () {
+      expect(
+        () => formatDashboard(_makeSnap(hitRate: double.nan)),
+        returnsNormally,
+      );
+    });
+
+    test('clamps hitRate > 1.0 to a full bar', () {
+      final output = formatDashboard(_makeSnap(hitRate: 2.0));
+
+      expect('█'.allMatches(output).length, equals(20));
+      expect('░'.allMatches(output).length, equals(0));
+    });
+
+    test('clamps negative hitRate to an empty bar', () {
+      final output = formatDashboard(_makeSnap(hitRate: -1.0));
+
+      expect('█'.allMatches(output).length, equals(0));
+      expect('░'.allMatches(output).length, equals(20));
+    });
+
     test('output includes capturedAt under Captured at: label', () {
       final capturedAt = DateTime(2026, 5, 15, 16, 10, 0);
       final output = formatDashboard(_makeSnap(capturedAt: capturedAt));
