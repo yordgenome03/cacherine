@@ -32,7 +32,7 @@ void main() {
     test('Triggers alert when hit rate is too low', () async {
       // 90% of requests are misses
       for (int i = 0; i < 10; i++) {
-        metrics.recordMiss();
+        metrics.recordMiss(Duration.zero);
       }
       metrics.recordHit(const Duration(milliseconds: 10));
 
@@ -54,7 +54,7 @@ void main() {
     test('Triggers alert when miss rate is too high', () async {
       // 80% of requests are misses
       for (int i = 0; i < 8; i++) {
-        metrics.recordMiss();
+        metrics.recordMiss(Duration.zero);
       }
       for (int i = 0; i < 2; i++) {
         metrics.recordHit(const Duration(milliseconds: 10));

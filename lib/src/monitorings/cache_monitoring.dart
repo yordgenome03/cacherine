@@ -16,7 +16,7 @@ mixin CacheMonitoring<K, V> {
     if (value != null) {
       metrics.recordHit(stopwatch.elapsed);
     } else {
-      metrics.recordMiss();
+      metrics.recordMiss(stopwatch.elapsed);
     }
     return value;
   }

@@ -8,9 +8,9 @@ void main() {
 
       metrics.recordHit(const Duration(milliseconds: 10));
       metrics.recordHit(const Duration(milliseconds: 20));
-      metrics.recordMiss();
-      metrics.recordMiss();
-      metrics.recordMiss();
+      metrics.recordMiss(Duration.zero);
+      metrics.recordMiss(Duration.zero);
+      metrics.recordMiss(Duration.zero);
 
       expect(metrics.hits, equals(2));
       expect(metrics.misses, equals(3));
@@ -22,8 +22,8 @@ void main() {
 
       metrics.recordHit(const Duration(milliseconds: 10));
       metrics.recordHit(const Duration(milliseconds: 20));
-      metrics.recordMiss();
-      metrics.recordMiss();
+      metrics.recordMiss(Duration.zero);
+      metrics.recordMiss(Duration.zero);
 
       expect(metrics.hitRate, closeTo(0.5, 0.01)); // 2/4 = 0.5
       expect(metrics.missRate, closeTo(0.5, 0.01)); // 2/4 = 0.5
@@ -51,6 +51,17 @@ void main() {
       ); // 100th percentile = max value
     });
 
+    test('averageLatency includes miss samples', () {
+      final metrics = CacheMetrics();
+
+      metrics.recordHit(const Duration(milliseconds: 10));
+      metrics.recordHit(const Duration(milliseconds: 20));
+      metrics.recordMiss(const Duration(milliseconds: 30));
+
+      // (10 + 20 + 30) / 3 = 20ms
+      expect(metrics.averageLatency.inMilliseconds, equals(20));
+    });
+
     test('Evictions are recorded correctly', () {
       final metrics = CacheMetrics();
 
@@ -74,7 +85,7 @@ void main() {
         final metrics = CacheMetrics();
 
         metrics.recordHit(const Duration(milliseconds: 15));
-        metrics.recordMiss();
+        metrics.recordMiss(Duration.zero);
         metrics.recordEviction();
 
         await Future.delayed(
@@ -82,7 +93,7 @@ void main() {
         ); // Simulate passage of time
 
         metrics.recordHit(const Duration(milliseconds: 25));
-        metrics.recordMiss();
+        metrics.recordMiss(Duration.zero);
         metrics.recordEviction();
 
         final recentStats = metrics.getRecentStats(const Duration(seconds: 1));
@@ -102,7 +113,7 @@ void main() {
       final metrics = CacheMetrics();
 
       metrics.recordHit(const Duration(milliseconds: 10));
-      metrics.recordMiss();
+      metrics.recordMiss(Duration.zero);
       metrics.recordEviction();
 
       metrics.reset();
@@ -212,7 +223,7 @@ void main() {
           metrics.recordHit(const Duration(milliseconds: 1));
         }
         for (var i = 0; i < totalMisses; i++) {
-          metrics.recordMiss();
+          metrics.recordMiss(Duration.zero);
         }
         expect(metrics.hits, equals(totalHits));
         expect(metrics.misses, equals(totalMisses));
