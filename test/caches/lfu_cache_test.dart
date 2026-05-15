@@ -140,8 +140,14 @@ void main() {
         // Eviction must then remove key2 (LRU tiebreak: oldest is evicted first).
         final cache = LFUCache<String, String>(2);
         await cache.set('key1', 'value1'); // bucket[1]: [key1]
-        await cache.set('key2', 'value2'); // bucket[1]: [key2, key1] (key1 is tail)
-        await cache.set('key1', 'updated'); // refreshes recency → [key1, key2] (key2 is tail)
+        await cache.set(
+          'key2',
+          'value2',
+        ); // bucket[1]: [key2, key1] (key1 is tail)
+        await cache.set(
+          'key1',
+          'updated',
+        ); // refreshes recency → [key1, key2] (key2 is tail)
         await cache.set('key3', 'value3'); // evicts tail of bucket[1] → key2
         expect(await cache.get('key2'), isNull);
         expect(await cache.get('key1'), equals('updated'));

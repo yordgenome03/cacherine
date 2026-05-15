@@ -133,7 +133,10 @@ void main() {
         final cache = SimpleLFUCache<String, String>(2);
         cache.set('key1', 'value1'); // bucket[1]: [key1]
         cache.set('key2', 'value2'); // bucket[1]: [key2, key1] (key1 is tail)
-        cache.set('key1', 'updated'); // refreshes recency → [key1, key2] (key2 is tail)
+        cache.set(
+          'key1',
+          'updated',
+        ); // refreshes recency → [key1, key2] (key2 is tail)
         cache.set('key3', 'value3'); // evicts tail of bucket[1] → key2
         expect(cache.get('key2'), isNull);
         expect(cache.get('key1'), equals('updated'));
