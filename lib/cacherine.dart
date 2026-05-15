@@ -30,3 +30,6 @@ export 'src/caches/monitored_fifo_cache.dart';
 export 'src/caches/monitored_lru_cache.dart';
 export 'src/caches/monitored_mru_cache.dart';
 export 'src/caches/monitored_lfu_cache.dart';
+
+// TTL Cache
+export 'src/caches/ttl_cache.dart';
