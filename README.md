@@ -39,6 +39,7 @@ Whether you need a simple single-threaded cache or an async-compatible solution 
   — [Learn more](doc/ttl_cache.md)
 - **MonitoredCache** (Includes performance monitoring with hit/miss rates, latency, and eviction alerts)
   — [Learn more](doc/monitored_cache.md)
+- **CacheStatsDashboard** (Wraps a MonitoredCache's metrics to provide point-in-time snapshots and periodic streams; `formatDashboard()` renders a Unicode terminal panel)
 - **Simple versions (e.g., SimpleFIFOCache) for single-threaded usage, and standard versions for multi-threaded environments**
 
 ## Installation
@@ -110,6 +111,45 @@ void main() async {
 If you want to monitor the performance of your cache and optimize the algorithm, use MonitoredCache.
 [Learn more about MonitoredCache and performance monitoring.](doc/monitored_cache.md)
 
+### Stats Dashboard Usage
+
+`CacheStatsDashboard` wraps any `CacheMetrics` instance (exposed by MonitoredCache variants) to give you typed snapshots and a periodic stream. Use `formatDashboard()` to render a human-readable terminal panel.
+
+```dart
+import 'package:cacherine/cacherine.dart';
+
+void main() async {
+  final cache = MonitoredLRUCache<String, String>(maxSize: 100);
+
+  // warm up the cache
+  await cache.set('key', 'value');
+  await cache.get('key');
+
+  // one-shot snapshot over a 1-minute eviction window
+  final dashboard = CacheStatsDashboard(cache.metrics);
+  final snap = dashboard.snapshot(const Duration(minutes: 1));
+  print(formatDashboard(snap));
+  // ┌─── Cacherine Dashboard Snapshot ─────────────────────────────┐
+  // │ Captured at: 2026-05-15 12:00:00                             │
+  // ├───────────────────────────────────────────────────────────────┤
+  // │ Traffic:     1 request                                        │
+  // │ Hit Rate:    100.0%  [████████████████████]                   │
+  // ├───────────────────────────────────────────────────────────────┤
+  // │ Latency:     P50: 12µs / P95: 12µs / P99: 12µs               │
+  // │ Evictions:   0 / min                                          │
+  // └───────────────────────────────────────────────────────────────┘
+
+  // periodic stream — emits every 5 seconds
+  final sub = dashboard
+      .stream(const Duration(minutes: 1), const Duration(seconds: 5))
+      .listen((s) => print(formatDashboard(s)));
+
+  await Future<void>.delayed(const Duration(seconds: 15));
+  await sub.cancel();
+  cache.dispose();
+}
+```
+
 ## API Reference
 
 - [FIFOCache<K, V>](lib/src/caches/fifo_cache.dart): FIFO-based cache
@@ -124,6 +164,10 @@ If you want to monitor the performance of your cache and optimize the algorithm,
 - [MonitoredLRUCache<K, V>](lib/src/caches/monitored_lru_cache.dart): LRU-based cache with monitoring
 - [MonitoredMRUCache<K, V>](lib/src/caches/monitored_mru_cache.dart): MRU-based cache with monitoring
 - [MonitoredLFUCache<K, V>](lib/src/caches/monitored_lfu_cache.dart): LFU-based cache with monitoring
+
+- [CacheStatsDashboard](lib/src/monitorings/cache_stats_dashboard.dart): Wraps `CacheMetrics` to provide `snapshot(Duration window)` and `stream(Duration window, Duration interval)`
+- [DashboardSnapshot](lib/src/monitorings/cache_stats_dashboard.dart): Immutable point-in-time snapshot (hitRate, missRate, latency percentiles, evictionsPerMinute, totalRequests, capturedAt)
+- [formatDashboard()](lib/src/monitorings/cache_stats_dashboard.dart): Renders a `DashboardSnapshot` as a Unicode box-drawing terminal panel
 
 ## Contributing
 
