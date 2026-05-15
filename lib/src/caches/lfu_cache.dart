@@ -130,12 +130,9 @@ class LFUCache<K, V> extends ThreadSafeCache<K, V> {
       node.unlink();
       if (bucket.isEmpty) {
         _freqMap.remove(node.freq);
-        if (node.freq == _minFreq) {
-          _minFreq =
-              _keyMap.isEmpty
-                  ? 0
-                  : _freqMap.keys.reduce((a, b) => a < b ? a : b);
-        }
+        if (_keyMap.isEmpty) _minFreq = 0;
+        // If items remain, _minFreq may be stale, but set() always resets it
+        // to 1 before the next eviction, so no O(n) recomputation is needed.
       }
     });
   }
