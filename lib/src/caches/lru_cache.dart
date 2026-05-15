@@ -47,7 +47,6 @@ class LRUCache<K, V> extends ThreadSafeCache<K, V> {
   @override
   Future<V?> get(K key) async {
     return await _lock.synchronized(() {
-      if (!_cache.containsKey(key)) return null;
       final value = _cache.remove(key);
       if (value == null) return null;
       _cache[key] = value; // LRU: Move accessed element to the end
