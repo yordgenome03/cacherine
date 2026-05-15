@@ -156,11 +156,13 @@ class LFUCache<K, V> extends ThreadSafeCache<K, V> {
   ///
   /// - Outputs **key-value pairs** currently stored in the cache as a string.
   ///
-  /// **This method is thread-safe.**
+  /// **Note:** `toString()` is synchronous and cannot acquire the internal
+  /// lock. It takes an eager snapshot of the current keys/values but does not
+  /// guarantee consistency with concurrent `set`/`remove`/`clear` calls.
   @override
   String toString() {
     return Map.fromEntries(
-      _keyMap.values.map((n) => MapEntry(n.key, n.value)),
+      _keyMap.values.toList().map((n) => MapEntry(n.key, n.value)),
     ).toString();
   }
 }
