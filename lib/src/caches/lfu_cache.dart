@@ -17,6 +17,10 @@ final class _LFUNode<K, V> extends LinkedListEntry<_LFUNode<K, V>> {
 /// It allows **safe access to the cache from multiple threads or asynchronous tasks**,
 /// preventing data race conditions.
 ///
+/// **Exception:** [toString] is synchronous and does not acquire the lock.
+/// It returns a point-in-time snapshot of the cache contents but is not
+/// covered by the thread-safety guarantee. See [toString] for details.
+///
 /// **Adopts an LFU (Least Frequently Used) eviction policy**,
 /// meaning **when the cache exceeds `maxSize`, the least frequently used element is removed**.
 class LFUCache<K, V> extends ThreadSafeCache<K, V> {
@@ -168,9 +172,13 @@ class LFUCache<K, V> extends ThreadSafeCache<K, V> {
   /// - Outputs **key-value pairs** currently stored in the cache as a string.
   /// - The order of pairs is unspecified (backed by [HashMap]).
   ///
-  /// **Note:** `toString()` is synchronous and cannot acquire the internal
-  /// lock. It takes an eager snapshot of the current keys/values but does not
-  /// guarantee consistency with concurrent `set`/`remove`/`clear` calls.
+  /// **Note:** `toString()` is synchronous and does not acquire the internal
+  /// lock — it is the one method that does not honor the thread-safety
+  /// contract. The snapshot of keys and values is taken atomically within
+  /// Dart's single-threaded execution model, so the snapshot itself cannot
+  /// race with a concurrent async operation. However, the result reflects a
+  /// point-in-time view: a concurrent `set`/`remove`/`clear` that is awaiting
+  /// the lock may change the cache immediately after this call returns.
   @override
   String toString() {
     return Map.fromEntries(
