@@ -123,6 +123,7 @@ void main() {
           maxSize: 2,
           alertConfig: config,
         );
+        addTearDown(cache.dispose);
         await cache.set('key1', 'value1');
         await cache.set('key2', 'value2');
 
@@ -155,6 +156,7 @@ void main() {
         maxSize: 2,
         alertConfig: config,
       );
+      addTearDown(cache.dispose);
       await cache.set('keyA', 'valueA');
       await cache.set('keyB', 'valueB');
 
