@@ -1,6 +1,7 @@
 library;
 
 // Interfaces
+export 'src/interfaces/disposable.dart';
 export 'src/interfaces/simple_cache.dart';
 export 'src/interfaces/thread_safe_cache.dart';
 

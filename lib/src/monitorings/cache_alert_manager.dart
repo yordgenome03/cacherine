@@ -10,6 +10,9 @@ class CacheAlertManager {
   final CacheMetrics metrics;
   final CacheAlertConfig config;
 
+  Timer? _timer;
+  bool _isDisposed = false;
+
   /// Initializes the alert manager.
   /// [metrics] is an instance of [CacheMetrics] that tracks cache performance,
   /// and [config] is an instance of [CacheAlertConfig] that configures the alert thresholds and notifications.
@@ -17,10 +20,19 @@ class CacheAlertManager {
 
   /// Periodically monitors cache performance at the interval specified in [config].
   void monitor() {
-    Timer.periodic(config.alertCheckInterval, (_) {
+    if (_isDisposed) return;
+    _timer?.cancel();
+    _timer = Timer.periodic(config.alertCheckInterval, (_) {
       final stats = metrics.getRecentStats(config.alertCheckInterval);
       _checkAlerts(stats);
     });
+  }
+
+  /// Cancels the monitoring timer and releases resources.
+  void dispose() {
+    _timer?.cancel();
+    _timer = null;
+    _isDisposed = true;
   }
 
   /// Checks the cache statistics and triggers alerts if any thresholds are exceeded.

@@ -3,6 +3,7 @@ import 'package:synchronized/synchronized.dart';
 
 import '../monitorings/cache_alert_manager.dart';
 import '../monitorings/cache_monitoring.dart';
+import '../interfaces/disposable.dart';
 import '../interfaces/thread_safe_cache.dart';
 
 /// **Thread-safe LFU (Least Frequently Used) Cache with Monitoring**
@@ -20,7 +21,8 @@ import '../interfaces/thread_safe_cache.dart';
 /// This cache implements the **LFU eviction policy**, and:
 /// - When the cache size exceeds `maxSize`, the **least frequently used element is removed**.
 class MonitoredLFUCache<K, V> extends ThreadSafeCache<K, V>
-    with CacheMonitoring<K, V> {
+    with CacheMonitoring<K, V>
+    implements Disposable {
   final int maxSize;
   final LinkedHashMap<K, V> _cache = LinkedHashMap();
   final Map<K, int> _usageCounts = {};
@@ -150,6 +152,9 @@ class MonitoredLFUCache<K, V> extends ThreadSafeCache<K, V>
       _usageCounts.clear();
     });
   }
+
+  @override
+  void dispose() => _cacheAlertManager.dispose();
 
   /// Returns a string representation of the current state of the cache.
   ///

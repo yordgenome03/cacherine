@@ -1,6 +1,5 @@
 import 'dart:async';
-import 'package:cacherine/src/monitorings/cache_alert_manager.dart';
-import 'package:cacherine/src/monitorings/cache_metrics.dart';
+import 'package:cacherine/cacherine.dart';
 import 'package:test/test.dart';
 
 void main() {
@@ -188,6 +187,89 @@ void main() {
         receivedAlerts.length,
         greaterThanOrEqualTo(2),
       ); // At least two alerts triggered
+      alertManager.dispose();
+    });
+  });
+
+  group('CacheAlertManager - Lifecycle', () {
+    late CacheMetrics metrics;
+    late List<String> receivedAlerts;
+    late CacheAlertManager alertManager;
+
+    setUp(() {
+      metrics = CacheMetrics();
+      receivedAlerts = [];
+      final config = CacheAlertConfig(
+        notifyCallback: (alert) => receivedAlerts.add(alert),
+        hitRateThreshold: 0.5,
+        alertCheckInterval: const Duration(milliseconds: 50),
+      );
+      alertManager = CacheAlertManager(metrics, config);
+    });
+
+    test('dispose stops the timer', () async {
+      // Record misses so alerts would fire if timer is active
+      for (int i = 0; i < 10; i++) {
+        metrics.recordMiss(Duration.zero);
+      }
+      alertManager.monitor();
+      await Future.delayed(const Duration(milliseconds: 100));
+      final countBeforeDispose = receivedAlerts.length;
+      expect(countBeforeDispose, greaterThan(0));
+
+      alertManager.dispose();
+      receivedAlerts.clear();
+
+      // Wait past several check intervals — no new alerts should fire
+      await Future.delayed(const Duration(milliseconds: 200));
+      expect(receivedAlerts, isEmpty);
+    });
+
+    test('dispose is idempotent', () {
+      alertManager.monitor();
+      expect(() {
+        alertManager.dispose();
+        alertManager.dispose();
+      }, returnsNormally);
+    });
+
+    test('monitor called twice does not double-fire', () async {
+      for (int i = 0; i < 10; i++) {
+        metrics.recordMiss(Duration.zero);
+      }
+      alertManager.monitor();
+      alertManager.monitor(); // second call cancels the first timer
+
+      await Future.delayed(const Duration(milliseconds: 200));
+
+      // With a single timer firing every 50ms over 200ms we expect ~4 firings.
+      // If timers were doubled we would see significantly more.
+      expect(receivedAlerts.length, lessThan(10));
+      alertManager.dispose();
+    });
+
+    test('monitor after dispose is a no-op', () async {
+      alertManager.monitor();
+      alertManager.dispose();
+      receivedAlerts.clear();
+
+      alertManager.monitor(); // should be a no-op
+      await Future.delayed(const Duration(milliseconds: 200));
+      expect(receivedAlerts, isEmpty);
+    });
+  });
+
+  group('Disposable type check', () {
+    test('MonitoredLRUCache implements Disposable', () {
+      final cache = MonitoredLRUCache<String, String>(
+        maxSize: 10,
+        alertConfig: CacheAlertConfig(
+          notifyCallback: (_) {},
+          alertCheckInterval: const Duration(seconds: 60),
+        ),
+      );
+      expect(cache, isA<Disposable>());
+      cache.dispose();
     });
   });
 }
