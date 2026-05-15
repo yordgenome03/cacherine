@@ -104,7 +104,7 @@ class MonitoredLFUCache<K, V> extends ThreadSafeCache<K, V>
   }
 
   /// Performs eviction using the LFU (Least Frequently Used) policy.
-  Future<void> _evictLFUEntry() async {
+  void _evictLFUEntry() {
     if (_cache.isEmpty) return;
 
     final K lfuKey =

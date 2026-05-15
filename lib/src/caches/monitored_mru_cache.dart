@@ -110,7 +110,7 @@ class MonitoredMRUCache<K, V> extends ThreadSafeCache<K, V>
   }
 
   /// Performs eviction (removal) using the MRU (Most Recently Used) policy.
-  Future<void> _evictMRUEntry() async {
+  void _evictMRUEntry() {
     if (_cache.isEmpty) return;
 
     // Remove the last added key (most recently used key)

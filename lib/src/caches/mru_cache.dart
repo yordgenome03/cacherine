@@ -77,7 +77,7 @@ class MRUCache<K, V> extends ThreadSafeCache<K, V> {
   }
 
   /// **Evicts the most recently used (MRU) entry.**
-  Future<void> _evictMRUEntry() async {
+  void _evictMRUEntry() {
     if (_cache.isEmpty) return;
 
     // Remove the last added key (most recently used key)
