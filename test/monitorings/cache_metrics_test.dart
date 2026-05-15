@@ -145,7 +145,7 @@ void main() {
           metrics.recordHit(Duration.zero);
         }
         metrics.recordHit(
-          Duration(milliseconds: CacheMetrics.maxLatencySamples),
+          const Duration(milliseconds: CacheMetrics.maxLatencySamples),
         );
         // Bounded: oldest 0ms entry dropped → [0×999, 1000ms] → average = 1ms.
         // Unbounded: [0×1000, 1000ms] → average = 1000/1001 ≈ 0ms.
