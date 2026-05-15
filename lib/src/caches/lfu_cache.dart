@@ -72,7 +72,7 @@ class LFUCache<K, V> extends ThreadSafeCache<K, V> {
   }
 
   /// Performs eviction based on the LFU (Least Frequently Used) policy.
-  Future<void> _evictLFUEntry() async {
+  void _evictLFUEntry() {
     if (_cache.isEmpty) return;
 
     // Find the key with the lowest usage count
