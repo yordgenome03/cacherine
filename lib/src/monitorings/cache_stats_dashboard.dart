@@ -105,7 +105,9 @@ String formatDashboard(DashboardSnapshot snap) {
     top,
     row('Captured at: $capturedAt'),
     sep,
-    row('Traffic:     ${snap.totalRequests} requests'),
+    row(
+      'Traffic:     ${snap.totalRequests} ${snap.totalRequests == 1 ? 'request' : 'requests'}',
+    ),
     row('Hit Rate:    $hitRatePct  [$bar]'),
     sep,
     row(

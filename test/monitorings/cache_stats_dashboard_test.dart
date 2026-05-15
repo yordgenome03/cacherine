@@ -184,6 +184,24 @@ void main() {
       expect(output, contains('Evictions'));
     });
 
+    test('uses singular "request" for totalRequests == 1', () {
+      final output = formatDashboard(_makeSnap(totalRequests: 1));
+
+      expect(output, contains('1 request'));
+      expect(output, isNot(contains('1 requests')));
+    });
+
+    test('uses plural "requests" for totalRequests != 1', () {
+      expect(
+        formatDashboard(_makeSnap(totalRequests: 0)),
+        contains('0 requests'),
+      );
+      expect(
+        formatDashboard(_makeSnap(totalRequests: 2)),
+        contains('2 requests'),
+      );
+    });
+
     test('output contains box-drawing border characters', () {
       final output = formatDashboard(_makeSnap());
 
@@ -207,17 +225,11 @@ void main() {
     );
 
     test('does not throw when hitRate is greater than 1.0', () {
-      expect(
-        () => formatDashboard(_makeSnap(hitRate: 1.5)),
-        returnsNormally,
-      );
+      expect(() => formatDashboard(_makeSnap(hitRate: 1.5)), returnsNormally);
     });
 
     test('does not throw when hitRate is negative', () {
-      expect(
-        () => formatDashboard(_makeSnap(hitRate: -0.5)),
-        returnsNormally,
-      );
+      expect(() => formatDashboard(_makeSnap(hitRate: -0.5)), returnsNormally);
     });
 
     test('does not throw when hitRate is NaN', () {
