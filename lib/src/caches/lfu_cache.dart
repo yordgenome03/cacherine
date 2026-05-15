@@ -63,6 +63,10 @@ class LFUCache<K, V> extends ThreadSafeCache<K, V> {
   @override
   Future<void> set(K key, V value) async {
     await _lock.synchronized(() {
+      if (_cache.containsKey(key)) {
+        _cache[key] = value;
+        return;
+      }
       if (_cache.length >= maxSize) {
         _evictLFUEntry(); // Evict based on LFU policy
       }

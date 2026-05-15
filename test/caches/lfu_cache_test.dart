@@ -59,6 +59,41 @@ void main() {
         ); // key3 is newly added and should remain
       },
     );
+
+    test(
+      'set() on an existing key when cache is full does not evict any entry',
+      () async {
+        final cache = LFUCache<String, String>(2);
+        await cache.set('key1', 'value1');
+        await cache.set('key2', 'value2');
+
+        await cache.set('key1', 'new_value1');
+
+        expect(await cache.get('key1'), equals('new_value1'));
+        expect(await cache.get('key2'), equals('value2'));
+        expect(cache.getKeys().length, equals(2));
+      },
+    );
+
+    test('set() on an existing key preserves its usage count', () async {
+      final cache = LFUCache<String, String>(2);
+      await cache.set('key1', 'value1');
+      await cache.set('key2', 'value2');
+
+      // Boost key1's usage count
+      await cache.get('key1');
+      await cache.get('key1');
+
+      // Update key1 — count must be preserved, not reset to 1
+      await cache.set('key1', 'updated');
+
+      // Inserting key3 forces eviction; key2 (count 1) must go, not key1 (count 3)
+      await cache.set('key3', 'value3');
+
+      expect(await cache.get('key2'), isNull);
+      expect(await cache.get('key1'), equals('updated'));
+      expect(await cache.get('key3'), equals('value3'));
+    });
   });
 
   group('LFUCache - Thread-safety Tests', () {
