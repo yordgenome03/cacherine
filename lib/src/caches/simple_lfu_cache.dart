@@ -84,8 +84,12 @@ class SimpleLFUCache<K, V> extends SimpleCache<K, V> {
   /// Stores the specified key-value pair in the cache.
   ///
   /// - If `set()` is called on an existing key, **its value is updated**,
-  ///   but **its usage count is not reset**.
+  ///   **its usage count is not reset**, and **its recency is refreshed**
+  ///   (the entry moves to the most-recently-used position within its
+  ///   frequency bucket). This means a `set()` call protects the entry from
+  ///   being chosen as the eviction victim among same-frequency entries.
   /// - If the cache exceeds **[maxSize]**, the **least frequently used element is removed** following the LFU policy.
+  ///   Among entries with the same frequency, the least recently used is evicted.
   ///
   /// **This method is not thread-safe.**
   @override
