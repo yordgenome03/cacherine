@@ -1,3 +1,19 @@
+## 2.0.0 - CacheStatsDashboard, TTLCache, and Lifecycle Management
+
+### New Features
+
+- **CacheStatsDashboard**: New class that wraps `CacheMetrics` to produce typed `DashboardSnapshot` objects for terminal-ready metric display.
+- **TTLCache**: Added a standalone cache implementation supporting Time-To-Live (TTL) for both global and per-entry expiry.
+- **Disposable Interface**: Introduced a standard `Disposable` interface to handle resource cleanup (timers, controllers) across monitored and TTL caches.
+- **DashboardSnapshot**: Immutable value type capturing `hitRate`, `missRate`, latency percentiles (`p50`, `p95`, `p99`), `evictionsPerMinute`, `totalRequests`, and `capturedAt`.
+- **formatDashboard()**: New top-level function that renders a `DashboardSnapshot` as a Unicode box-drawing terminal panel with adaptive unit formatting (µs, ms, s).
+
+### Breaking Changes
+
+- **Interface Implementation**: All `Monitored*` caches and `TTLCache` now implement `Disposable`. Callers managing these instances should call `.dispose()` to prevent timer leaks.
+- `CacheStatsDashboard.snapshot(Duration window)` now throws `ArgumentError` for zero or negative `window` values (previously undefined behaviour propagated from `CacheMetrics.getRecentStats`).
+- `CacheStatsDashboard.stream(Duration window, Duration interval)` now throws `ArgumentError` for zero or negative `interval` values.
+
 ## 1.1.5 - Bug Fixes
 
 - Fixed spurious eviction in FIFO `set()` when updating an existing key.
