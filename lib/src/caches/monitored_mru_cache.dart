@@ -3,6 +3,7 @@ import 'package:synchronized/synchronized.dart';
 
 import '../monitorings/cache_alert_manager.dart';
 import '../monitorings/cache_monitoring.dart';
+import '../interfaces/disposable.dart';
 import '../interfaces/thread_safe_cache.dart';
 
 /// **Thread-safe MRU (Most Recently Used) Cache with Monitoring**
@@ -20,7 +21,8 @@ import '../interfaces/thread_safe_cache.dart';
 /// Implements the **MRU eviction policy**, meaning:
 /// - When the cache size exceeds `maxSize`, the **most recently used element is removed**.
 class MonitoredMRUCache<K, V> extends ThreadSafeCache<K, V>
-    with CacheMonitoring<K, V> {
+    with CacheMonitoring<K, V>
+    implements Disposable {
   final int maxSize;
   final LinkedHashMap<K, V> _cache = LinkedHashMap();
   final _lock = Lock();
@@ -145,6 +147,9 @@ class MonitoredMRUCache<K, V> extends ThreadSafeCache<K, V>
   Future<void> clear() async {
     await _lock.synchronized(_cache.clear);
   }
+
+  @override
+  void dispose() => _cacheAlertManager.dispose();
 
   /// Returns a string representation of the current state of the cache.
   ///

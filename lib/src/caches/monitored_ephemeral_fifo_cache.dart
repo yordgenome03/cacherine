@@ -4,6 +4,7 @@ import 'package:synchronized/synchronized.dart';
 
 import '../monitorings/cache_alert_manager.dart';
 import '../monitorings/cache_monitoring.dart';
+import '../interfaces/disposable.dart';
 import '../interfaces/thread_safe_cache.dart';
 
 /// **Thread-safe Ephemeral FIFO (First In, First Out) Cache with Monitoring**
@@ -27,7 +28,8 @@ import '../interfaces/thread_safe_cache.dart';
 /// - **The retrieved data cannot be reused (it is removed from the cache upon retrieval)**
 /// - **If you need to preserve the key, use `MonitoredFIFOCache` instead.**
 class MonitoredEphemeralFIFOCache<K, V> extends ThreadSafeCache<K, V>
-    with CacheMonitoring<K, V> {
+    with CacheMonitoring<K, V>
+    implements Disposable {
   final int maxSize;
   final LinkedHashMap<K, V> _cache = LinkedHashMap();
   final _lock = Lock();
@@ -124,6 +126,9 @@ class MonitoredEphemeralFIFOCache<K, V> extends ThreadSafeCache<K, V>
   Future<void> clear() async {
     await _lock.synchronized(_cache.clear);
   }
+
+  @override
+  void dispose() => _cacheAlertManager.dispose();
 
   /// Returns a string representation of the current state of the cache.
   ///
