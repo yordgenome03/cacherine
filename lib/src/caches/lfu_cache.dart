@@ -88,6 +88,20 @@ class LFUCache<K, V> extends ThreadSafeCache<K, V> {
     _usageCounts.remove(lfuKey);
   }
 
+  /// Removes the entry with the given key from the cache.
+  ///
+  /// - If the key does not exist, this call is a no-op.
+  /// - The frequency counter for the key is also discarded.
+  ///
+  /// **This method is thread-safe.**
+  @override
+  Future<void> remove(K key) async {
+    await _lock.synchronized(() {
+      _cache.remove(key);
+      _usageCounts.remove(key);
+    });
+  }
+
   /// Clears the cache, removing all stored data.
   ///
   /// **This method is thread-safe.**

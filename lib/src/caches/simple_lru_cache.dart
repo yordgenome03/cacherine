@@ -69,6 +69,16 @@ class SimpleLRUCache<K, V> extends SimpleCache<K, V> {
     _cache[key] = value;
   }
 
+  /// Removes the entry with the given key from the cache.
+  ///
+  /// - If the key does not exist, this call is a no-op.
+  ///
+  /// **This method is not thread-safe.**
+  @override
+  void remove(K key) {
+    _cache.remove(key);
+  }
+
   /// Clears all data stored in the cache.
   ///
   /// - Removes all keys and values from the cache.

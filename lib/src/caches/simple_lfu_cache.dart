@@ -81,6 +81,18 @@ class SimpleLFUCache<K, V> extends SimpleCache<K, V> {
     _usageCounts.remove(lfuKey);
   }
 
+  /// Removes the entry with the given key from the cache.
+  ///
+  /// - If the key does not exist, this call is a no-op.
+  /// - The frequency counter for the key is also discarded.
+  ///
+  /// **This method is not thread-safe.**
+  @override
+  void remove(K key) {
+    _cache.remove(key);
+    _usageCounts.remove(key);
+  }
+
   /// Clears all data stored in the cache.
   ///
   /// - Removes all keys and values from the cache.

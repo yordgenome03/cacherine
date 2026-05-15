@@ -85,6 +85,18 @@ class MRUCache<K, V> extends ThreadSafeCache<K, V> {
     _cache.remove(mruKey);
   }
 
+  /// Removes the entry with the given key from the cache.
+  ///
+  /// - If the key does not exist, this call is a no-op.
+  ///
+  /// **This method is thread-safe.**
+  @override
+  Future<void> remove(K key) async {
+    await _lock.synchronized(() {
+      _cache.remove(key);
+    });
+  }
+
   /// Clears the cache, removing all stored data.
   ///
   /// **This method is thread-safe.**

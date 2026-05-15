@@ -99,4 +99,30 @@ void main() {
       );
     });
   });
+
+  group('MonitoredFIFOCache - remove()', () {
+    final config = CacheAlertConfig(notifyCallback: (_) {});
+
+    test('remove() existing key records eviction in metrics', () async {
+      final cache = MonitoredFIFOCache<String, String>(
+        maxSize: 3,
+        alertConfig: config,
+      );
+      await cache.set('key1', 'value1');
+      await cache.remove('key1');
+      expect(await cache.get('key1'), isNull);
+      final stats = cache.metrics.getRecentStats(const Duration(minutes: 1));
+      expect(stats['evictions_per_minute'], equals(1));
+    });
+
+    test('remove() non-existent key does not record eviction', () async {
+      final cache = MonitoredFIFOCache<String, String>(
+        maxSize: 3,
+        alertConfig: config,
+      );
+      await cache.remove('missing');
+      final stats = cache.metrics.getRecentStats(const Duration(minutes: 1));
+      expect(stats['evictions_per_minute'], equals(0));
+    });
+  });
 }

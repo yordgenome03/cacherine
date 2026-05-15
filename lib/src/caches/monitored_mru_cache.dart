@@ -118,6 +118,22 @@ class MonitoredMRUCache<K, V> extends ThreadSafeCache<K, V>
     _cache.remove(mruKey);
   }
 
+  /// Removes the entry with the given key from the cache.
+  ///
+  /// - If the key existed, records a manual eviction via [CacheMonitoring].
+  /// - If the key does not exist, this call is a no-op.
+  ///
+  /// **This method is thread-safe**.
+  @override
+  Future<void> remove(K key) async {
+    await _lock.synchronized(() {
+      if (_cache.containsKey(key)) {
+        _cache.remove(key);
+        metrics.recordEviction();
+      }
+    });
+  }
+
   /// Clears the cache and removes all data.
   ///
   /// - The monitoring function remains active even after the cache is cleared.
