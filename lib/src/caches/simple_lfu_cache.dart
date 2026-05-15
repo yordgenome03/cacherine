@@ -104,6 +104,12 @@ class SimpleLFUCache<K, V> extends SimpleCache<K, V> {
       return;
     }
     if (_keyMap.length >= maxSize) {
+      assert(
+        _freqMap.containsKey(_minFreq),
+        'Eviction reached with stale _minFreq=$_minFreq not present in _freqMap. '
+        'Any code path that triggers eviction must go through the new-key '
+        'insertion branch, which resets _minFreq=1.',
+      );
       final evictBucket = _freqMap[_minFreq]!;
       final victim = evictBucket.last;
       victim.unlink();
