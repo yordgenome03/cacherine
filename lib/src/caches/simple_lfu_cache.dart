@@ -57,6 +57,10 @@ class SimpleLFUCache<K, V> extends SimpleCache<K, V> {
   /// **This method is not thread-safe.**
   @override
   void set(K key, V value) {
+    if (_cache.containsKey(key)) {
+      _cache[key] = value;
+      return;
+    }
     if (_cache.length >= maxSize) {
       _evictLFUEntry(); // Evict based on LFU policy
     }
