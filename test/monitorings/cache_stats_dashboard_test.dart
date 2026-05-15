@@ -12,18 +12,17 @@ DashboardSnapshot _makeSnap({
   int evictionsPerMinute = 3,
   int totalRequests = 100,
   DateTime? capturedAt,
-}) =>
-    DashboardSnapshot(
-      hitRate: hitRate,
-      missRate: missRate,
-      averageLatency: averageLatency,
-      p50Latency: p50Latency,
-      p95Latency: p95Latency,
-      p99Latency: p99Latency,
-      evictionsPerMinute: evictionsPerMinute,
-      totalRequests: totalRequests,
-      capturedAt: capturedAt ?? DateTime.now(),
-    );
+}) => DashboardSnapshot(
+  hitRate: hitRate,
+  missRate: missRate,
+  averageLatency: averageLatency,
+  p50Latency: p50Latency,
+  p95Latency: p95Latency,
+  p99Latency: p99Latency,
+  evictionsPerMinute: evictionsPerMinute,
+  totalRequests: totalRequests,
+  capturedAt: capturedAt ?? DateTime.now(),
+);
 
 void main() {
   group('DashboardSnapshot', () {
@@ -69,8 +68,8 @@ void main() {
 
   group('CacheStatsDashboard.snapshot()', () {
     test('capturedAt is within 1 second of call time', () {
-      final metrics = CacheMetrics()
-        ..recordHit(const Duration(milliseconds: 5));
+      final metrics =
+          CacheMetrics()..recordHit(const Duration(milliseconds: 5));
       final dashboard = CacheStatsDashboard(metrics);
 
       final before = DateTime.now();
@@ -79,38 +78,36 @@ void main() {
 
       expect(
         snap.capturedAt.millisecondsSinceEpoch,
-        greaterThanOrEqualTo(
-          before.millisecondsSinceEpoch - 1000,
-        ),
+        greaterThanOrEqualTo(before.millisecondsSinceEpoch - 1000),
       );
       expect(
         snap.capturedAt.millisecondsSinceEpoch,
-        lessThanOrEqualTo(
-          after.millisecondsSinceEpoch + 1000,
-        ),
+        lessThanOrEqualTo(after.millisecondsSinceEpoch + 1000),
       );
     });
 
-    test('snapshot returns metric values matching the wrapped CacheMetrics', () {
-      final metrics = CacheMetrics()
-        ..recordHit(const Duration(milliseconds: 10))
-        ..recordHit(const Duration(milliseconds: 20))
-        ..recordMiss(const Duration(milliseconds: 30));
+    test(
+      'snapshot returns metric values matching the wrapped CacheMetrics',
+      () {
+        final metrics =
+            CacheMetrics()
+              ..recordHit(const Duration(milliseconds: 10))
+              ..recordHit(const Duration(milliseconds: 20))
+              ..recordMiss(const Duration(milliseconds: 30));
 
-      final snap =
-          CacheStatsDashboard(metrics).snapshot(const Duration(minutes: 1));
+        final snap = CacheStatsDashboard(
+          metrics,
+        ).snapshot(const Duration(minutes: 1));
 
-      expect(snap.hitRate, closeTo(2 / 3, 0.001));
-      expect(snap.missRate, closeTo(1 / 3, 0.001));
-      expect(snap.totalRequests, equals(3));
-    });
+        expect(snap.hitRate, closeTo(2 / 3, 0.001));
+        expect(snap.missRate, closeTo(1 / 3, 0.001));
+        expect(snap.totalRequests, equals(3));
+      },
+    );
 
     test('throws ArgumentError on zero window', () {
       final dashboard = CacheStatsDashboard(CacheMetrics());
-      expect(
-        () => dashboard.snapshot(Duration.zero),
-        throwsArgumentError,
-      );
+      expect(() => dashboard.snapshot(Duration.zero), throwsArgumentError);
     });
 
     test('throws ArgumentError on negative window', () {
@@ -124,16 +121,13 @@ void main() {
 
   group('CacheStatsDashboard.stream()', () {
     test('emits DashboardSnapshot values', () async {
-      final metrics = CacheMetrics()
-        ..recordHit(const Duration(milliseconds: 5));
+      final metrics =
+          CacheMetrics()..recordHit(const Duration(milliseconds: 5));
       final dashboard = CacheStatsDashboard(metrics);
       final snapshots = <DashboardSnapshot>[];
 
       final sub = dashboard
-          .stream(
-            const Duration(minutes: 1),
-            const Duration(milliseconds: 50),
-          )
+          .stream(const Duration(minutes: 1), const Duration(milliseconds: 50))
           .listen(snapshots.add);
 
       await Future<void>.delayed(const Duration(milliseconds: 200));
@@ -144,16 +138,13 @@ void main() {
     });
 
     test('no further events emitted after cancellation', () async {
-      final metrics = CacheMetrics()
-        ..recordHit(const Duration(milliseconds: 5));
+      final metrics =
+          CacheMetrics()..recordHit(const Duration(milliseconds: 5));
       final dashboard = CacheStatsDashboard(metrics);
       final snapshots = <DashboardSnapshot>[];
 
       final sub = dashboard
-          .stream(
-            const Duration(minutes: 1),
-            const Duration(milliseconds: 50),
-          )
+          .stream(const Duration(minutes: 1), const Duration(milliseconds: 50))
           .listen(snapshots.add);
 
       await Future<void>.delayed(const Duration(milliseconds: 80));
@@ -162,6 +153,25 @@ void main() {
       await Future<void>.delayed(const Duration(milliseconds: 150));
 
       expect(snapshots.length, equals(countAtCancel));
+    });
+
+    test('throws ArgumentError on zero interval', () {
+      final dashboard = CacheStatsDashboard(CacheMetrics());
+      expect(
+        () => dashboard.stream(const Duration(minutes: 1), Duration.zero),
+        throwsArgumentError,
+      );
+    });
+
+    test('throws ArgumentError on negative interval', () {
+      final dashboard = CacheStatsDashboard(CacheMetrics());
+      expect(
+        () => dashboard.stream(
+          const Duration(minutes: 1),
+          const Duration(seconds: -1),
+        ),
+        throwsArgumentError,
+      );
     });
   });
 
@@ -186,12 +196,15 @@ void main() {
       expect(output, contains('│'));
     });
 
-    test('hit-rate bar has exactly 10 filled and 10 empty cells for hitRate=0.5', () {
-      final output = formatDashboard(_makeSnap(hitRate: 0.5, missRate: 0.5));
+    test(
+      'hit-rate bar has exactly 10 filled and 10 empty cells for hitRate=0.5',
+      () {
+        final output = formatDashboard(_makeSnap(hitRate: 0.5, missRate: 0.5));
 
-      expect('█'.allMatches(output).length, equals(10));
-      expect('░'.allMatches(output).length, equals(10));
-    });
+        expect('█'.allMatches(output).length, equals(10));
+        expect('░'.allMatches(output).length, equals(10));
+      },
+    );
 
     test('output includes capturedAt under Captured at: label', () {
       final capturedAt = DateTime(2026, 5, 15, 16, 10, 0);

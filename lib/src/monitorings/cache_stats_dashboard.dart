@@ -57,8 +57,14 @@ class CacheStatsDashboard {
   /// Returns a [Stream] that emits a [DashboardSnapshot] every [interval].
   ///
   /// The stream is unbounded; callers must cancel the [StreamSubscription] to stop it.
-  Stream<DashboardSnapshot> stream(Duration window, Duration interval) =>
-      Stream.periodic(interval, (_) => snapshot(window));
+  ///
+  /// Throws [ArgumentError] if [interval] is zero or negative.
+  Stream<DashboardSnapshot> stream(Duration window, Duration interval) {
+    if (interval <= Duration.zero) {
+      throw ArgumentError.value(interval, 'interval', 'must be positive');
+    }
+    return Stream.periodic(interval, (_) => snapshot(window));
+  }
 }
 
 String _formatDuration(Duration d) {
