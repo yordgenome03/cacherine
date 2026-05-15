@@ -75,24 +75,54 @@ void main() {
       },
     );
 
-    test('set() on an existing key increments its usage count', () async {
+    test(
+      'set() on an existing key preserves its usage count (not reset to 1)',
+      () async {
+        final cache = LFUCache<String, String>(2);
+        await cache.set('key1', 'value1');
+        await cache.set('key2', 'value2');
+
+        // Boost key1's usage count via get (count = 3)
+        await cache.get('key1');
+        await cache.get('key1');
+
+        // Update key1 via set — count is preserved, not reset to 1
+        await cache.set('key1', 'updated');
+
+        // Inserting key3 forces eviction; key2 (count 1) must go, not key1
+        await cache.set('key3', 'value3');
+
+        expect(await cache.get('key2'), isNull);
+        expect(await cache.get('key1'), equals('updated'));
+        expect(await cache.get('key3'), equals('value3'));
+      },
+    );
+
+    test('set() on an existing key does not inflate its usage count', () async {
+      // Regression: repeated set() calls must not increment the usage count.
+      // If they did, the count could exceed that of a key boosted via get(),
+      // causing the wrong key to be evicted.
       final cache = LFUCache<String, String>(2);
-      await cache.set('key1', 'value1');
-      await cache.set('key2', 'value2');
+      await cache.set('keyA', 'valueA');
+      await cache.set('keyB', 'valueB');
 
-      // Boost key1's usage count via get (count = 3)
-      await cache.get('key1');
-      await cache.get('key1');
+      // Boost keyA's count to 4 via three get() calls (1 initial + 3 gets)
+      await cache.get('keyA');
+      await cache.get('keyA');
+      await cache.get('keyA');
 
-      // Update key1 via set — count increments (not reset to 1)
-      await cache.set('key1', 'updated');
+      // Update keyB four times via set(); count must remain 1
+      await cache.set('keyB', 'update1');
+      await cache.set('keyB', 'update2');
+      await cache.set('keyB', 'update3');
+      await cache.set('keyB', 'update4');
 
-      // Inserting key3 forces eviction; key2 (count 1) must go, not key1
-      await cache.set('key3', 'value3');
+      // Insert keyC — eviction must remove keyB (count 1), not keyA (count 4)
+      await cache.set('keyC', 'valueC');
 
-      expect(await cache.get('key2'), isNull);
-      expect(await cache.get('key1'), equals('updated'));
-      expect(await cache.get('key3'), equals('value3'));
+      expect(await cache.get('keyB'), isNull);
+      expect(await cache.get('keyA'), equals('valueA'));
+      expect(await cache.get('keyC'), equals('valueC'));
     });
   });
 
