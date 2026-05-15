@@ -94,7 +94,7 @@ class CacheMetrics {
   ///
   /// Throws [ArgumentError] if [window] is zero or negative.
   Map<String, dynamic> getRecentStats(Duration window) {
-    if (window.inMilliseconds <= 0) {
+    if (window.inMicroseconds <= 0) {
       throw ArgumentError(
         'window must be a positive Duration, but was $window',
       );
@@ -110,7 +110,7 @@ class CacheMetrics {
       'p95_latency': getLatencyPercentile(95).inMilliseconds,
       'p99_latency': getLatencyPercentile(99).inMilliseconds,
       'evictions_per_minute':
-          (recentEvictions * 60000) ~/ window.inMilliseconds,
+          (recentEvictions * 60000000) ~/ window.inMicroseconds,
     };
   }
 

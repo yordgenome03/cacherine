@@ -148,6 +148,14 @@ void main() {
       );
     });
 
+    test('getRecentStats() with positive sub-millisecond Duration succeeds', () {
+      final metrics = CacheMetrics();
+      expect(
+        () => metrics.getRecentStats(const Duration(microseconds: 1)),
+        returnsNormally,
+      );
+    });
+
     test('getRecentStats() with positive Duration succeeds', () {
       final metrics = CacheMetrics();
       expect(
