@@ -28,6 +28,8 @@ void main() {
       alertManager = CacheAlertManager(metrics, config);
     });
 
+    tearDown(() => alertManager.dispose());
+
     test('Triggers alert when hit rate is too low', () async {
       // 90% of requests are misses
       for (int i = 0; i < 10; i++) {
@@ -206,6 +208,8 @@ void main() {
       );
       alertManager = CacheAlertManager(metrics, config);
     });
+
+    tearDown(() => alertManager.dispose());
 
     test('dispose stops the timer', () async {
       // Record misses so alerts would fire if timer is active
