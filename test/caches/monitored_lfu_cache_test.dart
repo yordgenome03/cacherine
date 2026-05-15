@@ -126,14 +126,21 @@ void main() {
         await cache.set('key1', 'value1');
         await cache.set('key2', 'value2');
 
-        // Boost key1's usage count via get (count = 3)
+        // Give key2 count=2 so a reset-to-1 on key1 would make key1 the LFU
+        await cache.get('key2');
+
+        // Boost key1's count to 5
+        await cache.get('key1');
+        await cache.get('key1');
         await cache.get('key1');
         await cache.get('key1');
 
-        // Update key1 via set — count is preserved, not reset to 1
+        // Update key1 via set — count must be preserved at 5, not reset to 1.
+        // If reset to 1, key1 (count 1) < key2 (count 2) → key1 would be
+        // evicted instead of key2, and the assertions below would fail.
         await cache.set('key1', 'updated');
 
-        // Inserting key3 forces eviction; key2 (count 1) must go, not key1
+        // Inserting key3 forces eviction; key2 (count 2) must go, not key1
         await cache.set('key3', 'value3');
 
         expect(await cache.get('key2'), isNull);
