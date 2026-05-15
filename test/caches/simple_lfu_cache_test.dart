@@ -104,28 +104,25 @@ void main() {
       },
     );
 
-    test(
-      'set() on an existing key does not reset its usage count',
-      () {
-        final cache = SimpleLFUCache<String, String>(2);
-        cache.set('key1', 'value1');
-        cache.set('key2', 'value2');
+    test('set() on an existing key does not reset its usage count', () {
+      final cache = SimpleLFUCache<String, String>(2);
+      cache.set('key1', 'value1');
+      cache.set('key2', 'value2');
 
-        // Boost key1's usage count
-        cache.get('key1');
-        cache.get('key1');
+      // Boost key1's usage count
+      cache.get('key1');
+      cache.get('key1');
 
-        // Update key1 — count must be preserved, not reset to 1
-        cache.set('key1', 'updated');
+      // Update key1 — count must be preserved, not reset to 1
+      cache.set('key1', 'updated');
 
-        // Inserting key3 forces eviction; key2 (count 1) must go, not key1 (count 3)
-        cache.set('key3', 'value3');
+      // Inserting key3 forces eviction; key2 (count 1) must go, not key1 (count 3)
+      cache.set('key3', 'value3');
 
-        expect(cache.get('key2'), isNull);
-        expect(cache.get('key1'), equals('updated'));
-        expect(cache.get('key3'), equals('value3'));
-      },
-    );
+      expect(cache.get('key2'), isNull);
+      expect(cache.get('key1'), equals('updated'));
+      expect(cache.get('key3'), equals('value3'));
+    });
   });
 
   group('SimpleLFUCache - Error Handling', () {

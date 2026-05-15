@@ -116,31 +116,28 @@ void main() {
       },
     );
 
-    test(
-      'set() on an existing key preserves its usage count',
-      () async {
-        final cache = MonitoredLFUCache<String, String>(
-          maxSize: 2,
-          alertConfig: config,
-        );
-        await cache.set('key1', 'value1');
-        await cache.set('key2', 'value2');
+    test('set() on an existing key preserves its usage count', () async {
+      final cache = MonitoredLFUCache<String, String>(
+        maxSize: 2,
+        alertConfig: config,
+      );
+      await cache.set('key1', 'value1');
+      await cache.set('key2', 'value2');
 
-        // Boost key1's usage count
-        await cache.get('key1');
-        await cache.get('key1');
+      // Boost key1's usage count
+      await cache.get('key1');
+      await cache.get('key1');
 
-        // Update key1 — count must be preserved, not reset to 1
-        await cache.set('key1', 'updated');
+      // Update key1 — count must be preserved, not reset to 1
+      await cache.set('key1', 'updated');
 
-        // Inserting key3 forces eviction; key2 (count 1) must go, not key1 (count 3)
-        await cache.set('key3', 'value3');
+      // Inserting key3 forces eviction; key2 (count 1) must go, not key1 (count 3)
+      await cache.set('key3', 'value3');
 
-        expect(await cache.get('key2'), isNull);
-        expect(await cache.get('key1'), equals('updated'));
-        expect(await cache.get('key3'), equals('value3'));
-      },
-    );
+      expect(await cache.get('key2'), isNull);
+      expect(await cache.get('key1'), equals('updated'));
+      expect(await cache.get('key3'), equals('value3'));
+    });
 
     test('Should throw an exception if maxSize is 0 or negative', () {
       expect(
