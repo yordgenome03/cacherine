@@ -3,7 +3,19 @@
 /// This class tracks cache hit rates, miss rates, request latencies (delays),
 /// and eviction events. It provides the data necessary to measure and check
 /// cache performance over time.
+///
+/// **Bounded storage**: latency samples are kept in a rolling window of the
+/// most recent [maxLatencySamples] (1 000) entries, and eviction timestamps
+/// are kept in a rolling window of the most recent [maxEvictionSamples]
+/// (10 000) entries. This prevents unbounded heap growth in long-running
+/// caches. As a result, [averageLatency] and [getLatencyPercentile] reflect
+/// only the most recent 1 000 hits, and [getRecentStats] eviction counts are
+/// accurate only while the requested window fits within the retained eviction
+/// history.
 class CacheMetrics {
+  static const int maxLatencySamples = 1000;
+  static const int maxEvictionSamples = 10000;
+
   int _hits = 0;
   int _misses = 0;
   int _totalRequests = 0;
@@ -56,6 +68,7 @@ class CacheMetrics {
   void recordHit(Duration latency) {
     _hits++;
     _totalRequests++;
+    if (_latencies.length >= maxLatencySamples) _latencies.removeAt(0);
     _latencies.add(latency);
   }
 
@@ -67,6 +80,7 @@ class CacheMetrics {
 
   /// Records a cache eviction event
   void recordEviction() {
+    if (_evictions.length >= maxEvictionSamples) _evictions.removeAt(0);
     _evictions.add(DateTime.now());
   }
 
