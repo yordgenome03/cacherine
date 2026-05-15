@@ -25,7 +25,7 @@ void main() {
 
       expect(await cache.get('key1'), isNull);
       expect(await cache.get('key2'), isNull);
-      expect(cache.getKeys(), isEmpty);
+      expect(await cache.getKeys(), isEmpty);
     });
   });
 
@@ -71,7 +71,7 @@ void main() {
 
         expect(await cache.get('key1'), equals('new_value1'));
         expect(await cache.get('key2'), equals('value2'));
-        expect(cache.getKeys().length, equals(2));
+        expect((await cache.getKeys()).length, equals(2));
       },
     );
 
@@ -111,7 +111,7 @@ void main() {
 
       await Future.wait(futures);
       expect(
-        cache.getKeys().length,
+        (await cache.getKeys()).length,
         lessThanOrEqualTo(5),
       ); // Only 5 keys should remain
     });
@@ -127,7 +127,7 @@ void main() {
       expect(await cache.get('key1'), isNull);
       expect(await cache.get('key2'), isNull);
       expect(await cache.get('key3'), isNull);
-      expect(cache.getKeys(), isEmpty);
+      expect(await cache.getKeys(), isEmpty);
     });
   });
 
@@ -144,7 +144,7 @@ void main() {
       await cache.set('key1', 'value1');
       await cache.remove('key1');
       expect(await cache.get('key1'), isNull);
-      expect(cache.getKeys(), isNot(contains('key1')));
+      expect(await cache.getKeys(), isNot(contains('key1')));
     });
 
     test('remove() non-existent key is a no-op', () async {
@@ -152,7 +152,7 @@ void main() {
       await cache.set('key1', 'value1');
       await cache.remove('missing');
       expect(await cache.get('key1'), equals('value1'));
-      expect(cache.getKeys().length, equals(1));
+      expect((await cache.getKeys()).length, equals(1));
     });
 
     test('remove() Future completes without error', () async {

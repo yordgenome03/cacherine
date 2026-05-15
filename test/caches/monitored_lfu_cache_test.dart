@@ -95,7 +95,7 @@ void main() {
 
       expect(await cache.get('key1'), isNull);
       expect(await cache.get('key2'), isNull);
-      expect(cache.getKeys(), isEmpty);
+      expect(await cache.getKeys(), isEmpty);
     });
 
     test(
@@ -112,7 +112,7 @@ void main() {
 
         expect(await cache.get('key1'), equals('new_value1'));
         expect(await cache.get('key2'), equals('value2'));
-        expect(cache.getKeys().length, equals(2));
+        expect((await cache.getKeys()).length, equals(2));
       },
     );
 
