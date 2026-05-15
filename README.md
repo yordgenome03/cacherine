@@ -12,7 +12,7 @@
   <img src="https://github.com/user-attachments/assets/2a42a018-61cb-4ef7-a3d8-a0cafe923328" alt="cacherine logo" width="300"/>
 </p>
 
-`cacherine` is a simple and flexible memory cache library for Dart. It provides basic caching algorithms such as FIFO, LRU, MRU, and LFU. Both single-threaded and async-enabled versions are available to handle different usage scenarios.
+`cacherine` is a simple and flexible memory cache library for Dart. It provides caching algorithms such as FIFO, LRU, MRU, LFU, and TTL-based expiry. Both single-threaded and async-enabled versions are available to handle different usage scenarios.
 
 If you want to choose the best cache algorithm for your app, you can use **MonitoredCache** in your development environment. It helps you monitor performance metrics (such as hit/miss rates, latency, and eviction alerts) so you can make data-driven decisions and optimize the algorithm you use.
 
@@ -35,6 +35,8 @@ Whether you need a simple single-threaded cache or an async-compatible solution 
   — [Learn more](doc/mru_cache.md)
 - **LFU** (Least Frequently Used)
   — [Learn more](doc/lfu_cache.md)
+- **TTL** (Time-To-Live — entries auto-expire after a configurable duration; optional per-entry TTL override and background sweep)
+  — [Learn more](doc/ttl_cache.md)
 - **MonitoredCache** (Includes performance monitoring with hit/miss rates, latency, and eviction alerts)
   — [Learn more](doc/monitored_cache.md)
 - **Simple versions (e.g., SimpleFIFOCache) for single-threaded usage, and standard versions for multi-threaded environments**
@@ -80,6 +82,29 @@ void main() async {
 }
 ```
 
+### TTL Usage
+
+Entries expire automatically once their TTL elapses. Use `ttl:` on individual `set()` calls to override the global default for a single entry.
+
+```Dart
+import 'package:cacherine/cacherine.dart';
+
+void main() async {
+  final cache = TTLCache<String, String>(
+    ttl: const Duration(minutes: 5),   // global default
+    maxSize: 100,                       // optional capacity limit
+    sweepInterval: const Duration(minutes: 1), // optional background sweep
+  );
+
+  await cache.set('token', 'abc123');                     // expires in 5 min
+  await cache.set('rate', '42', ttl: Duration(seconds: 30)); // expires in 30 s
+
+  print(await cache.get('token')); // 'abc123' (if within TTL)
+
+  cache.dispose(); // cancel background sweep timer when done
+}
+```
+
 ### Monitoring Usage
 
 If you want to monitor the performance of your cache and optimize the algorithm, use MonitoredCache.
@@ -92,6 +117,7 @@ If you want to monitor the performance of your cache and optimize the algorithm,
 - [LRUCache<K, V>](lib/src/caches/lru_cache.dart): Cache that removes the least recently used items
 - [MRUCache<K, V>](lib/src/caches/mru_cache.dart): Cache that removes the most recently used items
 - [LFUCache<K, V>](lib/src/caches/lfu_cache.dart): Cache that removes the least frequently used items
+- [TTLCache<K, V>](lib/src/caches/ttl_cache.dart): Cache with time-based expiry; global TTL with optional per-entry override, lazy eviction, optional background sweep, and optional capacity limit
 
 - [MonitoredFIFOCache<K, V>](lib/src/caches/monitored_ephemeral_fifo_cache.dart): FIFO-based cache with monitoring
 - [MonitoredEphemeralFIFOCache<K, V>](lib/src/caches/monitored_fifo_cache.dart): Ephemeral FIFO cache with monitoring
