@@ -129,5 +129,14 @@ void main() {
       final stats = cache.metrics.getRecentStats(const Duration(minutes: 1));
       expect(stats['evictions_per_minute'], equals(0));
     });
+
+    test('dispose() implements Disposable and stops the timer', () {
+      final cache = MonitoredEphemeralFIFOCache<String, String>(
+        maxSize: 3,
+        alertConfig: config,
+      );
+      expect(cache, isA<Disposable>());
+      expect(cache.dispose, returnsNormally);
+    });
   });
 }
