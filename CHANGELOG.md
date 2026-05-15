@@ -1,4 +1,4 @@
-## 1.2.0 - CacheStatsDashboard, TTLCache, and Lifecycle Management
+## 2.0.0 - CacheStatsDashboard, TTLCache, and Lifecycle Management
 
 ### New Features
 
