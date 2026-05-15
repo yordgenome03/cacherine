@@ -131,6 +131,23 @@ void main() {
       expect(await cache.get('keyA'), equals('valueA'));
       expect(await cache.get('keyC'), equals('valueC'));
     });
+
+    test(
+      'set() on existing key refreshes LRU position — eviction uses LRU tiebreak',
+      () async {
+        // key1 inserted first, key2 inserted second. Both at freq=1 with key1 oldest.
+        // set(key1) refreshes key1's recency → key2 becomes the oldest in bucket[1].
+        // Eviction must then remove key2 (LRU tiebreak: oldest is evicted first).
+        final cache = LFUCache<String, String>(2);
+        await cache.set('key1', 'value1'); // bucket[1]: [key1]
+        await cache.set('key2', 'value2'); // bucket[1]: [key2, key1] (key1 is tail)
+        await cache.set('key1', 'updated'); // refreshes recency → [key1, key2] (key2 is tail)
+        await cache.set('key3', 'value3'); // evicts tail of bucket[1] → key2
+        expect(await cache.get('key2'), isNull);
+        expect(await cache.get('key1'), equals('updated'));
+        expect(await cache.get('key3'), equals('value3'));
+      },
+    );
   });
 
   group('LFUCache - Thread-safety Tests', () {

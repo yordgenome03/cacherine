@@ -60,7 +60,8 @@ class SimpleLFUCache<K, V> extends SimpleCache<K, V> {
   }
 
   // Moves node to the head of its current frequency bucket (LRU recency
-  // update) without changing its frequency or _minFreq.
+  // update) without changing its frequency or _minFreq. Called by set() to
+  // record that the key was touched, enabling correct LRU tiebreak on eviction.
   void _refreshInBucket(_LFUNode<K, V> node) {
     final bucket = _freqMap[node.freq]!;
     node.unlink();
