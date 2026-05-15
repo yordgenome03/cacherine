@@ -54,7 +54,7 @@ class SimpleEphemeralFIFOCache<K, V> extends SimpleCache<K, V> {
   /// **This method is not thread-safe.**
   @override
   void set(K key, V value) {
-    if (_cache.length >= maxSize) {
+    if (!_cache.containsKey(key) && _cache.length >= maxSize) {
       _cache.remove(
         _cache.keys.first,
       ); // Remove the oldest element following FIFO

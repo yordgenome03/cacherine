@@ -77,14 +77,33 @@ void main() {
         await cache.set('key2', 'value2');
         await cache.set('key1', 'new_value1'); // Order does not change
 
-        await cache.set('key3', 'value3'); // key2 will be evicted (FIFO order)
+        await cache.set(
+          'key3',
+          'value3',
+        ); // key1 will be evicted (FIFO order, key1 is oldest)
 
-        expect(await cache.get('key2'), isNull); // key2 should be removed
         expect(
           await cache.get('key1'),
-          equals('new_value1'),
-        ); // key1 should remain with new value
+          isNull,
+        ); // key1 should be removed (oldest)
+        expect(await cache.get('key2'), equals('value2')); // key2 should remain
         expect(await cache.get('key3'), equals('value3')); // key3 should be set
+      },
+    );
+
+    test(
+      'Updating an existing key at capacity does not evict any entry',
+      () async {
+        final cache = FIFOCache<String, String>(3);
+        await cache.set('A', 'valueA');
+        await cache.set('B', 'valueB');
+        await cache.set('C', 'valueC');
+
+        await cache.set('B', 'newValueB'); // update existing key — no eviction
+
+        expect(cache.getKeys().length, equals(3));
+        expect(cache.getKeys(), containsAll(['A', 'B', 'C']));
+        expect(await cache.get('B'), equals('newValueB'));
       },
     );
   });
