@@ -101,7 +101,6 @@ class MonitoredLFUCache<K, V> extends ThreadSafeCache<K, V>
     await _lock.synchronized(() {
       if (_cache.containsKey(key)) {
         _cache[key] = value;
-        _usageCounts[key] = (_usageCounts[key] ?? 0) + 1;
         return;
       }
       if (_cache.length >= maxSize) {
