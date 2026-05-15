@@ -9,7 +9,7 @@
 /// are kept in a rolling window of the most recent [maxEvictionSamples]
 /// (10 000) entries. This prevents unbounded heap growth in long-running
 /// caches. As a result, [averageLatency] and [getLatencyPercentile] reflect
-/// only the most recent 1 000 hits, and [getRecentStats] eviction counts are
+/// only the most recent 1 000 requests (hits and misses), and [getRecentStats] eviction counts are
 /// accurate only while the requested window fits within the retained eviction
 /// history.
 class CacheMetrics {
@@ -72,10 +72,14 @@ class CacheMetrics {
     _latencies.add(latency);
   }
 
-  /// Records a cache miss
-  void recordMiss() {
+  /// Records a cache miss with the given request latency.
+  /// [latency] is the [Duration] representing the request's latency.
+  /// Latency is recorded for every request (hit or miss).
+  void recordMiss(Duration latency) {
     _misses++;
     _totalRequests++;
+    if (_latencies.length >= maxLatencySamples) _latencies.removeAt(0);
+    _latencies.add(latency);
   }
 
   /// Records a cache eviction event
