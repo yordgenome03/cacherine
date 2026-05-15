@@ -104,9 +104,12 @@ void main() {
         await cache.set('key1', 'value1');
         await cache.set('key2', 'value2');
 
-        await cache.set('key1', 'new_value1');
+        // Update the non-oldest key (key2). With the buggy implementation that
+        // lacked the containsKey guard, key1 (oldest) would be evicted here.
+        await cache.set('key2', 'new_value2');
 
         expect((await cache.getKeys()).length, equals(2));
+        expect(await cache.get('key1'), equals('value1'));
       },
     );
 
