@@ -1,3 +1,12 @@
+## 1.1.5 - Bug Fixes
+
+- Fixed spurious eviction in FIFO `set()` when updating an existing key.
+- Fixed unawaited `Future` in LFU/MRU eviction causing silent async errors.
+- Fixed LFU `set()` incorrectly resetting usage count and spuriously evicting when updating an existing key.
+- Fixed unbounded memory growth in `CacheMetrics` by capping stored latency samples.
+- Fixed miss latency silently discarded in `CacheMetrics`/`CacheMonitoring`.
+- Fixed incorrect cache descriptions for LRU and MRU.
+
 ## 1.1.4 - Add Project Logo to README
 
 - Added project logo to README header for improved visual branding.
