@@ -1,4 +1,4 @@
-import 'package:cacherine/src/monitorings/cache_metrics.dart';
+import 'cache_metrics.dart';
 
 /// Immutable point-in-time snapshot of all cache metrics.
 class DashboardSnapshot {
@@ -63,7 +63,7 @@ class CacheStatsDashboard {
 
 String _formatDuration(Duration d) {
   final us = d.inMicroseconds;
-  if (us < 1000) return '${us}µs';
+  if (us < 1000) return '$usµs';
   if (us < 1000000) return '${d.inMilliseconds}ms';
   return '${(us / 1000000).toStringAsFixed(1)}s';
 }
@@ -79,7 +79,8 @@ String formatDashboard(DashboardSnapshot snap) {
   final hitRatePct = '${(snap.hitRate * 100).toStringAsFixed(1)}%';
 
   final dt = snap.capturedAt;
-  final capturedAt = '${dt.year.toString().padLeft(4, '0')}-'
+  final capturedAt =
+      '${dt.year.toString().padLeft(4, '0')}-'
       '${dt.month.toString().padLeft(2, '0')}-'
       '${dt.day.toString().padLeft(2, '0')} '
       '${dt.hour.toString().padLeft(2, '0')}:'
