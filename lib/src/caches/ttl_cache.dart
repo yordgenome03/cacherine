@@ -107,6 +107,9 @@ class TTLCache<K, V> extends ThreadSafeCache<K, V> implements Disposable {
   ///   insertion order is refreshed (it becomes the newest entry for FIFO purposes).
   @override
   Future<void> set(K key, V value, {Duration? ttl}) async {
+    if (ttl != null && ttl <= Duration.zero) {
+      throw ArgumentError('ttl must be greater than zero.');
+    }
     await _lock.synchronized(() {
       _cache.remove(key); // Refresh insertion order on update.
       _evictIfNeeded();

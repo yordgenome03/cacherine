@@ -36,6 +36,28 @@ void main() {
         throwsArgumentError,
       );
     });
+
+    test('set() throws ArgumentError for zero per-entry ttl override', () async {
+      final cache = TTLCache<String, String>(
+        ttl: const Duration(seconds: 10),
+        clock: fakeClock,
+      );
+      await expectLater(
+        () => cache.set('key', 'value', ttl: Duration.zero),
+        throwsArgumentError,
+      );
+    });
+
+    test('set() throws ArgumentError for negative per-entry ttl override', () async {
+      final cache = TTLCache<String, String>(
+        ttl: const Duration(seconds: 10),
+        clock: fakeClock,
+      );
+      await expectLater(
+        () => cache.set('key', 'value', ttl: const Duration(seconds: -1)),
+        throwsArgumentError,
+      );
+    });
   });
 
   group('TTLCache - Global TTL', () {
