@@ -40,6 +40,9 @@ class LFUCache<K, V> extends ThreadSafeCache<K, V> {
 
   /// Returns all keys currently stored in the cache.
   ///
+  /// **Note:** The iteration order is unspecified (backed by [HashMap]).
+  /// Do not rely on insertion order or any other stable ordering.
+  ///
   /// **This method is thread-safe.**
   @override
   Future<Iterable<K>> getKeys() async {
@@ -157,6 +160,7 @@ class LFUCache<K, V> extends ThreadSafeCache<K, V> {
   /// Returns a string representation of the current cache state.
   ///
   /// - Outputs **key-value pairs** currently stored in the cache as a string.
+  /// - The order of pairs is unspecified (backed by [HashMap]).
   ///
   /// **Note:** `toString()` is synchronous and cannot acquire the internal
   /// lock. It takes an eager snapshot of the current keys/values but does not

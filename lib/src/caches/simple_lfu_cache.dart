@@ -39,6 +39,9 @@ class SimpleLFUCache<K, V> extends SimpleCache<K, V> {
 
   /// Returns all keys currently stored in the cache.
   ///
+  /// **Note:** The iteration order is unspecified (backed by [HashMap]).
+  /// Do not rely on insertion order or any other stable ordering.
+  ///
   /// **This method is not thread-safe.**
   @override
   Iterable<K> getKeys() => _keyMap.keys;
@@ -148,6 +151,7 @@ class SimpleLFUCache<K, V> extends SimpleCache<K, V> {
   /// Returns a string representation of the current cache state.
   ///
   /// - Outputs **key-value pairs** currently stored in the cache as a string.
+  /// - The order of pairs is unspecified (backed by [HashMap]).
   ///
   /// **This method is not thread-safe.**
   @override
