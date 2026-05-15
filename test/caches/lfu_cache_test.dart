@@ -131,6 +131,29 @@ void main() {
       expect(await cache.get('keyA'), equals('valueA'));
       expect(await cache.get('keyC'), equals('valueC'));
     });
+
+    test(
+      'set() on existing key refreshes LRU position — eviction uses LRU tiebreak',
+      () async {
+        // key1 inserted first, key2 inserted second. Both at freq=1 with key1 oldest.
+        // set(key1) refreshes key1's recency → key2 becomes the oldest in bucket[1].
+        // Eviction must then remove key2 (LRU tiebreak: oldest is evicted first).
+        final cache = LFUCache<String, String>(2);
+        await cache.set('key1', 'value1'); // bucket[1]: [key1]
+        await cache.set(
+          'key2',
+          'value2',
+        ); // bucket[1]: [key2, key1] (key1 is tail)
+        await cache.set(
+          'key1',
+          'updated',
+        ); // refreshes recency → [key1, key2] (key2 is tail)
+        await cache.set('key3', 'value3'); // evicts tail of bucket[1] → key2
+        expect(await cache.get('key2'), isNull);
+        expect(await cache.get('key1'), equals('updated'));
+        expect(await cache.get('key3'), equals('value3'));
+      },
+    );
   });
 
   group('LFUCache - Thread-safety Tests', () {
@@ -175,7 +198,41 @@ void main() {
     });
   });
 
+  group('LFUCache - toString()', () {
+    test('toString() returns key-value pairs as a string', () async {
+      final cache = LFUCache<String, String>(3);
+      await cache.set('a', '1');
+      await cache.set('b', '2');
+      final result = cache.toString();
+      expect(result, contains('a'));
+      expect(result, contains('1'));
+      expect(result, contains('b'));
+      expect(result, contains('2'));
+    });
+  });
+
   group('LFUCache - remove()', () {
+    test(
+      'remove() empties minFreq bucket while other items remain — next set() evicts correctly',
+      () async {
+        final cache = LFUCache<String, String>(2);
+        await cache.set('key1', 'value1'); // freq=1
+        await cache.set('key2', 'value2'); // freq=1
+        await cache.get('key2'); // key2 freq=2, _minFreq still 1
+        // Remove key1: freq=1 bucket becomes empty. _minFreq may be stale
+        // but set() resets _minFreq=1 on next new-key insertion.
+        await cache.remove('key1');
+        expect(await cache.get('key1'), isNull);
+        expect(await cache.get('key2'), equals('value2'));
+        // Insert two new keys — cache is size 2, so key3 gets evicted by key4.
+        await cache.set('key3', 'value3'); // _minFreq reset to 1
+        await cache.set('key4', 'value4'); // evicts key3 (freq=1, key2 freq≥2)
+        expect(await cache.get('key3'), isNull);
+        expect(await cache.get('key2'), equals('value2'));
+        expect(await cache.get('key4'), equals('value4'));
+      },
+    );
+
     test('remove() existing key makes subsequent get() return null', () async {
       final cache = LFUCache<String, String>(3);
       await cache.set('key1', 'value1');

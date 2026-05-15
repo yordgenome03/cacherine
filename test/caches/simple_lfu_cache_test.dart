@@ -123,12 +123,45 @@ void main() {
       expect(cache.get('key1'), equals('updated'));
       expect(cache.get('key3'), equals('value3'));
     });
+
+    test(
+      'set() on existing key refreshes LRU position — eviction uses LRU tiebreak',
+      () {
+        // key1 inserted first, key2 inserted second. Both at freq=1 with key1 oldest.
+        // set(key1) refreshes key1's recency → key2 becomes the oldest in bucket[1].
+        // Eviction must then remove key2 (LRU tiebreak: oldest is evicted first).
+        final cache = SimpleLFUCache<String, String>(2);
+        cache.set('key1', 'value1'); // bucket[1]: [key1]
+        cache.set('key2', 'value2'); // bucket[1]: [key2, key1] (key1 is tail)
+        cache.set(
+          'key1',
+          'updated',
+        ); // refreshes recency → [key1, key2] (key2 is tail)
+        cache.set('key3', 'value3'); // evicts tail of bucket[1] → key2
+        expect(cache.get('key2'), isNull);
+        expect(cache.get('key1'), equals('updated'));
+        expect(cache.get('key3'), equals('value3'));
+      },
+    );
   });
 
   group('SimpleLFUCache - Error Handling', () {
     test('Throws ArgumentError when maxSize is 0 or less', () {
       expect(() => SimpleLFUCache<String, String>(0), throwsArgumentError);
       expect(() => SimpleLFUCache<String, String>(-1), throwsArgumentError);
+    });
+  });
+
+  group('SimpleLFUCache - toString()', () {
+    test('toString() returns key-value pairs as a string', () {
+      final cache = SimpleLFUCache<String, String>(3);
+      cache.set('a', '1');
+      cache.set('b', '2');
+      final result = cache.toString();
+      expect(result, contains('a'));
+      expect(result, contains('1'));
+      expect(result, contains('b'));
+      expect(result, contains('2'));
     });
   });
 
