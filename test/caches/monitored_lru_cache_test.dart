@@ -128,5 +128,17 @@ void main() {
       final stats = cache.metrics.getRecentStats(const Duration(minutes: 1));
       expect(stats['evictions_per_minute'], equals(0));
     });
+
+    test('capacity eviction via set() records eviction in metrics', () async {
+      final cache = MonitoredLRUCache<String, String>(
+        maxSize: 2,
+        alertConfig: config,
+      );
+      await cache.set('key1', 'value1');
+      await cache.set('key2', 'value2');
+      await cache.set('key3', 'value3'); // triggers LRU eviction of key1
+      final stats = cache.metrics.getRecentStats(const Duration(minutes: 1));
+      expect(stats['evictions_per_minute'], equals(1));
+    });
   });
 }

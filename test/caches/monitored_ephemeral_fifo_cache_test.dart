@@ -94,6 +94,22 @@ void main() {
       expect(await cache.getKeys(), isEmpty);
     });
 
+    test(
+      'set() on an existing key when cache is full does not evict any entry',
+      () async {
+        final cache = MonitoredEphemeralFIFOCache<String, String>(
+          maxSize: 2,
+          alertConfig: config,
+        );
+        await cache.set('key1', 'value1');
+        await cache.set('key2', 'value2');
+
+        await cache.set('key1', 'new_value1');
+
+        expect((await cache.getKeys()).length, equals(2));
+      },
+    );
+
     test('Should throw an exception if maxSize is 0 or negative', () {
       expect(
         () => MonitoredEphemeralFIFOCache<String, String>(
@@ -128,6 +144,18 @@ void main() {
       await cache.remove('missing');
       final stats = cache.metrics.getRecentStats(const Duration(minutes: 1));
       expect(stats['evictions_per_minute'], equals(0));
+    });
+
+    test('capacity eviction via set() records eviction in metrics', () async {
+      final cache = MonitoredEphemeralFIFOCache<String, String>(
+        maxSize: 2,
+        alertConfig: config,
+      );
+      await cache.set('key1', 'value1');
+      await cache.set('key2', 'value2');
+      await cache.set('key3', 'value3'); // triggers FIFO eviction of key1
+      final stats = cache.metrics.getRecentStats(const Duration(minutes: 1));
+      expect(stats['evictions_per_minute'], equals(1));
     });
 
     test('dispose() implements Disposable and stops the timer', () {

@@ -86,7 +86,7 @@ The eviction policy of an LRU Cache follows these rules:
    - Add a new key D. Since the cache has reached maxSize (3), B, being the least recently used, is evicted.
      | Order | Key | Value |
      | ----- | --- | ----- |
-     | 2 | A | ... |
+     | 3 | A | ... |
      | 4 | C | ... |
      | 5 | D | ... |
 

@@ -107,6 +107,7 @@ class MonitoredMRUCache<K, V> extends ThreadSafeCache<K, V>
         _cache.remove(key);
       } else if (_cache.length >= maxSize) {
         _evictMRUEntry(); // Perform eviction using MRU policy
+        metrics.recordEviction();
       }
       // Insert the key to mark it as the most recently used
       _cache[key] = value;

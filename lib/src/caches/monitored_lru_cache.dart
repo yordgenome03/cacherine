@@ -109,6 +109,7 @@ class MonitoredLRUCache<K, V> extends ThreadSafeCache<K, V>
         _cache.remove(
           _cache.keys.first,
         ); // Remove the least recently used element
+        metrics.recordEviction();
       }
       _cache[key] = value;
     });
