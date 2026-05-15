@@ -1,3 +1,5 @@
+import 'dart:collection';
+
 /// Cache performance metrics class
 ///
 /// This class tracks cache hit rates, miss rates, request latencies (delays),
@@ -19,8 +21,8 @@ class CacheMetrics {
   int _hits = 0;
   int _misses = 0;
   int _totalRequests = 0;
-  final List<Duration> _latencies = [];
-  final List<DateTime> _evictions = [];
+  final Queue<Duration> _latencies = Queue();
+  final Queue<DateTime> _evictions = Queue();
 
   /// The number of cache hits
   int get hits => _hits;
@@ -68,7 +70,7 @@ class CacheMetrics {
   void recordHit(Duration latency) {
     _hits++;
     _totalRequests++;
-    if (_latencies.length >= maxLatencySamples) _latencies.removeAt(0);
+    if (_latencies.length >= maxLatencySamples) _latencies.removeFirst();
     _latencies.add(latency);
   }
 
@@ -78,18 +80,25 @@ class CacheMetrics {
   void recordMiss(Duration latency) {
     _misses++;
     _totalRequests++;
-    if (_latencies.length >= maxLatencySamples) _latencies.removeAt(0);
+    if (_latencies.length >= maxLatencySamples) _latencies.removeFirst();
     _latencies.add(latency);
   }
 
   /// Records a cache eviction event
   void recordEviction() {
-    if (_evictions.length >= maxEvictionSamples) _evictions.removeAt(0);
+    if (_evictions.length >= maxEvictionSamples) _evictions.removeFirst();
     _evictions.add(DateTime.now());
   }
 
   /// Retrieves the recent cache statistics within a given time window.
+  ///
+  /// Throws [ArgumentError] if [window] is zero or negative.
   Map<String, dynamic> getRecentStats(Duration window) {
+    if (window.inMilliseconds <= 0) {
+      throw ArgumentError(
+        'window must be a positive Duration, but was $window',
+      );
+    }
     final now = DateTime.now();
     final windowStart = now.subtract(window);
     final recentEvictions =

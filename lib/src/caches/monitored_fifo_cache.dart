@@ -64,8 +64,10 @@ class MonitoredFIFOCache<K, V> extends ThreadSafeCache<K, V>
   ///
   /// **This method is thread-safe**, taking a snapshot of the cache before returning the keys.
   @override
-  Iterable<K> getKeys() {
-    return Map<K, V>.of(_cache).keys;
+  Future<Iterable<K>> getKeys() async {
+    return await _lock.synchronized(() {
+      return Map<K, V>.of(_cache).keys;
+    });
   }
 
   /// Retrieves the value for the specified key.

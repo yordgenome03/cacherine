@@ -131,6 +131,32 @@ void main() {
     });
   });
 
+  group('CacheMetrics - getRecentStats() validation', () {
+    test('getRecentStats(Duration.zero) throws ArgumentError', () {
+      final metrics = CacheMetrics();
+      expect(
+        () => metrics.getRecentStats(Duration.zero),
+        throwsA(isA<ArgumentError>()),
+      );
+    });
+
+    test('getRecentStats() with negative Duration throws ArgumentError', () {
+      final metrics = CacheMetrics();
+      expect(
+        () => metrics.getRecentStats(const Duration(milliseconds: -1)),
+        throwsA(isA<ArgumentError>()),
+      );
+    });
+
+    test('getRecentStats() with positive Duration succeeds', () {
+      final metrics = CacheMetrics();
+      expect(
+        () => metrics.getRecentStats(const Duration(minutes: 1)),
+        returnsNormally,
+      );
+    });
+  });
+
   group('CacheMetrics - Bounded Storage', () {
     test(
       '_latencies does not exceed maxLatencySamples entries after many recordHit calls',

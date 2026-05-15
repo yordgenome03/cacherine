@@ -7,8 +7,8 @@
 abstract class ThreadSafeCache<K, V> {
   /// **Retrieves all keys stored in the cache.**
   ///
-  /// **Returns:** A list of all keys in the cache.
-  Iterable<K> getKeys();
+  /// **Returns:** A snapshot of all keys in the cache at the time of the call.
+  Future<Iterable<K>> getKeys();
 
   /// **Retrieves the value associated with the specified key (asynchronously).**
   ///

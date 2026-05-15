@@ -32,7 +32,7 @@ void main() {
 
       expect(await cache.get('key1'), isNull);
       expect(await cache.get('key2'), isNull);
-      expect(cache.getKeys(), isEmpty);
+      expect(await cache.getKeys(), isEmpty);
     });
   });
 
@@ -83,8 +83,8 @@ void main() {
 
         await cache.set('B', 'newValueB'); // update existing key — no eviction
 
-        expect(cache.getKeys().length, equals(3));
-        expect(cache.getKeys(), containsAll(['A', 'B', 'C']));
+        expect((await cache.getKeys()).length, equals(3));
+        expect(await cache.getKeys(), containsAll(['A', 'B', 'C']));
         expect(await cache.get('B'), equals('newValueB'));
       },
     );
@@ -109,7 +109,7 @@ void main() {
       await Future.wait(futures);
 
       // Confirm that no values are left in the cache
-      expect(cache.getKeys().isEmpty, isTrue);
+      expect((await cache.getKeys()).isEmpty, isTrue);
     });
 
     test('Parallel clear() calls remove all data', () async {
@@ -124,7 +124,7 @@ void main() {
       expect(await cache.get('key1'), isNull);
       expect(await cache.get('key2'), isNull);
       expect(await cache.get('key3'), isNull);
-      expect(cache.getKeys(), isEmpty);
+      expect(await cache.getKeys(), isEmpty);
     });
 
     test(
@@ -163,7 +163,7 @@ void main() {
       await cache.set('key1', 'value1');
       await cache.remove('key1');
       expect(await cache.get('key1'), isNull);
-      expect(cache.getKeys(), isNot(contains('key1')));
+      expect(await cache.getKeys(), isNot(contains('key1')));
     });
 
     test('remove() non-existent key is a no-op', () async {
@@ -171,8 +171,8 @@ void main() {
       await cache.set('key1', 'value1');
       await cache.remove('missing');
       // Use getKeys() — calling get() would consume the ephemeral entry
-      expect(cache.getKeys(), contains('key1'));
-      expect(cache.getKeys().length, equals(1));
+      expect(await cache.getKeys(), contains('key1'));
+      expect((await cache.getKeys()).length, equals(1));
     });
 
     test('remove() Future completes without error', () async {
