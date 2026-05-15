@@ -110,7 +110,8 @@ class CacheMetrics {
       'p95_latency': getLatencyPercentile(95).inMilliseconds,
       'p99_latency': getLatencyPercentile(99).inMilliseconds,
       'evictions_per_minute':
-          (recentEvictions * 60000000) ~/ window.inMicroseconds,
+          (recentEvictions * Duration.microsecondsPerMinute) ~/
+          window.inMicroseconds,
     };
   }
 
