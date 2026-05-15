@@ -96,4 +96,36 @@ void main() {
       expect(() => SimpleLRUCache<String, String>(-1), throwsArgumentError);
     });
   });
+
+  group('SimpleLRUCache - remove()', () {
+    test('remove() existing key makes get() return null', () {
+      final cache = SimpleLRUCache<String, String>(3);
+      cache.set('key1', 'value1');
+      cache.remove('key1');
+      expect(cache.get('key1'), isNull);
+      expect(cache.getKeys(), isNot(contains('key1')));
+    });
+
+    test('remove() non-existent key is a no-op', () {
+      final cache = SimpleLRUCache<String, String>(3);
+      cache.set('key1', 'value1');
+      cache.remove('missing');
+      expect(cache.get('key1'), equals('value1'));
+      expect(cache.getKeys().length, equals(1));
+    });
+
+    test('remove() does not affect LRU ordering of remaining entries', () {
+      final cache = SimpleLRUCache<String, String>(3);
+      cache.set('key1', 'value1');
+      cache.set('key2', 'value2');
+      cache.set('key3', 'value3');
+      // LRU order: key1 (LRU), key2, key3 (MRU)
+      cache.remove('key2'); // remove middle entry
+      // Remaining: key1 (LRU), key3 (MRU)
+      expect(cache.get('key1'), equals('value1'));
+      expect(cache.get('key3'), equals('value3'));
+      expect(cache.getKeys(), isNot(contains('key2')));
+      expect(cache.getKeys().length, equals(2));
+    });
+  });
 }

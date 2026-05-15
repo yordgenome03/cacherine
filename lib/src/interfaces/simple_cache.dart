@@ -28,6 +28,14 @@ abstract class SimpleCache<K, V> {
   /// - `value`: The value of the data to store.
   void set(K key, V value);
 
+  /// **Removes the entry with the given key from the cache.**
+  ///
+  /// - If the key does not exist, this call is a no-op.
+  ///
+  /// **Arguments:**
+  /// - `key`: The key of the entry to remove.
+  void remove(K key);
+
   /// **Removes all data stored in the cache.**
   void clear();
 }

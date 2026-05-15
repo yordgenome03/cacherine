@@ -137,4 +137,28 @@ void main() {
       expect(() => LFUCache<String, String>(-1), throwsArgumentError);
     });
   });
+
+  group('LFUCache - remove()', () {
+    test('remove() existing key makes subsequent get() return null', () async {
+      final cache = LFUCache<String, String>(3);
+      await cache.set('key1', 'value1');
+      await cache.remove('key1');
+      expect(await cache.get('key1'), isNull);
+      expect(cache.getKeys(), isNot(contains('key1')));
+    });
+
+    test('remove() non-existent key is a no-op', () async {
+      final cache = LFUCache<String, String>(3);
+      await cache.set('key1', 'value1');
+      await cache.remove('missing');
+      expect(await cache.get('key1'), equals('value1'));
+      expect(cache.getKeys().length, equals(1));
+    });
+
+    test('remove() Future completes without error', () async {
+      final cache = LFUCache<String, String>(3);
+      await cache.set('key1', 'value1');
+      await expectLater(cache.remove('key1'), completes);
+    });
+  });
 }

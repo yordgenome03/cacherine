@@ -136,4 +136,23 @@ void main() {
       );
     });
   });
+
+  group('SimpleEphemeralFIFOCache - remove()', () {
+    test('remove() existing key makes get() return null', () {
+      final cache = SimpleEphemeralFIFOCache<String, String>(3);
+      cache.set('key1', 'value1');
+      cache.remove('key1');
+      expect(cache.get('key1'), isNull);
+      expect(cache.getKeys(), isNot(contains('key1')));
+    });
+
+    test('remove() non-existent key is a no-op', () {
+      final cache = SimpleEphemeralFIFOCache<String, String>(3);
+      cache.set('key1', 'value1');
+      cache.remove('missing');
+      // Use getKeys() — calling get() would consume the ephemeral entry
+      expect(cache.getKeys(), contains('key1'));
+      expect(cache.getKeys().length, equals(1));
+    });
+  });
 }

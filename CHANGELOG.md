@@ -1,3 +1,16 @@
+## 1.2.0 - Add Manual Cache Eviction
+
+### Breaking Changes
+
+- `SimpleCache<K, V>` now requires implementing `void remove(K key)`. Any external class that directly implements `SimpleCache` (rather than extending a built-in implementation) must add this method.
+- `ThreadSafeCache<K, V>` now requires implementing `Future<void> remove(K key)`. Same caveat applies.
+
+### New Features
+
+- `remove(K key)` on all `SimpleCache` implementations (`SimpleLRUCache`, `SimpleMRUCache`, `SimpleLFUCache`, `SimpleFIFOCache`, `SimpleEphemeralFIFOCache`): synchronously removes a single entry; no-op if the key does not exist.
+- `remove(K key)` on all `ThreadSafeCache` implementations (`LRUCache`, `MRUCache`, `LFUCache`, `FIFOCache`, `EphemeralFIFOCache`): asynchronously removes a single entry under the instance lock; no-op if the key does not exist.
+- `remove(K key)` on all `Monitored*` wrappers (`MonitoredLRUCache`, `MonitoredMRUCache`, `MonitoredLFUCache`, `MonitoredFIFOCache`, `MonitoredEphemeralFIFOCache`): delegates to the underlying cache and calls `CacheMetrics.recordEviction()` when the key existed, so manual evictions are reflected in `evictions_per_minute` and related metrics.
+
 ## 1.1.5 - Bug Fixes
 
 - Fixed spurious eviction in FIFO `set()` when updating an existing key.

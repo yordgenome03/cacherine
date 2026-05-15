@@ -137,4 +137,22 @@ void main() {
       expect(() => SimpleFIFOCache<String, String>(-1), throwsArgumentError);
     });
   });
+
+  group('SimpleFIFOCache - remove()', () {
+    test('remove() existing key makes get() return null', () {
+      final cache = SimpleFIFOCache<String, String>(3);
+      cache.set('key1', 'value1');
+      cache.remove('key1');
+      expect(cache.get('key1'), isNull);
+      expect(cache.getKeys(), isNot(contains('key1')));
+    });
+
+    test('remove() non-existent key is a no-op', () {
+      final cache = SimpleFIFOCache<String, String>(3);
+      cache.set('key1', 'value1');
+      cache.remove('missing');
+      expect(cache.get('key1'), equals('value1'));
+      expect(cache.getKeys().length, equals(1));
+    });
+  });
 }
