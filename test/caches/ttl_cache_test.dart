@@ -12,6 +12,32 @@ void main() {
     fakeNow = DateTime(2024, 1, 1);
   });
 
+  group('TTLCache - Constructor validation', () {
+    test('throws ArgumentError for zero ttl', () {
+      expect(
+        () => TTLCache<String, String>(ttl: Duration.zero),
+        throwsArgumentError,
+      );
+    });
+
+    test('throws ArgumentError for negative ttl', () {
+      expect(
+        () => TTLCache<String, String>(ttl: const Duration(seconds: -1)),
+        throwsArgumentError,
+      );
+    });
+
+    test('throws ArgumentError for zero maxSize', () {
+      expect(
+        () => TTLCache<String, String>(
+          ttl: const Duration(seconds: 10),
+          maxSize: 0,
+        ),
+        throwsArgumentError,
+      );
+    });
+  });
+
   group('TTLCache - Global TTL', () {
     test('entry expires after global TTL elapses', () async {
       // 3.1 / 3.11
@@ -112,22 +138,25 @@ void main() {
   });
 
   group('TTLCache - maxSize FIFO eviction', () {
-    test('maxSize evicts oldest FIFO entry when capacity is exceeded', () async {
-      // 3.7
-      final cache = TTLCache<String, String>(
-        ttl: const Duration(seconds: 60),
-        maxSize: 2,
-        clock: fakeClock,
-      );
+    test(
+      'maxSize evicts oldest FIFO entry when capacity is exceeded',
+      () async {
+        // 3.7
+        final cache = TTLCache<String, String>(
+          ttl: const Duration(seconds: 60),
+          maxSize: 2,
+          clock: fakeClock,
+        );
 
-      await cache.set('a', '1');
-      await cache.set('b', '2');
-      await cache.set('c', '3'); // should evict 'a'
+        await cache.set('a', '1');
+        await cache.set('b', '2');
+        await cache.set('c', '3'); // should evict 'a'
 
-      expect(await cache.get('a'), isNull);
-      expect(await cache.get('b'), equals('2'));
-      expect(await cache.get('c'), equals('3'));
-    });
+        expect(await cache.get('a'), isNull);
+        expect(await cache.get('b'), equals('2'));
+        expect(await cache.get('c'), equals('3'));
+      },
+    );
 
     test('expired entries do not count toward maxSize', () async {
       // 3.8
