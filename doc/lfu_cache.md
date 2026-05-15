@@ -38,6 +38,7 @@ The LFU Cache eviction policy follows these rules:
 1. If the key exists:
    - Update the value.
    - Increment the frequency counter.
+     (The key is treated as accessed, so its frequency increases.)
 2. If the key does not exist:
    - If the cache exceeds the [maxSize], evict entries based on LFU policy.
    - Add the new key-value pair and initialize the frequency counter to 1.
@@ -47,14 +48,14 @@ The LFU Cache eviction policy follows these rules:
 1. Initial state: LFUCache<maxCount: 3>
 
    - The cache is empty.
-     | index | Key | Frequency Count |
+     | Order | Key | Frequency Count |
      | ----- | --- | --------------- |
      | 0 | - | - |
 
 2. set A
 
    - Key A is added to the cache. The frequency count is 1 on the first insertion.
-     | index | Key | Frequency Count |
+     | Order | Key | Frequency Count |
      |-------|-----|-----------------|
      | 0 | A | 1 |
 
@@ -88,9 +89,9 @@ The LFU Cache eviction policy follows these rules:
    - A new key D is added, requiring space in the cache (maxSize: 3). B and C have the same frequency of 1, but B is evicted because it was inserted first.
      | Order | Key | Frequency Count |
      |-------|-----|-----------------|
-     | 1 | A | 2 |
-     | 3 | C | 1 |
-     | 4 | D | 1 |
+     | 0 | A | 2 |
+     | 2 | C | 1 |
+     | 3 | D | 1 |
 
 ## 4. Suitable Use Cases
 

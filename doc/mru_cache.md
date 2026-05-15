@@ -81,7 +81,7 @@ The eviction policy of MRU Cache follows these rules:
      | 3 | A |
      | 4 | C |
 
-6. set D (A evicted due to MRU)
+6. set D (C evicted due to MRU)
 
    - Add key D. Since the cache has reached its max size (maxSize: 3), C, being the most recently accessed, is evicted.
      | Order | Key | Value |
