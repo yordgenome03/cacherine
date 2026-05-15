@@ -1,3 +1,16 @@
+## 1.2.0 - CacheStatsDashboard
+
+### New Features
+
+- **CacheStatsDashboard**: New class that wraps `CacheMetrics` to produce typed `DashboardSnapshot` objects for terminal-ready metric display.
+- **DashboardSnapshot**: Immutable value type capturing `hitRate`, `missRate`, latency percentiles (`p50`, `p95`, `p99`), `evictionsPerMinute`, `totalRequests`, and `capturedAt`.
+- **formatDashboard()**: New top-level function that renders a `DashboardSnapshot` as a Unicode box-drawing terminal panel.
+
+### Breaking Changes
+
+- `CacheStatsDashboard.snapshot(Duration window)` now throws `ArgumentError` for zero or negative `window` values (previously undefined behaviour propagated from `CacheMetrics.getRecentStats`).
+- `CacheStatsDashboard.stream(Duration window, Duration interval)` now throws `ArgumentError` for zero or negative `interval` values.
+
 ## 1.1.5 - Bug Fixes
 
 - Fixed spurious eviction in FIFO `set()` when updating an existing key.
