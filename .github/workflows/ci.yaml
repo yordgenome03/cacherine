@@ -8,7 +8,7 @@ on:
       - release/**
 
 permissions:
-  contents: read
+  contents: write
   pull-requests: write
 
 jobs:
@@ -18,7 +18,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        sdk: ['3.7.0', 'stable']
+        sdk: ['3.8.0', 'stable']
 
     steps:
       - name: Checkout repository
@@ -49,9 +49,19 @@ jobs:
         run: dart pub outdated
         timeout-minutes: 2
 
-      - name: Verify formatting
+      - name: Apply formatting (Overwrite)
         if: matrix.sdk == 'stable'
-        run: dart format --output=none --set-exit-if-changed .
+        run: dart format .
+        timeout-minutes: 2
+
+      - name: Suggest formatting fixes via Reviewdog and Fail CI
+        if: matrix.sdk == 'stable'
+        uses: reviewdog/action-suggester@v1
+        with:
+          tool_name: dart format
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          filter_mode: added
+          fail_on_error: true
         timeout-minutes: 2
 
       - name: Analyze project source with strict mode
