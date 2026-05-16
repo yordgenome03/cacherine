@@ -50,6 +50,7 @@ jobs:
         timeout-minutes: 2
 
       - name: Verify formatting
+        if: matrix.sdk == 'stable'
         run: dart format --output=none --set-exit-if-changed .
         timeout-minutes: 2
 
