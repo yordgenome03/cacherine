@@ -12,17 +12,18 @@ DashboardSnapshot _makeSnap({
   int evictionsPerMinute = 3,
   int totalRequests = 100,
   DateTime? capturedAt,
-}) => DashboardSnapshot(
-  hitRate: hitRate,
-  missRate: missRate,
-  averageLatency: averageLatency,
-  p50Latency: p50Latency,
-  p95Latency: p95Latency,
-  p99Latency: p99Latency,
-  evictionsPerMinute: evictionsPerMinute,
-  totalRequests: totalRequests,
-  capturedAt: capturedAt ?? DateTime.now(),
-);
+}) =>
+    DashboardSnapshot(
+      hitRate: hitRate,
+      missRate: missRate,
+      averageLatency: averageLatency,
+      p50Latency: p50Latency,
+      p95Latency: p95Latency,
+      p99Latency: p99Latency,
+      evictionsPerMinute: evictionsPerMinute,
+      totalRequests: totalRequests,
+      capturedAt: capturedAt ?? DateTime.now(),
+    );
 
 void main() {
   group('DashboardSnapshot', () {

@@ -38,3 +38,7 @@ doc/api/
 misc.xml
 modules.xml
 vcs.xml
+
+# FVM local toolchain config (developer environment, not part of the package)
+.fvm/
+.fvmrc

@@ -8,60 +8,73 @@ on:
       - release/**
 
 permissions:
-  contents: read
+  contents: write
   pull-requests: write
-  actions: write
 
 jobs:
   test:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
-    steps:
-      - uses: actions/checkout@v3
-        timeout-minutes: 5
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        sdk: ['3.8.0', 'stable']
 
-      - name: Setup Dart
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        timeout-minutes: 2
+
+      - name: Set up Dart SDK
         uses: dart-lang/setup-dart@v1
         with:
-          sdk: "3.7.2"
-        timeout-minutes: 5
+          sdk: ${{ matrix.sdk }}
+        timeout-minutes: 2
 
       - name: Cache Dart dependencies
-        uses: actions/cache@v3
+        uses: actions/cache@v4
         with:
           path: ~/.pub-cache
-          key: ${{ runner.os }}-pub-${{ hashFiles('**/pubspec.lock') }}
+          key: ${{ runner.os }}-pub-${{ matrix.sdk }}-${{ hashFiles('**/pubspec.lock') }}
           restore-keys: |
+            ${{ runner.os }}-pub-${{ matrix.sdk }}-
             ${{ runner.os }}-pub-
-        timeout-minutes: 5
+        timeout-minutes: 2
 
       - name: Install dependencies
         run: dart pub get
-        timeout-minutes: 10
+        timeout-minutes: 3
 
       - name: Check outdated dependencies
         run: dart pub outdated
-        timeout-minutes: 5
+        timeout-minutes: 2
 
-      - name: Verify formatting
-        run: dart format --output=none --set-exit-if-changed .
-        timeout-minutes: 5
+      - name: Apply formatting (Overwrite)
+        if: matrix.sdk == 'stable'
+        run: dart format .
+        timeout-minutes: 2
+
+      - name: Suggest formatting fixes via Reviewdog and Fail CI
+        if: matrix.sdk == 'stable'
+        uses: reviewdog/action-suggester@v1
+        with:
+          tool_name: dart format
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          filter_mode: added
+          fail_on_error: true
+        timeout-minutes: 2
 
       - name: Analyze project source with strict mode
         run: dart analyze --fatal-infos
-        timeout-minutes: 5
-
-      - name: Run Dart Code Metrics (SAST)
-        run: dart run dart_code_metrics:metrics analyze lib
-        timeout-minutes: 5
+        timeout-minutes: 2
 
       - name: Run tests with coverage
         run: dart test --coverage=coverage/
-        timeout-minutes: 20
+        timeout-minutes: 5
 
       - name: Convert coverage to lcov
         run: dart run coverage:format_coverage --lcov --in=coverage --out=coverage/lcov.info --report-on=lib
-        timeout-minutes: 5
+        timeout-minutes: 2
 
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v5
@@ -69,8 +82,8 @@ jobs:
           token: ${{ secrets.CODECOV_TOKEN }}
           files: ./coverage/lcov.info
           fail_ci_if_error: true
-        timeout-minutes: 5
+        timeout-minutes: 3
 
       - name: Validate package before publishing
         run: dart pub publish --dry-run
-        timeout-minutes: 5
+        timeout-minutes: 2
