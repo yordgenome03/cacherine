@@ -1,3 +1,31 @@
+## 2.0.1 - LFU Performance Improvements, Bug Fixes, and Maintenance
+
+### Performance
+
+- **LFUCache**: Replaced O(n) eviction scan with an O(1) frequency-bucket structure. Eviction is now constant-time regardless of cache size.
+- **LFUCache**: Eliminated O(n) `_minFreq` recomputation in `remove()`. The minimum-frequency pointer is now maintained incrementally.
+
+### Bug Fixes
+
+- **LFUCache**: `toString()` now eagerly snapshots `_keyMap` before formatting, preventing a data-race window between the map read and string construction in async contexts.
+
+### Documentation
+
+- **LFUCache**: Class-level note added clarifying that `toString()` is not covered by the lock-based thread-safety guarantee; result is a point-in-time snapshot.
+- **LFUCache**: Documented unspecified iteration order for `getKeys()` and `toString()`.
+- **LRUCache / MRUCache**: Documented LRU-recency-refresh behavior of `set()` on an existing key and the tiebreak semantics.
+
+### Maintenance
+
+- Adjusted SDK constraint floor to `>=3.5.0` (calculated minimum to match the transitive dependencies of `lints ^5.1.1` and `test ^1.31.0`)
+- Raised `synchronized` dependency from `^3.3.1` to `^3.4.0` to match the exact resolved version in the lock file (`3.4.0+1`)
+- Updated `lints` dev dependency from `^5.0.0` to `^5.1.1` to align with the revised SDK baseline
+- Raised `test` dev dependency from `^1.25.8` to `^1.31.0` (resolved: 1.31.1)
+- Removed `dart_code_metrics ^5.7.6` (incompatible with the `analyzer` versions required by modern test tooling)
+- CI: Added matrix testing across Dart 3.5.0 and stable; updated GitHub Actions to v4; optimized permissions and tightened job timeouts
+- Added `.fvm/` and `.fvmrc` to `.gitignore`
+- No public API changes; no breaking changes
+
 ## 2.0.0 - CacheStatsDashboard, TTLCache, and Lifecycle Management
 
 ### New Features

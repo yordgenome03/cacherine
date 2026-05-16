@@ -41,9 +41,9 @@ class TTLCache<K, V> extends ThreadSafeCache<K, V> implements Disposable {
     int? maxSize,
     Duration? sweepInterval,
     DateTime Function()? clock,
-  }) : _globalTTL = ttl,
-       _maxSize = maxSize,
-       _clock = clock ?? DateTime.now {
+  })  : _globalTTL = ttl,
+        _maxSize = maxSize,
+        _clock = clock ?? DateTime.now {
     if (ttl <= Duration.zero) {
       throw ArgumentError('ttl must be greater than zero.');
     }

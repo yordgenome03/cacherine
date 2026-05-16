@@ -87,8 +87,7 @@ String formatDashboard(DashboardSnapshot snap) {
   final hitRatePct = '${(clampedRate * 100).toStringAsFixed(1)}%';
 
   final dt = snap.capturedAt;
-  final capturedAt =
-      '${dt.year.toString().padLeft(4, '0')}-'
+  final capturedAt = '${dt.year.toString().padLeft(4, '0')}-'
       '${dt.month.toString().padLeft(2, '0')}-'
       '${dt.day.toString().padLeft(2, '0')} '
       '${dt.hour.toString().padLeft(2, '0')}:'
