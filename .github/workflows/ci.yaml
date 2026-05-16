@@ -51,7 +51,9 @@ jobs:
 
       - name: Verify formatting
         if: matrix.sdk == 'stable'
-        run: dart format --output=none --set-exit-if-changed .
+        run: |
+          dart format --output=write .
+          git diff --exit-code
         timeout-minutes: 2
 
       - name: Analyze project source with strict mode
