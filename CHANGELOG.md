@@ -17,12 +17,12 @@
 
 ### Maintenance
 
-- Adjusted SDK constraint floor to `>=3.5.0` (calculated minimum to match the transitive dependencies of `lints ^5.1.1` and `test ^1.31.0`)
+- Adjusted SDK constraint floor to `>=3.6.0` (minimum required by `lints ^5.1.1`)
 - Raised `synchronized` dependency from `^3.3.1` to `^3.4.0` to match the exact resolved version in the lock file (`3.4.0+1`)
 - Updated `lints` dev dependency from `^5.0.0` to `^5.1.1` to align with the revised SDK baseline
 - Raised `test` dev dependency from `^1.25.8` to `^1.31.0` (resolved: 1.31.1)
 - Removed `dart_code_metrics ^5.7.6` (incompatible with the `analyzer` versions required by modern test tooling)
-- CI: Added matrix testing across Dart 3.5.0 and stable; updated GitHub Actions to v4; optimized permissions and tightened job timeouts
+- CI: Added matrix testing across Dart 3.6.0 and stable; updated GitHub Actions to v4; optimized permissions and tightened job timeouts
 - Added `.fvm/` and `.fvmrc` to `.gitignore`
 - No public API changes; no breaking changes
 

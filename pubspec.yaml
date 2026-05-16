@@ -4,7 +4,7 @@ version: 2.0.1
 repository: https://github.com/yordgenome03/cacherine
 
 environment:
-  sdk: ">=3.5.0 <4.0.0"
+  sdk: ">=3.6.0 <4.0.0"
 
 dependencies:
   synchronized: ^3.4.0
