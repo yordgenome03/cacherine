@@ -24,6 +24,15 @@ void main() {
       ); // It should be removed after retrieval
     });
 
+    test('stored null is removed after get()', () async {
+      final cache = EphemeralFIFOCache<String, String?>(3);
+
+      await cache.set('key1', null);
+
+      expect(await cache.get('key1'), isNull);
+      expect(await cache.getKeys(), isNot(contains('key1')));
+    });
+
     test('clear() empties the cache', () async {
       final cache = EphemeralFIFOCache<String, String>(3);
       await cache.set('key1', 'value1');

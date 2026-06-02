@@ -87,6 +87,23 @@ void main() {
   });
 
   group('TTLCache - Global TTL', () {
+    test('stored null remains present until it expires', () async {
+      final cache = TTLCache<String, String?>(
+        ttl: const Duration(seconds: 10),
+        clock: fakeClock,
+      );
+
+      await cache.set('key', null);
+
+      expect(await cache.get('key'), isNull);
+      expect(await cache.getKeys(), contains('key'));
+
+      fakeNow = fakeNow.add(const Duration(seconds: 11));
+
+      expect(await cache.get('key'), isNull);
+      expect(await cache.getKeys(), isNot(contains('key')));
+    });
+
     test('entry expires after global TTL elapses', () async {
       // 3.1 / 3.11
       final cache = TTLCache<String, String>(

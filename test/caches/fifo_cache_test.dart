@@ -58,6 +58,21 @@ void main() {
   });
 
   group('FIFOCache - FIFO Eviction Tests', () {
+    test('stored null remains present without changing FIFO order', () async {
+      final cache = FIFOCache<String, String?>(2);
+
+      await cache.set('key1', null);
+      await cache.set('key2', 'value2');
+
+      expect(await cache.get('key1'), isNull);
+      expect(await cache.getKeys(), contains('key1'));
+
+      await cache.set('key3', 'value3');
+
+      expect(await cache.getKeys(), containsAll(['key2', 'key3']));
+      expect(await cache.getKeys(), isNot(contains('key1')));
+    });
+
     test(
       'When the cache exceeds maxSize, FIFO eviction removes the oldest item',
       () async {

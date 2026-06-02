@@ -30,6 +30,19 @@ void main() {
   });
 
   group('SimpleMRUCache - MRU Eviction Tests', () {
+    test('get() treats a stored null as present and refreshes recency', () {
+      final cache = SimpleMRUCache<String, String?>(2);
+
+      cache.set('key1', null);
+      cache.set('key2', 'value2');
+      expect(cache.get('key1'), isNull);
+
+      cache.set('key3', 'value3');
+
+      expect(cache.getKeys(), containsAll(['key2', 'key3']));
+      expect(cache.getKeys(), isNot(contains('key1')));
+    });
+
     test(
       'When the cache exceeds maxSize, MRU eviction removes the most recently used item',
       () {
