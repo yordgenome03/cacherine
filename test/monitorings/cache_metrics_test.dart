@@ -79,6 +79,47 @@ void main() {
   });
 
   group('CacheMetrics - Time Window Stats', () {
+    test('snapshot() returns typed metric values', () {
+      final metrics = CacheMetrics()
+        ..recordHit(const Duration(milliseconds: 10))
+        ..recordHit(const Duration(milliseconds: 20))
+        ..recordMiss(const Duration(milliseconds: 30))
+        ..recordEviction();
+
+      final before = DateTime.now();
+      final snapshot = metrics.snapshot(const Duration(minutes: 1));
+      final after = DateTime.now();
+
+      expect(snapshot.hitRate, closeTo(2 / 3, 0.001));
+      expect(snapshot.missRate, closeTo(1 / 3, 0.001));
+      expect(snapshot.averageLatency, const Duration(milliseconds: 20));
+      expect(snapshot.p50Latency, const Duration(milliseconds: 20));
+      expect(snapshot.p95Latency, const Duration(milliseconds: 20));
+      expect(snapshot.p99Latency, const Duration(milliseconds: 20));
+      expect(snapshot.evictionsPerMinute, equals(1));
+      expect(snapshot.totalRequests, equals(3));
+      expect(
+        !snapshot.capturedAt.isBefore(before) &&
+            !snapshot.capturedAt.isAfter(after),
+        isTrue,
+      );
+    });
+
+    test('getRecentStats() is backed by snapshot values', () {
+      final metrics = CacheMetrics()
+        ..recordHit(const Duration(milliseconds: 10))
+        ..recordMiss(const Duration(milliseconds: 30));
+
+      final stats = metrics.getRecentStats(const Duration(minutes: 1));
+
+      expect(stats['hit_rate'], equals(0.5));
+      expect(stats['miss_rate'], equals(0.5));
+      expect(stats['average_latency'], equals(20));
+      expect(stats['p50_latency'], equals(20));
+      expect(stats['p95_latency'], equals(10));
+      expect(stats['p99_latency'], equals(10));
+    });
+
     test(
       'getRecentStats() filters events correctly based on time window',
       () async {

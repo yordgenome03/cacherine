@@ -1,5 +1,30 @@
 import 'dart:collection';
 
+/// Typed point-in-time snapshot of cache metrics.
+class CacheMetricsSnapshot {
+  final double hitRate;
+  final double missRate;
+  final Duration averageLatency;
+  final Duration p50Latency;
+  final Duration p95Latency;
+  final Duration p99Latency;
+  final int evictionsPerMinute;
+  final int totalRequests;
+  final DateTime capturedAt;
+
+  CacheMetricsSnapshot({
+    required this.hitRate,
+    required this.missRate,
+    required this.averageLatency,
+    required this.p50Latency,
+    required this.p95Latency,
+    required this.p99Latency,
+    required this.evictionsPerMinute,
+    required this.totalRequests,
+    required this.capturedAt,
+  });
+}
+
 /// Cache performance metrics class
 ///
 /// This class tracks cache hit rates, miss rates, request latencies (delays),
@@ -78,10 +103,10 @@ class CacheMetrics {
     _evictions.add(DateTime.now());
   }
 
-  /// Retrieves the recent cache statistics within a given time window.
+  /// Captures a typed point-in-time snapshot within a given time window.
   ///
   /// Throws [ArgumentError] if [window] is zero or negative.
-  Map<String, dynamic> getRecentStats(Duration window) {
+  CacheMetricsSnapshot snapshot(Duration window) {
     if (window.inMicroseconds <= 0) {
       throw ArgumentError(
         'window must be a positive Duration, but was $window',
@@ -93,15 +118,37 @@ class CacheMetrics {
         .where((t) => t.isAfter(windowStart))
         .length;
     final sortedLatencies = List.of(_latencies)..sort();
-    return {
-      'hit_rate': hitRate,
-      'miss_rate': missRate,
-      'average_latency': averageLatency.inMilliseconds,
-      'p95_latency': _latencyPercentile(sortedLatencies, 95).inMilliseconds,
-      'p99_latency': _latencyPercentile(sortedLatencies, 99).inMilliseconds,
-      'evictions_per_minute':
+    return CacheMetricsSnapshot(
+      hitRate: hitRate,
+      missRate: missRate,
+      averageLatency: averageLatency,
+      p50Latency: _latencyPercentile(sortedLatencies, 50),
+      p95Latency: _latencyPercentile(sortedLatencies, 95),
+      p99Latency: _latencyPercentile(sortedLatencies, 99),
+      evictionsPerMinute:
           (recentEvictions * Duration.microsecondsPerMinute) ~/
           window.inMicroseconds,
+      totalRequests: totalRequests,
+      capturedAt: now,
+    );
+  }
+
+  /// Retrieves the recent cache statistics within a given time window.
+  ///
+  /// Prefer [snapshot] for typed access. This method is retained for backward
+  /// compatibility.
+  ///
+  /// Throws [ArgumentError] if [window] is zero or negative.
+  Map<String, dynamic> getRecentStats(Duration window) {
+    final snap = snapshot(window);
+    return {
+      'hit_rate': snap.hitRate,
+      'miss_rate': snap.missRate,
+      'average_latency': snap.averageLatency.inMilliseconds,
+      'p50_latency': snap.p50Latency.inMilliseconds,
+      'p95_latency': snap.p95Latency.inMilliseconds,
+      'p99_latency': snap.p99Latency.inMilliseconds,
+      'evictions_per_minute': snap.evictionsPerMinute,
     };
   }
 
