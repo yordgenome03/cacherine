@@ -49,12 +49,15 @@ class MonitoredEphemeralFIFOCache<K, V> extends ThreadSafeCache<K, V>
   /// **Throws an [ArgumentError] if [maxSize] is less than or equal to 0.**
   MonitoredEphemeralFIFOCache({
     required this.maxSize,
-    CacheAlertConfig alertConfig = const CacheAlertConfig(),
+    CacheAlertConfig? alertConfig,
   }) {
     if (maxSize <= 0) {
       throw ArgumentError('maxSize must be greater than 0.');
     }
-    _cacheAlertManager = CacheAlertManager(metrics, alertConfig);
+    _cacheAlertManager = CacheAlertManager(
+      metrics,
+      alertConfig ?? CacheAlertConfig(),
+    );
     _cacheAlertManager.monitor();
   }
 
@@ -76,11 +79,13 @@ class MonitoredEphemeralFIFOCache<K, V> extends ThreadSafeCache<K, V>
   /// **This method is async-safe**.
   @override
   Future<V?> get(K key) async {
+    var found = false;
     return await monitoredGet(key, () async {
       return await _lock.synchronized(() {
+        found = _cache.containsKey(key);
         return _cache.remove(key); // Remove after retrieval
       });
-    });
+    }, found: () => found);
   }
 
   /// Stores the specified key and value in the cache.

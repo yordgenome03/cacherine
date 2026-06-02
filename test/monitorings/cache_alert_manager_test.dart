@@ -5,9 +5,23 @@ import 'package:test/test.dart';
 void main() {
   group('CacheAlertConfig', () {
     test('default notify callback is a no-op', () {
-      const config = CacheAlertConfig();
+      final config = CacheAlertConfig();
 
       expect(() => config.notifyCallback('ignored'), returnsNormally);
+    });
+
+    test('throws ArgumentError for zero alertCheckInterval', () {
+      expect(
+        () => CacheAlertConfig(alertCheckInterval: Duration.zero),
+        throwsArgumentError,
+      );
+    });
+
+    test('throws ArgumentError for negative alertCheckInterval', () {
+      expect(
+        () => CacheAlertConfig(alertCheckInterval: const Duration(seconds: -1)),
+        throwsArgumentError,
+      );
     });
   });
 

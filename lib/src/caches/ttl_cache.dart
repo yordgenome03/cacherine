@@ -36,6 +36,9 @@ class TTLCache<K, V> extends ThreadSafeCache<K, V> implements Disposable {
   /// - [sweepInterval]: When provided, a background timer fires at this interval
   ///   and removes all expired entries.
   /// - [clock]: Injectable time source for testing; defaults to [DateTime.now].
+  ///
+  /// When [maxSize] is configured and the cache is at capacity, [set] scans all
+  /// entries to remove expired data before applying FIFO eviction.
   TTLCache({
     required Duration ttl,
     int? maxSize,
@@ -49,6 +52,9 @@ class TTLCache<K, V> extends ThreadSafeCache<K, V> implements Disposable {
     }
     if (maxSize != null && maxSize <= 0) {
       throw ArgumentError('maxSize must be greater than 0.');
+    }
+    if (sweepInterval != null && sweepInterval <= Duration.zero) {
+      throw ArgumentError('sweepInterval must be greater than zero.');
     }
     if (sweepInterval != null) {
       _sweepTimer = Timer.periodic(sweepInterval, (_) => _sweep());

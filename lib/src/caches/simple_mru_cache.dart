@@ -44,9 +44,7 @@ class SimpleMRUCache<K, V> extends SimpleCache<K, V> {
 
     // MRU: Remove and reinsert the key to mark it as the most recently used
     final value = _cache.remove(key);
-    if (value != null) {
-      _cache[key] = value;
-    }
+    _cache[key] = value as V;
     return value;
   }
 

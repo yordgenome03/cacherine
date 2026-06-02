@@ -37,6 +37,26 @@ void main() {
       );
     });
 
+    test('throws ArgumentError for zero sweepInterval', () {
+      expect(
+        () => TTLCache<String, String>(
+          ttl: const Duration(seconds: 10),
+          sweepInterval: Duration.zero,
+        ),
+        throwsArgumentError,
+      );
+    });
+
+    test('throws ArgumentError for negative sweepInterval', () {
+      expect(
+        () => TTLCache<String, String>(
+          ttl: const Duration(seconds: 10),
+          sweepInterval: const Duration(seconds: -1),
+        ),
+        throwsArgumentError,
+      );
+    });
+
     test(
       'set() throws ArgumentError for zero per-entry ttl override',
       () async {

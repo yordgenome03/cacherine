@@ -60,14 +60,14 @@ class MonitoredLFUCache<K, V> extends ThreadSafeCache<K, V>
   ///
   /// ### **Exceptions:**
   /// - **[ArgumentError]**: Thrown when [maxSize] is `0 or less`.
-  MonitoredLFUCache({
-    required this.maxSize,
-    CacheAlertConfig alertConfig = const CacheAlertConfig(),
-  }) {
+  MonitoredLFUCache({required this.maxSize, CacheAlertConfig? alertConfig}) {
     if (maxSize <= 0) {
       throw ArgumentError('maxSize must be greater than 0.');
     }
-    _cacheAlertManager = CacheAlertManager(metrics, alertConfig);
+    _cacheAlertManager = CacheAlertManager(
+      metrics,
+      alertConfig ?? CacheAlertConfig(),
+    );
     _cacheAlertManager.monitor();
   }
 
@@ -109,14 +109,16 @@ class MonitoredLFUCache<K, V> extends ThreadSafeCache<K, V>
   /// **This method is async-safe**.
   @override
   Future<V?> get(K key) async {
+    var found = false;
     return await monitoredGet(key, () async {
       return await _lock.synchronized(() {
         final node = _keyMap[key];
         if (node == null) return null;
+        found = true;
         _promoteFreq(node);
         return node.value;
       });
-    });
+    }, found: () => found);
   }
 
   /// Stores the specified key and value in the cache.

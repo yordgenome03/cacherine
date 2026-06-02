@@ -31,6 +31,22 @@ void main() {
 
   group('LRUCache - LRU Eviction Tests', () {
     test(
+      'get() treats a stored null as present and refreshes recency',
+      () async {
+        final cache = LRUCache<String, String?>(2);
+
+        await cache.set('key1', null);
+        await cache.set('key2', 'value2');
+        expect(await cache.get('key1'), isNull);
+
+        await cache.set('key3', 'value3');
+
+        expect(await cache.getKeys(), containsAll(['key1', 'key3']));
+        expect(await cache.getKeys(), isNot(contains('key2')));
+      },
+    );
+
+    test(
       'When the cache exceeds maxSize, LRU eviction removes the least recently used item',
       () async {
         final cache = LRUCache<String, String>(2);

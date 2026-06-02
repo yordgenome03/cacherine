@@ -8,12 +8,16 @@ mixin CacheMonitoring<K, V> {
   final CacheMetrics metrics = CacheMetrics();
 
   /// Measures and records cache hit/miss performance when accessing a key.
-  Future<V?> monitoredGet(K key, Future<V?> Function() getter) async {
+  Future<V?> monitoredGet(
+    K key,
+    Future<V?> Function() getter, {
+    bool Function()? found,
+  }) async {
     final stopwatch = Stopwatch()..start();
     final value = await getter();
     stopwatch.stop();
 
-    if (value != null) {
+    if (found?.call() ?? value != null) {
       metrics.recordHit(stopwatch.elapsed);
     } else {
       metrics.recordMiss(stopwatch.elapsed);

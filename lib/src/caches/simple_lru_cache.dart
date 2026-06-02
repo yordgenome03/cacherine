@@ -41,9 +41,9 @@ class SimpleLRUCache<K, V> extends SimpleCache<K, V> {
   /// **This method is not thread-safe.**
   @override
   V? get(K key) {
+    if (!_cache.containsKey(key)) return null;
     final value = _cache.remove(key);
-    if (value == null) return null;
-    _cache[key] = value; // LRU: Move accessed element to the end
+    _cache[key] = value as V; // LRU: Move accessed element to the end
     return value;
   }
 
