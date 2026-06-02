@@ -52,7 +52,7 @@ class MonitoredMRUCache<K, V> extends ThreadSafeCache<K, V>
   /// - **[ArgumentError]**: Thrown when [maxSize] is `0 or less`.
   MonitoredMRUCache({
     required this.maxSize,
-    required CacheAlertConfig alertConfig,
+    CacheAlertConfig alertConfig = const CacheAlertConfig(),
   }) {
     if (maxSize <= 0) {
       throw ArgumentError('maxSize must be greater than 0.');

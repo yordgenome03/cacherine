@@ -1,6 +1,8 @@
 import 'dart:async';
 import 'cache_metrics.dart';
 
+void _noopAlertCallback(String _) {}
+
 /// Cache alert management class
 ///
 /// This class monitors cache performance and triggers alerts when the user-defined
@@ -97,8 +99,8 @@ class CacheAlertConfig {
   /// [notifyCallback] is the function used to notify about alerts,
   /// the various thresholds set user-defined limits for performance metrics,
   /// and [alertCheckInterval] sets the interval for checking alerts.
-  CacheAlertConfig({
-    required this.notifyCallback,
+  const CacheAlertConfig({
+    this.notifyCallback = _noopAlertCallback,
     this.hitRateThreshold = 0.5,
     this.missRateThreshold = 0.5,
     this.p95LatencyThreshold = 200,

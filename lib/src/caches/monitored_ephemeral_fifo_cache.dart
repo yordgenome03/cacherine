@@ -49,7 +49,7 @@ class MonitoredEphemeralFIFOCache<K, V> extends ThreadSafeCache<K, V>
   /// **Throws an [ArgumentError] if [maxSize] is less than or equal to 0.**
   MonitoredEphemeralFIFOCache({
     required this.maxSize,
-    required CacheAlertConfig alertConfig,
+    CacheAlertConfig alertConfig = const CacheAlertConfig(),
   }) {
     if (maxSize <= 0) {
       throw ArgumentError('maxSize must be greater than 0.');
