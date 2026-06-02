@@ -39,6 +39,7 @@ Whether you need a simple synchronous cache or an async-compatible solution that
   — [Learn more](doc/ttl_cache.md)
 - **MonitoredCache** (Includes performance monitoring with hit/miss rates, latency, and eviction alerts)
   — [Learn more](doc/monitored_cache.md)
+- **MonitoredTTLCache** (TTL-based expiry with the same monitoring metrics and alerts as other monitored cache variants)
 - **CacheStatsDashboard** (Wraps a MonitoredCache's metrics to provide point-in-time snapshots and periodic streams; `formatDashboard()` renders a Unicode terminal panel)
 - **Simple versions (e.g., SimpleFIFOCache) for synchronous usage, and standard versions that serialize concurrent async calls within the same isolate**
 
@@ -172,6 +173,7 @@ The standard and monitored cache variants use `Future` APIs and an internal lock
 - [MonitoredLRUCache<K, V>](lib/src/caches/monitored_lru_cache.dart): LRU-based cache with monitoring
 - [MonitoredMRUCache<K, V>](lib/src/caches/monitored_mru_cache.dart): MRU-based cache with monitoring
 - [MonitoredLFUCache<K, V>](lib/src/caches/monitored_lfu_cache.dart): LFU-based cache with monitoring
+- [MonitoredTTLCache<K, V>](lib/src/caches/monitored_ttl_cache.dart): TTL-based cache with monitoring
 
 - [CacheStatsDashboard](lib/src/monitorings/cache_stats_dashboard.dart): Wraps `CacheMetrics` to provide `snapshot(Duration window)` and `stream(Duration window, Duration interval)`
 - [DashboardSnapshot](lib/src/monitorings/cache_stats_dashboard.dart): Immutable point-in-time snapshot (hitRate, missRate, latency percentiles, evictionsPerMinute, totalRequests, capturedAt)
