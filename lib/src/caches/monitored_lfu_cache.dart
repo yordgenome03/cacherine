@@ -14,10 +14,10 @@ final class _LFUNode<K, V> extends LinkedListEntry<_LFUNode<K, V>> {
   _LFUNode(this.key, this.value, this.freq);
 }
 
-/// **Thread-safe LFU (Least Frequently Used) Cache with Monitoring**
+/// **Async-safe LFU (Least Frequently Used) Cache with Monitoring**
 ///
-/// This class extends [ThreadSafeCache] and ensures thread-safety using a **`Lock`**.
-/// It allows safe access to the cache from multiple threads or asynchronous tasks, preventing data race conditions.
+/// This class extends [ThreadSafeCache] and serializes concurrent async calls
+/// on the same cache instance within the same isolate using `Lock`.
 ///
 /// Additionally, by utilizing the [CacheMonitoring] mixin, it automatically **monitors cache performance**.
 /// It records the following metrics and triggers alerts via the [CacheAlertManager] if thresholds are exceeded:
@@ -44,7 +44,7 @@ class MonitoredLFUCache<K, V> extends ThreadSafeCache<K, V>
 
   /// **Creates a [MonitoredLFUCache] with a specified maximum size and alert configuration.**
   ///
-  /// This cache is thread-safe and monitors the following performance metrics:
+  /// This cache is async-safe and monitors the following performance metrics:
   ///
   /// - **Hit rate and miss rate**: Tracks the success/failure rate of cache accesses.
   /// - **Request latency**: Measures the response time for cache operations.
@@ -73,7 +73,7 @@ class MonitoredLFUCache<K, V> extends ThreadSafeCache<K, V>
 
   /// Returns all the keys currently stored in the cache.
   ///
-  /// **This method is thread-safe**, taking a snapshot of the cache before returning the keys.
+  /// **This method is async-safe**, taking a snapshot of the cache before returning the keys.
   @override
   Future<Iterable<K>> getKeys() async {
     return await _lock.synchronized(() {
@@ -106,7 +106,7 @@ class MonitoredLFUCache<K, V> extends ThreadSafeCache<K, V>
   /// - **Records cache hit/miss and measures request latency** via [CacheMonitoring].
   /// - **Returns `null` if the key does not exist in the cache**.
   ///
-  /// **This method is thread-safe**.
+  /// **This method is async-safe**.
   @override
   Future<V?> get(K key) async {
     return await monitoredGet(key, () async {
@@ -124,7 +124,7 @@ class MonitoredLFUCache<K, V> extends ThreadSafeCache<K, V>
   /// - If the key already exists, `set()` will **update its value** without resetting its usage count.
   /// - If the cache size exceeds **[maxSize]**, the least frequently used element will be removed based on the LFU policy.
   ///
-  /// **This method is thread-safe**.
+  /// **This method is async-safe**.
   @override
   Future<void> set(K key, V value) async {
     await _lock.synchronized(() {
@@ -162,7 +162,7 @@ class MonitoredLFUCache<K, V> extends ThreadSafeCache<K, V>
   /// - If the key does not exist, this call is a no-op.
   /// - The frequency counter for the key is also discarded.
   ///
-  /// **This method is thread-safe**.
+  /// **This method is async-safe**.
   @override
   Future<void> remove(K key) async {
     await _lock.synchronized(() {
@@ -183,7 +183,7 @@ class MonitoredLFUCache<K, V> extends ThreadSafeCache<K, V>
   ///
   /// - The monitoring function remains active even after the cache is cleared.
   ///
-  /// **This method is thread-safe**.
+  /// **This method is async-safe**.
   @override
   Future<void> clear() async {
     await _lock.synchronized(() {
@@ -200,7 +200,8 @@ class MonitoredLFUCache<K, V> extends ThreadSafeCache<K, V>
   ///
   /// - Outputs **key-value pairs** currently stored in the cache as a string.
   ///
-  /// **This method is thread-safe**.
+  /// **Note:** `toString()` is synchronous and does not acquire the internal
+  /// lock. Treat the result as diagnostic output for a point-in-time view.
   @override
   String toString() {
     return Map.fromEntries(

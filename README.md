@@ -12,7 +12,7 @@
   <img src="https://github.com/user-attachments/assets/2a42a018-61cb-4ef7-a3d8-a0cafe923328" alt="cacherine logo" width="300"/>
 </p>
 
-`cacherine` is a simple and flexible memory cache library for Dart. It provides caching algorithms such as FIFO, LRU, MRU, LFU, and TTL-based expiry. Both single-threaded and async-enabled versions are available to handle different usage scenarios.
+`cacherine` is a simple and flexible memory cache library for Dart. It provides caching algorithms such as FIFO, LRU, MRU, LFU, and TTL-based expiry. Both synchronous and async-safe versions are available to handle different usage scenarios.
 
 If you want to choose the best cache algorithm for your app, you can use **MonitoredCache** in your development environment. It helps you monitor performance metrics (such as hit/miss rates, latency, and eviction alerts) so you can make data-driven decisions and optimize the algorithm you use.
 
@@ -21,7 +21,7 @@ If you want to choose the best cache algorithm for your app, you can use **Monit
 Dart/Flutter does not have a built-in caching solution similar to `NSCache` in Swift.  
 `cacherine` was created to provide a lightweight and flexible in-memory cache with common caching strategies like FIFO, LRU, MRU, and LFU.
 
-Whether you need a simple single-threaded cache or an async-compatible solution for concurrent environments, `cacherine` offers an easy-to-use API.
+Whether you need a simple synchronous cache or an async-compatible solution that serializes concurrent async calls within the same isolate, `cacherine` offers an easy-to-use API.
 
 ## Features
 
@@ -40,7 +40,7 @@ Whether you need a simple single-threaded cache or an async-compatible solution 
 - **MonitoredCache** (Includes performance monitoring with hit/miss rates, latency, and eviction alerts)
   — [Learn more](doc/monitored_cache.md)
 - **CacheStatsDashboard** (Wraps a MonitoredCache's metrics to provide point-in-time snapshots and periodic streams; `formatDashboard()` renders a Unicode terminal panel)
-- **Simple versions (e.g., SimpleFIFOCache) for single-threaded usage, and standard versions for multi-threaded environments**
+- **Simple versions (e.g., SimpleFIFOCache) for synchronous usage, and standard versions that serialize concurrent async calls within the same isolate**
 
 ## Installation
 
@@ -150,6 +150,14 @@ void main() async {
 }
 ```
 
+## API Contracts
+
+The standard and monitored cache variants use `Future` APIs and an internal lock to serialize concurrent async calls on the same cache instance within the same isolate. They are not shared-memory synchronization primitives across Dart isolates.
+
+`get()` returns `null` when a key is absent. Because the current API does not expose `containsKey()` or an entry wrapper, storing nullable values such as `Cache<String, String?>` is not supported: a stored `null` cannot be distinguished from a missing key.
+
+`toString()` is synchronous. It returns a point-in-time representation of the cache contents and should be treated as diagnostic output, not as a synchronized cache operation.
+
 ## API Reference
 
 - [FIFOCache<K, V>](lib/src/caches/fifo_cache.dart): FIFO-based cache
@@ -159,8 +167,8 @@ void main() async {
 - [LFUCache<K, V>](lib/src/caches/lfu_cache.dart): Cache that removes the least frequently used items
 - [TTLCache<K, V>](lib/src/caches/ttl_cache.dart): Cache with time-based expiry; global TTL with optional per-entry override, lazy eviction, optional background sweep, and optional capacity limit
 
-- [MonitoredFIFOCache<K, V>](lib/src/caches/monitored_ephemeral_fifo_cache.dart): FIFO-based cache with monitoring
-- [MonitoredEphemeralFIFOCache<K, V>](lib/src/caches/monitored_fifo_cache.dart): Ephemeral FIFO cache with monitoring
+- [MonitoredFIFOCache<K, V>](lib/src/caches/monitored_fifo_cache.dart): FIFO-based cache with monitoring
+- [MonitoredEphemeralFIFOCache<K, V>](lib/src/caches/monitored_ephemeral_fifo_cache.dart): Ephemeral FIFO cache with monitoring
 - [MonitoredLRUCache<K, V>](lib/src/caches/monitored_lru_cache.dart): LRU-based cache with monitoring
 - [MonitoredMRUCache<K, V>](lib/src/caches/monitored_mru_cache.dart): MRU-based cache with monitoring
 - [MonitoredLFUCache<K, V>](lib/src/caches/monitored_lfu_cache.dart): LFU-based cache with monitoring

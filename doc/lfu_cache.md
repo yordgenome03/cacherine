@@ -20,8 +20,8 @@ The LFU Cache eviction policy follows these rules:
 
 1. **Remove the data with the lowest frequency**
    - When the cache is full, the entry with the minimum access count is evicted.
-2. **FIFO for entries with the same frequency**
-   - If multiple entries have the same frequency, the oldest entry is evicted.
+2. **LRU for entries with the same frequency**
+   - If multiple entries have the same frequency, the least recently used entry within that frequency bucket is evicted.
 
 ## 3. Workflow
 
@@ -37,8 +37,8 @@ The LFU Cache eviction policy follows these rules:
 
 1. If the key exists:
    - Update the value.
-   - Increment the frequency counter.
-     (The key is treated as accessed, so its frequency increases.)
+   - Keep the existing frequency counter.
+   - Refresh its recency within the current frequency bucket.
 2. If the key does not exist:
    - If the cache exceeds the [maxSize], evict entries based on LFU policy.
    - Add the new key-value pair and initialize the frequency counter to 1.
@@ -86,7 +86,7 @@ The LFU Cache eviction policy follows these rules:
 
 6. set D (B evicted due to LFU)
 
-   - A new key D is added, requiring space in the cache (maxSize: 3). B and C have the same frequency of 1, but B is evicted because it was inserted first.
+   - A new key D is added, requiring space in the cache (maxSize: 3). B and C have the same frequency of 1, but B is evicted because it is least recently used within that frequency.
      | Order | Key | Frequency Count |
      |-------|-----|-----------------|
      | 0 | A | 2 |
