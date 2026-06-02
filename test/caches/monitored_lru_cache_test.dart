@@ -79,6 +79,34 @@ void main() {
       expect(metrics.misses, equals(1));
     });
 
+    test('get() records a stored null value as a cache hit', () async {
+      final cache = MonitoredLRUCache<String, String?>(
+        maxSize: 2,
+        alertConfig: config,
+      );
+
+      await cache.set('key1', null);
+
+      expect(await cache.get('key1'), isNull);
+      expect(cache.metrics.hits, equals(1));
+      expect(cache.metrics.misses, equals(0));
+    });
+
+    test('get() refreshes recency for a stored null value', () async {
+      final cache = MonitoredLRUCache<String, String?>(
+        maxSize: 2,
+        alertConfig: config,
+      );
+
+      await cache.set('key1', null);
+      await cache.set('key2', 'value2');
+      expect(await cache.get('key1'), isNull);
+      await cache.set('key3', 'value3');
+
+      expect(await cache.getKeys(), containsAll(['key1', 'key3']));
+      expect(await cache.getKeys(), isNot(contains('key2')));
+    });
+
     test('clear() should remove all cache entries', () async {
       final cache = MonitoredLRUCache<String, String>(
         maxSize: 3,

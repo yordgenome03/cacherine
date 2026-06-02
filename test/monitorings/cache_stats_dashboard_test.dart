@@ -12,18 +12,17 @@ DashboardSnapshot _makeSnap({
   int evictionsPerMinute = 3,
   int totalRequests = 100,
   DateTime? capturedAt,
-}) =>
-    DashboardSnapshot(
-      hitRate: hitRate,
-      missRate: missRate,
-      averageLatency: averageLatency,
-      p50Latency: p50Latency,
-      p95Latency: p95Latency,
-      p99Latency: p99Latency,
-      evictionsPerMinute: evictionsPerMinute,
-      totalRequests: totalRequests,
-      capturedAt: capturedAt ?? DateTime.now(),
-    );
+}) => DashboardSnapshot(
+  hitRate: hitRate,
+  missRate: missRate,
+  averageLatency: averageLatency,
+  p50Latency: p50Latency,
+  p95Latency: p95Latency,
+  p99Latency: p99Latency,
+  evictionsPerMinute: evictionsPerMinute,
+  totalRequests: totalRequests,
+  capturedAt: capturedAt ?? DateTime.now(),
+);
 
 void main() {
   group('DashboardSnapshot', () {
@@ -69,8 +68,8 @@ void main() {
 
   group('CacheStatsDashboard.snapshot()', () {
     test('capturedAt is within 1 second of call time', () {
-      final metrics =
-          CacheMetrics()..recordHit(const Duration(milliseconds: 5));
+      final metrics = CacheMetrics()
+        ..recordHit(const Duration(milliseconds: 5));
       final dashboard = CacheStatsDashboard(metrics);
 
       final before = DateTime.now();
@@ -90,11 +89,10 @@ void main() {
     test(
       'snapshot returns metric values matching the wrapped CacheMetrics',
       () {
-        final metrics =
-            CacheMetrics()
-              ..recordHit(const Duration(milliseconds: 10))
-              ..recordHit(const Duration(milliseconds: 20))
-              ..recordMiss(const Duration(milliseconds: 30));
+        final metrics = CacheMetrics()
+          ..recordHit(const Duration(milliseconds: 10))
+          ..recordHit(const Duration(milliseconds: 20))
+          ..recordMiss(const Duration(milliseconds: 30));
 
         final snap = CacheStatsDashboard(
           metrics,
@@ -122,8 +120,8 @@ void main() {
 
   group('CacheStatsDashboard.stream()', () {
     test('emits DashboardSnapshot values', () async {
-      final metrics =
-          CacheMetrics()..recordHit(const Duration(milliseconds: 5));
+      final metrics = CacheMetrics()
+        ..recordHit(const Duration(milliseconds: 5));
       final dashboard = CacheStatsDashboard(metrics);
       final snapshots = <DashboardSnapshot>[];
 
@@ -139,8 +137,8 @@ void main() {
     });
 
     test('no further events emitted after cancellation', () async {
-      final metrics =
-          CacheMetrics()..recordHit(const Duration(milliseconds: 5));
+      final metrics = CacheMetrics()
+        ..recordHit(const Duration(milliseconds: 5));
       final dashboard = CacheStatsDashboard(metrics);
       final snapshots = <DashboardSnapshot>[];
 

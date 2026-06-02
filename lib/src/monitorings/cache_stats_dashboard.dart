@@ -79,8 +79,9 @@ String formatDashboard(DashboardSnapshot snap) {
   const innerWidth = 61;
   const contentWidth = innerWidth - 2;
 
-  final clampedRate =
-      snap.hitRate.isFinite ? snap.hitRate.clamp(0.0, 1.0) : 0.0;
+  final clampedRate = snap.hitRate.isFinite
+      ? snap.hitRate.clamp(0.0, 1.0)
+      : 0.0;
   final filled = (clampedRate * 20).round();
   final empty = 20 - filled;
   final bar = '${'█' * filled}${'░' * empty}';

@@ -32,6 +32,20 @@ void main() {
       expect(monitoringCache.metrics.hits, equals(0));
       expect(monitoringCache.metrics.misses, equals(1));
     });
+
+    test('monitoredGet() can record a null value as a hit', () async {
+      final monitoringCache = TestCache();
+      var found = false;
+
+      final result = await monitoringCache.monitoredGet('key1', () async {
+        found = true;
+        return null;
+      }, found: () => found);
+
+      expect(result, isNull);
+      expect(monitoringCache.metrics.hits, equals(1));
+      expect(monitoringCache.metrics.misses, equals(0));
+    });
   });
 
   group('CacheMonitoring - Performance Monitoring', () {

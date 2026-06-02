@@ -99,7 +99,7 @@ class CacheAlertConfig {
   /// [notifyCallback] is the function used to notify about alerts,
   /// the various thresholds set user-defined limits for performance metrics,
   /// and [alertCheckInterval] sets the interval for checking alerts.
-  const CacheAlertConfig({
+  CacheAlertConfig({
     this.notifyCallback = _noopAlertCallback,
     this.hitRateThreshold = 0.5,
     this.missRateThreshold = 0.5,
@@ -110,5 +110,9 @@ class CacheAlertConfig {
     this.alertCheckInterval = const Duration(
       minutes: 1,
     ), // Default check every minute
-  });
+  }) {
+    if (alertCheckInterval <= Duration.zero) {
+      throw ArgumentError('alertCheckInterval must be greater than zero.');
+    }
+  }
 }

@@ -50,14 +50,14 @@ class MonitoredMRUCache<K, V> extends ThreadSafeCache<K, V>
   ///
   /// ### **Exceptions:**
   /// - **[ArgumentError]**: Thrown when [maxSize] is `0 or less`.
-  MonitoredMRUCache({
-    required this.maxSize,
-    CacheAlertConfig alertConfig = const CacheAlertConfig(),
-  }) {
+  MonitoredMRUCache({required this.maxSize, CacheAlertConfig? alertConfig}) {
     if (maxSize <= 0) {
       throw ArgumentError('maxSize must be greater than 0.');
     }
-    _cacheAlertManager = CacheAlertManager(metrics, alertConfig);
+    _cacheAlertManager = CacheAlertManager(
+      metrics,
+      alertConfig ?? CacheAlertConfig(),
+    );
     _cacheAlertManager.monitor();
   }
 
@@ -80,17 +80,17 @@ class MonitoredMRUCache<K, V> extends ThreadSafeCache<K, V>
   /// **This method is async-safe**.
   @override
   Future<V?> get(K key) async {
+    var found = false;
     return await monitoredGet(key, () async {
       return await _lock.synchronized(() {
         if (!_cache.containsKey(key)) return null;
+        found = true;
 
         final value = _cache.remove(key);
-        if (value != null) {
-          _cache[key] = value; // MRU: Reinsert to mark as "recently used"
-        }
+        _cache[key] = value as V; // MRU: Reinsert to mark as "recently used"
         return value;
       });
-    });
+    }, found: () => found);
   }
 
   /// Stores the specified key and value in the cache.

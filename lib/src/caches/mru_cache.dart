@@ -49,9 +49,8 @@ class MRUCache<K, V> extends ThreadSafeCache<K, V> {
       if (!_cache.containsKey(key)) return null;
 
       final value = _cache.remove(key);
-      if (value != null) {
-        _cache[key] = value; // MRU: Reinsert to record "recently used" status
-      }
+      _cache[key] =
+          value as V; // MRU: Reinsert to record "recently used" status
       return value;
     });
   }

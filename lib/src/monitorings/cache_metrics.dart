@@ -50,19 +50,7 @@ class CacheMetrics {
   Duration getLatencyPercentile(double percentile) {
     if (_latencies.isEmpty) return Duration.zero;
     final sorted = List.of(_latencies)..sort();
-
-    final index = ((sorted.length - 1) * percentile / 100).toInt();
-
-    // For 50th percentile (median), take the average of two middle values when even
-    if (percentile == 50 && sorted.length % 2 == 0) {
-      final mid1 = sorted[sorted.length ~/ 2 - 1];
-      final mid2 = sorted[sorted.length ~/ 2];
-      return Duration(
-        milliseconds: (mid1.inMilliseconds + mid2.inMilliseconds) ~/ 2,
-      );
-    }
-
-    return sorted[index];
+    return _latencyPercentile(sorted, percentile);
   }
 
   /// Records a cache hit with the given request latency.
@@ -101,14 +89,16 @@ class CacheMetrics {
     }
     final now = DateTime.now();
     final windowStart = now.subtract(window);
-    final recentEvictions =
-        _evictions.where((t) => t.isAfter(windowStart)).length;
+    final recentEvictions = _evictions
+        .where((t) => t.isAfter(windowStart))
+        .length;
+    final sortedLatencies = List.of(_latencies)..sort();
     return {
       'hit_rate': hitRate,
       'miss_rate': missRate,
       'average_latency': averageLatency.inMilliseconds,
-      'p95_latency': getLatencyPercentile(95).inMilliseconds,
-      'p99_latency': getLatencyPercentile(99).inMilliseconds,
+      'p95_latency': _latencyPercentile(sortedLatencies, 95).inMilliseconds,
+      'p99_latency': _latencyPercentile(sortedLatencies, 99).inMilliseconds,
       'evictions_per_minute':
           (recentEvictions * Duration.microsecondsPerMinute) ~/
           window.inMicroseconds,
@@ -122,5 +112,21 @@ class CacheMetrics {
     _totalRequests = 0;
     _latencies.clear();
     _evictions.clear();
+  }
+
+  Duration _latencyPercentile(List<Duration> sorted, double percentile) {
+    if (sorted.isEmpty) return Duration.zero;
+    final index = ((sorted.length - 1) * percentile / 100).toInt();
+
+    // For 50th percentile (median), take the average of two middle values when even
+    if (percentile == 50 && sorted.length % 2 == 0) {
+      final mid1 = sorted[sorted.length ~/ 2 - 1];
+      final mid2 = sorted[sorted.length ~/ 2];
+      return Duration(
+        milliseconds: (mid1.inMilliseconds + mid2.inMilliseconds) ~/ 2,
+      );
+    }
+
+    return sorted[index];
   }
 }
