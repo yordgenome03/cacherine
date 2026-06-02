@@ -86,6 +86,15 @@ void main() {
       expect(result, equals('value1'));
       expect(cache.get('key1'), isNull); // key should be removed after get()
     });
+
+    test('stored null is removed after get()', () {
+      final cache = SimpleEphemeralFIFOCache<String, String?>(3);
+
+      cache.set('key1', null);
+
+      expect(cache.get('key1'), isNull);
+      expect(cache.getKeys(), isNot(contains('key1')));
+    });
   });
 
   group('SimpleFIFOCache - Additional Behavior Validation', () {

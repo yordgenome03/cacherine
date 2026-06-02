@@ -75,6 +75,26 @@ void main() {
       expect(metrics.misses, equals(1));
     });
 
+    test(
+      'get() records a stored null as a hit without changing FIFO order',
+      () async {
+        final cache = MonitoredFIFOCache<String, String?>(
+          maxSize: 2,
+          alertConfig: config,
+        );
+
+        await cache.set('key1', null);
+        await cache.set('key2', 'value2');
+        expect(await cache.get('key1'), isNull);
+        await cache.set('key3', 'value3');
+
+        expect(cache.metrics.hits, equals(1));
+        expect(cache.metrics.misses, equals(0));
+        expect(await cache.getKeys(), containsAll(['key2', 'key3']));
+        expect(await cache.getKeys(), isNot(contains('key1')));
+      },
+    );
+
     test('clear() should remove all cache entries', () async {
       final cache = MonitoredFIFOCache<String, String>(
         maxSize: 3,

@@ -30,6 +30,21 @@ void main() {
   });
 
   group('SimpleFIFOCache - FIFO Eviction Tests', () {
+    test('stored null remains present without changing FIFO order', () {
+      final cache = SimpleFIFOCache<String, String?>(2);
+
+      cache.set('key1', null);
+      cache.set('key2', 'value2');
+
+      expect(cache.get('key1'), isNull);
+      expect(cache.getKeys(), contains('key1'));
+
+      cache.set('key3', 'value3');
+
+      expect(cache.getKeys(), containsAll(['key2', 'key3']));
+      expect(cache.getKeys(), isNot(contains('key1')));
+    });
+
     test(
       'When the cache exceeds maxSize, FIFO eviction removes the oldest item',
       () {

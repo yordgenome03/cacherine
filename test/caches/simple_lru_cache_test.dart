@@ -30,6 +30,19 @@ void main() {
   });
 
   group('SimpleLRUCache - LRU Eviction Tests', () {
+    test('get() treats a stored null as present and refreshes recency', () {
+      final cache = SimpleLRUCache<String, String?>(2);
+
+      cache.set('key1', null);
+      cache.set('key2', 'value2');
+      expect(cache.get('key1'), isNull);
+
+      cache.set('key3', 'value3');
+
+      expect(cache.getKeys(), containsAll(['key1', 'key3']));
+      expect(cache.getKeys(), isNot(contains('key2')));
+    });
+
     test(
       'When the cache exceeds maxSize, LRU eviction removes the least recently used item',
       () {

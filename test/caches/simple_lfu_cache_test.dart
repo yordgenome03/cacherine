@@ -30,6 +30,19 @@ void main() {
   });
 
   group('SimpleLFUCache - LFU Eviction Tests', () {
+    test('get() treats a stored null as present and increments frequency', () {
+      final cache = SimpleLFUCache<String, String?>(2);
+
+      cache.set('key1', null);
+      cache.set('key2', 'value2');
+      expect(cache.get('key1'), isNull);
+
+      cache.set('key3', 'value3');
+
+      expect(cache.getKeys(), containsAll(['key1', 'key3']));
+      expect(cache.getKeys(), isNot(contains('key2')));
+    });
+
     test(
       'When the cache exceeds maxSize, LFU eviction removes the least frequently used item',
       () {

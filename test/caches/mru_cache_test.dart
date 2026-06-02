@@ -31,6 +31,22 @@ void main() {
 
   group('MRUCache - MRU Eviction Tests', () {
     test(
+      'get() treats a stored null as present and refreshes recency',
+      () async {
+        final cache = MRUCache<String, String?>(2);
+
+        await cache.set('key1', null);
+        await cache.set('key2', 'value2');
+        expect(await cache.get('key1'), isNull);
+
+        await cache.set('key3', 'value3');
+
+        expect(await cache.getKeys(), containsAll(['key2', 'key3']));
+        expect(await cache.getKeys(), isNot(contains('key1')));
+      },
+    );
+
+    test(
       'When the cache exceeds maxSize, MRU eviction removes the most recently used item',
       () async {
         final cache = MRUCache<String, String>(2);

@@ -40,17 +40,17 @@ class CacheStatsDashboard {
   ///
   /// Throws [ArgumentError] if [window] is zero or negative.
   DashboardSnapshot snapshot(Duration window) {
-    final stats = metrics.getRecentStats(window);
+    final stats = metrics.snapshot(window);
     return DashboardSnapshot(
-      hitRate: metrics.hitRate,
-      missRate: metrics.missRate,
-      averageLatency: metrics.averageLatency,
-      p50Latency: metrics.getLatencyPercentile(50),
-      p95Latency: metrics.getLatencyPercentile(95),
-      p99Latency: metrics.getLatencyPercentile(99),
-      evictionsPerMinute: stats['evictions_per_minute'] as int,
-      totalRequests: metrics.totalRequests,
-      capturedAt: DateTime.now(),
+      hitRate: stats.hitRate,
+      missRate: stats.missRate,
+      averageLatency: stats.averageLatency,
+      p50Latency: stats.p50Latency,
+      p95Latency: stats.p95Latency,
+      p99Latency: stats.p99Latency,
+      evictionsPerMinute: stats.evictionsPerMinute,
+      totalRequests: stats.totalRequests,
+      capturedAt: stats.capturedAt,
     );
   }
 
