@@ -147,6 +147,26 @@ void main() {
 
       expect(await cache.get('long'), equals('value'));
     });
+
+    test('toString returns live entries and omits expired entries', () async {
+      final cache = MonitoredTTLCache<String, String>(
+        ttl: const Duration(seconds: 10),
+        clock: fakeClock,
+        alertConfig: config,
+      );
+      addTearDown(cache.dispose);
+
+      await cache.set('expired', 'old', ttl: const Duration(seconds: 5));
+      await cache.set('live', 'new');
+      fakeNow = fakeNow.add(const Duration(seconds: 6));
+
+      final cacheString = cache.toString();
+
+      expect(cacheString, contains('live'));
+      expect(cacheString, contains('new'));
+      expect(cacheString, isNot(contains('expired')));
+      expect(cacheString, isNot(contains('old')));
+    });
   });
 
   group('MonitoredTTLCache - eviction metrics', () {
@@ -238,6 +258,30 @@ void main() {
 
   group('MonitoredTTLCache - lifecycle', () {
     final config = CacheAlertConfig(notifyCallback: (_) {});
+
+    test(
+      'background sweep removes expired entries and records evictions',
+      () async {
+        final cache = MonitoredTTLCache<String, String>(
+          ttl: const Duration(seconds: 10),
+          sweepInterval: const Duration(milliseconds: 5),
+          clock: fakeClock,
+          alertConfig: config,
+        );
+        addTearDown(cache.dispose);
+
+        await cache.set('key', 'value');
+        fakeNow = fakeNow.add(const Duration(seconds: 11));
+
+        await Future<void>.delayed(const Duration(milliseconds: 30));
+
+        expect(await cache.getKeys(), isEmpty);
+        expect(
+          cache.metrics.snapshot(const Duration(minutes: 1)).evictionsPerMinute,
+          equals(1),
+        );
+      },
+    );
 
     test('clear removes entries without resetting metrics', () async {
       final cache = MonitoredTTLCache<String, String>(
