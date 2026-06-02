@@ -95,6 +95,25 @@ void main() {
       expect(await cache.getKeys(), isEmpty);
     });
 
+    test(
+      'set() on an existing key updates value and refreshes recency',
+      () async {
+        final cache = MonitoredLRUCache<String, String>(
+          maxSize: 2,
+          alertConfig: config,
+        );
+
+        await cache.set('key1', 'value1');
+        await cache.set('key2', 'value2');
+        await cache.set('key1', 'updated1');
+        await cache.set('key3', 'value3');
+
+        expect(await cache.get('key1'), equals('updated1'));
+        expect(await cache.get('key2'), isNull);
+        expect(await cache.get('key3'), equals('value3'));
+      },
+    );
+
     test('Should throw an exception if maxSize is 0 or negative', () {
       expect(
         () =>

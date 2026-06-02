@@ -3,11 +3,10 @@ import 'package:synchronized/synchronized.dart';
 
 import '../interfaces/thread_safe_cache.dart';
 
-/// **Thread-safe LRU (Least Recently Used) Cache**
+/// **Async-safe LRU (Least Recently Used) Cache**
 ///
-/// This class extends [ThreadSafeCache] and ensures **thread safety using `Lock`**.
-/// It allows **safe access to the cache from multiple threads or asynchronous tasks**,
-/// preventing data race conditions.
+/// This class extends [ThreadSafeCache] and serializes concurrent async calls
+/// on the same cache instance within the same isolate using `Lock`.
 ///
 /// **Adopts an LRU (Least Recently Used) eviction policy**,
 /// meaning **when the cache exceeds `maxSize`, the least recently used element is removed**.
@@ -30,7 +29,7 @@ class LRUCache<K, V> extends ThreadSafeCache<K, V> {
 
   /// Returns all keys currently stored in the cache.
   ///
-  /// **This method is thread-safe.**
+  /// **This method is async-safe.**
   @override
   Future<Iterable<K>> getKeys() async {
     return await _lock.synchronized(() {
@@ -43,7 +42,7 @@ class LRUCache<K, V> extends ThreadSafeCache<K, V> {
   /// - **Uses the LRU policy**, meaning that **when a value is retrieved, the element is moved to the end of the list**.
   /// - **Returns `null` if the key does not exist.**
   ///
-  /// **This method is thread-safe.**
+  /// **This method is async-safe.**
   @override
   Future<V?> get(K key) async {
     return await _lock.synchronized(() {
@@ -61,7 +60,7 @@ class LRUCache<K, V> extends ThreadSafeCache<K, V> {
   /// - If the cache exceeds **[maxSize]**,
   ///   the **least recently used element is removed** according to the LRU rule.
   ///
-  /// **This method is thread-safe.**
+  /// **This method is async-safe.**
   @override
   Future<void> set(K key, V value) async {
     await _lock.synchronized(() {
@@ -82,7 +81,7 @@ class LRUCache<K, V> extends ThreadSafeCache<K, V> {
   ///
   /// - If the key does not exist, this call is a no-op.
   ///
-  /// **This method is thread-safe.**
+  /// **This method is async-safe.**
   @override
   Future<void> remove(K key) async {
     await _lock.synchronized(() {
@@ -94,7 +93,7 @@ class LRUCache<K, V> extends ThreadSafeCache<K, V> {
   ///
   /// - Removes all keys and values from the cache.
   ///
-  /// **This method is thread-safe.**
+  /// **This method is async-safe.**
   @override
   Future<void> clear() async {
     await _lock.synchronized(_cache.clear);
@@ -104,7 +103,8 @@ class LRUCache<K, V> extends ThreadSafeCache<K, V> {
   ///
   /// - Outputs **key-value pairs** currently stored in the cache as a string.
   ///
-  /// **This method is thread-safe.**
+  /// **Note:** `toString()` is synchronous and does not acquire the internal
+  /// lock. Treat the result as diagnostic output for a point-in-time view.
   @override
   String toString() {
     final snapshot = Map.of(_cache); // Take a snapshot of the cache

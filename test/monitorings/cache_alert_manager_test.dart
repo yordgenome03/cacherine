@@ -3,6 +3,14 @@ import 'package:cacherine/cacherine.dart';
 import 'package:test/test.dart';
 
 void main() {
+  group('CacheAlertConfig', () {
+    test('default notify callback is a no-op', () {
+      const config = CacheAlertConfig();
+
+      expect(() => config.notifyCallback('ignored'), returnsNormally);
+    });
+  });
+
   group('CacheAlertManager - Alert Triggering', () {
     late CacheMetrics metrics;
     late List<String> receivedAlerts;

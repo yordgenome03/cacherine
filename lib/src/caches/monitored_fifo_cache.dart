@@ -7,10 +7,10 @@ import '../monitorings/cache_monitoring.dart';
 import '../interfaces/disposable.dart';
 import '../interfaces/thread_safe_cache.dart';
 
-/// **Thread-safe FIFO (First In, First Out) Cache with Monitoring**
+/// **Async-safe FIFO (First In, First Out) Cache with Monitoring**
 ///
-/// This class extends [ThreadSafeCache] and ensures thread-safety using a **`Lock`**.
-/// It allows safe access to the cache from multiple threads or asynchronous tasks, preventing data race conditions.
+/// This class extends [ThreadSafeCache] and serializes concurrent async calls
+/// on the same cache instance within the same isolate using `Lock`.
 ///
 /// Additionally, by utilizing the [CacheMonitoring] mixin, it automatically **monitors cache performance**.
 /// It records the following metrics and triggers alerts via the [CacheAlertManager] if thresholds are exceeded:
@@ -35,7 +35,7 @@ class MonitoredFIFOCache<K, V> extends ThreadSafeCache<K, V>
 
   /// **Creates a [MonitoredFIFOCache] with a specified maximum size and alert configuration.**
   ///
-  /// This cache is thread-safe and monitors the following performance metrics:
+  /// This cache is async-safe and monitors the following performance metrics:
   ///
   /// - **Hit rate and miss rate**: Tracks the success/failure rate of cache accesses.
   /// - **Request latency**: Measures the response time for cache operations.
@@ -53,7 +53,7 @@ class MonitoredFIFOCache<K, V> extends ThreadSafeCache<K, V>
   /// - **[ArgumentError]**: Thrown when [maxSize] is `0 or less`.
   MonitoredFIFOCache({
     required this.maxSize,
-    required CacheAlertConfig alertConfig,
+    CacheAlertConfig alertConfig = const CacheAlertConfig(),
   }) {
     if (maxSize <= 0) {
       throw ArgumentError('maxSize must be greater than 0.');
@@ -64,7 +64,7 @@ class MonitoredFIFOCache<K, V> extends ThreadSafeCache<K, V>
 
   /// Returns all the keys currently stored in the cache.
   ///
-  /// **This method is thread-safe**, taking a snapshot of the cache before returning the keys.
+  /// **This method is async-safe**, taking a snapshot of the cache before returning the keys.
   @override
   Future<Iterable<K>> getKeys() async {
     return await _lock.synchronized(() {
@@ -78,7 +78,7 @@ class MonitoredFIFOCache<K, V> extends ThreadSafeCache<K, V>
   /// - **The priority of data is not changed by FIFO** (the order of deletion is unchanged when calling `get()`).
   /// - Returns **`null` if the key does not exist in the cache**.
   ///
-  /// **This method is thread-safe**.
+  /// **This method is async-safe**.
   @override
   Future<V?> get(K key) async {
     return await monitoredGet(key, () async {
@@ -93,7 +93,7 @@ class MonitoredFIFOCache<K, V> extends ThreadSafeCache<K, V>
   /// - If the key already exists, `set()` will **update its value** without changing its position.
   /// - If the cache size exceeds **[maxSize]**, the oldest element will be removed based on the FIFO policy.
   ///
-  /// **This method is thread-safe**.
+  /// **This method is async-safe**.
   @override
   Future<void> set(K key, V value) async {
     await _lock.synchronized(() {
@@ -112,7 +112,7 @@ class MonitoredFIFOCache<K, V> extends ThreadSafeCache<K, V>
   /// - If the key existed, records a manual eviction via [CacheMonitoring].
   /// - If the key does not exist, this call is a no-op.
   ///
-  /// **This method is thread-safe.**
+  /// **This method is async-safe.**
   @override
   Future<void> remove(K key) async {
     await _lock.synchronized(() {
@@ -127,7 +127,7 @@ class MonitoredFIFOCache<K, V> extends ThreadSafeCache<K, V>
   ///
   /// - The monitoring function remains active even after the cache is cleared.
   ///
-  /// **This method is thread-safe.**
+  /// **This method is async-safe.**
   @override
   Future<void> clear() async {
     await _lock.synchronized(_cache.clear);
@@ -140,7 +140,8 @@ class MonitoredFIFOCache<K, V> extends ThreadSafeCache<K, V>
   ///
   /// - Outputs the **key-value pairs** stored in the cache.
   ///
-  /// **This method is thread-safe**.
+  /// **Note:** `toString()` is synchronous and does not acquire the internal
+  /// lock. Treat the result as diagnostic output for a point-in-time view.
   @override
   String toString() {
     final snapshot = Map.of(_cache); // Take a snapshot of the cache

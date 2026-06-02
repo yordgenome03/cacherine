@@ -17,6 +17,7 @@ The **alert system** in `MonitoredCache` is powered by the `CacheAlertManager` c
 2. **`CacheAlertConfig`**:
 
    - Configures the alert thresholds for various cache metrics.
+   - Optional when creating monitored caches; omitted alert configuration uses a no-op notification callback with default thresholds.
    - Includes thresholds for:
      - **Hit rate**: Low hit rate detection.
      - **Miss rate**: High miss rate detection.

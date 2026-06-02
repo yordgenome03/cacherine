@@ -1,9 +1,10 @@
-/// **Thread-safe Cache Interface**
+/// **Async-safe Cache Interface**
 ///
-/// An abstract class defining the basic cache operations for **multi-threaded environments**
-/// and **asynchronous processing**.
-/// - Provides **thread-safe cache operations** using **asynchronous processing (`Future`)**.
-/// - Designed to **safely handle access from multiple threads**.
+/// An abstract class defining basic cache operations for asynchronous use.
+///
+/// Implementations serialize concurrent async calls on the same cache instance
+/// within the same isolate. They are not shared-memory synchronization
+/// primitives across Dart isolates.
 abstract class ThreadSafeCache<K, V> {
   /// **Retrieves all keys stored in the cache.**
   ///

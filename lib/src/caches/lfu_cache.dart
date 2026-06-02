@@ -11,15 +11,14 @@ final class _LFUNode<K, V> extends LinkedListEntry<_LFUNode<K, V>> {
   _LFUNode(this.key, this.value, this.freq);
 }
 
-/// **Thread-safe LFU (Least Frequently Used) Cache**
+/// **Async-safe LFU (Least Frequently Used) Cache**
 ///
-/// This class extends [ThreadSafeCache] and ensures **thread safety using `Lock`**.
-/// It allows **safe access to the cache from multiple threads or asynchronous tasks**,
-/// preventing data race conditions.
+/// This class extends [ThreadSafeCache] and serializes concurrent async calls
+/// on the same cache instance within the same isolate using `Lock`.
 ///
 /// **Exception:** [toString] is synchronous and does not acquire the lock.
 /// It returns a point-in-time snapshot of the cache contents but is not
-/// covered by the thread-safety guarantee. See [toString] for details.
+/// covered by the async-safety guarantee. See [toString] for details.
 ///
 /// **Adopts an LFU (Least Frequently Used) eviction policy**,
 /// meaning **when the cache exceeds `maxSize`, the least frequently used element is removed**.
@@ -47,7 +46,7 @@ class LFUCache<K, V> extends ThreadSafeCache<K, V> {
   /// **Note:** The iteration order is unspecified (backed by [HashMap]).
   /// Do not rely on insertion order or any other stable ordering.
   ///
-  /// **This method is thread-safe.**
+  /// **This method is async-safe.**
   @override
   Future<Iterable<K>> getKeys() async {
     return await _lock.synchronized(() => _keyMap.keys.toList());
@@ -82,7 +81,7 @@ class LFUCache<K, V> extends ThreadSafeCache<K, V> {
   ///
   /// - **Returns `null` if the key does not exist.**
   ///
-  /// **This method is thread-safe.**
+  /// **This method is async-safe.**
   @override
   Future<V?> get(K key) async {
     return await _lock.synchronized(() {
@@ -103,7 +102,7 @@ class LFUCache<K, V> extends ThreadSafeCache<K, V> {
   /// - If the cache exceeds **[maxSize]**, the **least frequently used element is removed** following the LFU policy.
   ///   Among entries with the same frequency, the least recently used is evicted.
   ///
-  /// **This method is thread-safe.**
+  /// **This method is async-safe.**
   @override
   Future<void> set(K key, V value) async {
     await _lock.synchronized(() {
@@ -138,7 +137,7 @@ class LFUCache<K, V> extends ThreadSafeCache<K, V> {
   /// - If the key does not exist, this call is a no-op.
   /// - The frequency counter for the key is also discarded.
   ///
-  /// **This method is thread-safe.**
+  /// **This method is async-safe.**
   @override
   Future<void> remove(K key) async {
     await _lock.synchronized(() {
@@ -157,7 +156,7 @@ class LFUCache<K, V> extends ThreadSafeCache<K, V> {
 
   /// Clears the cache, removing all stored data.
   ///
-  /// **This method is thread-safe.**
+  /// **This method is async-safe.**
   @override
   Future<void> clear() async {
     await _lock.synchronized(() {
@@ -173,7 +172,7 @@ class LFUCache<K, V> extends ThreadSafeCache<K, V> {
   /// - The order of pairs is unspecified (backed by [HashMap]).
   ///
   /// **Note:** `toString()` is synchronous and does not acquire the internal
-  /// lock — it is the one method that does not honor the thread-safety
+  /// lock — it is the one method that does not honor the async-safety
   /// contract. The snapshot of keys and values is taken atomically within
   /// Dart's single-threaded execution model, so the snapshot itself cannot
   /// race with a concurrent async operation. However, the result reflects a

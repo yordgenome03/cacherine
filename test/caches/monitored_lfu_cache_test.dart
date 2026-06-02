@@ -179,6 +179,46 @@ void main() {
       expect(await cache.get('keyC'), equals('valueC'));
     });
 
+    test(
+      'get() promotes the only entry in the minimum frequency bucket',
+      () async {
+        final cache = MonitoredLFUCache<String, String>(
+          maxSize: 2,
+          alertConfig: config,
+        );
+        addTearDown(cache.dispose);
+
+        await cache.set('keyA', 'valueA');
+        await cache.get('keyA');
+        await cache.set('keyB', 'valueB');
+        await cache.set('keyC', 'valueC');
+
+        expect(await cache.get('keyA'), equals('valueA'));
+        expect(await cache.get('keyB'), isNull);
+        expect(await cache.get('keyC'), equals('valueC'));
+      },
+    );
+
+    test(
+      'set() on an existing key refreshes recency among same-frequency entries',
+      () async {
+        final cache = MonitoredLFUCache<String, String>(
+          maxSize: 2,
+          alertConfig: config,
+        );
+        addTearDown(cache.dispose);
+        await cache.set('keyA', 'valueA');
+        await cache.set('keyB', 'valueB');
+
+        await cache.set('keyB', 'updatedB');
+        await cache.set('keyC', 'valueC');
+
+        expect(await cache.get('keyA'), isNull);
+        expect(await cache.get('keyB'), equals('updatedB'));
+        expect(await cache.get('keyC'), equals('valueC'));
+      },
+    );
+
     test('Should throw an exception if maxSize is 0 or negative', () {
       expect(
         () =>
@@ -202,6 +242,29 @@ void main() {
       final stats = cache.metrics.getRecentStats(const Duration(minutes: 1));
       expect(stats['evictions_per_minute'], equals(1));
     });
+
+    test(
+      'remove() promoted key keeps remaining frequency buckets usable',
+      () async {
+        final cache = MonitoredLFUCache<String, String>(
+          maxSize: 2,
+          alertConfig: config,
+        );
+        addTearDown(cache.dispose);
+
+        await cache.set('key1', 'value1');
+        await cache.set('key2', 'value2');
+        await cache.get('key1');
+        await cache.remove('key1');
+        await cache.set('key3', 'value3');
+        await cache.set('key4', 'value4');
+
+        expect(await cache.get('key1'), isNull);
+        expect(await cache.get('key2'), isNull);
+        expect(await cache.get('key3'), equals('value3'));
+        expect(await cache.get('key4'), equals('value4'));
+      },
+    );
 
     test('remove() non-existent key does not record eviction', () async {
       final cache = MonitoredLFUCache<String, String>(
