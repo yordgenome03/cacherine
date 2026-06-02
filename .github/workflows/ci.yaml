@@ -9,12 +9,58 @@ on:
 
 permissions:
   contents: read
-  pull-requests: write
 
 jobs:
+  format-suggestions:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    permissions:
+      contents: read
+      pull-requests: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        timeout-minutes: 2
+
+      - name: Set up Dart SDK
+        uses: dart-lang/setup-dart@v1
+        with:
+          sdk: stable
+        timeout-minutes: 2
+
+      - name: Cache Dart dependencies
+        uses: actions/cache@v4
+        with:
+          path: ~/.pub-cache
+          key: ${{ runner.os }}-pub-stable-${{ hashFiles('**/pubspec.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-pub-stable-
+            ${{ runner.os }}-pub-
+        timeout-minutes: 2
+
+      - name: Install dependencies
+        run: dart pub get
+        timeout-minutes: 3
+
+      - name: Apply formatting
+        run: dart format .
+        timeout-minutes: 2
+
+      - name: Suggest formatting fixes via Reviewdog and Fail CI
+        uses: reviewdog/action-suggester@v1
+        with:
+          tool_name: dart format
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          filter_mode: added
+          fail_on_error: true
+        timeout-minutes: 2
+
   test:
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    permissions:
+      contents: read
     strategy:
       fail-fast: false
       matrix:
@@ -47,21 +93,6 @@ jobs:
 
       - name: Check outdated dependencies
         run: dart pub outdated
-        timeout-minutes: 2
-
-      - name: Apply formatting (Overwrite)
-        if: matrix.sdk == 'stable'
-        run: dart format .
-        timeout-minutes: 2
-
-      - name: Suggest formatting fixes via Reviewdog and Fail CI
-        if: matrix.sdk == 'stable'
-        uses: reviewdog/action-suggester@v1
-        with:
-          tool_name: dart format
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          filter_mode: added
-          fail_on_error: true
         timeout-minutes: 2
 
       - name: Analyze project source with strict mode
