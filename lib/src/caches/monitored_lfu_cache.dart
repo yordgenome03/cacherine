@@ -6,6 +6,14 @@ import '../monitorings/cache_monitoring.dart';
 import '../interfaces/disposable.dart';
 import '../interfaces/thread_safe_cache.dart';
 
+final class _LFUNode<K, V> extends LinkedListEntry<_LFUNode<K, V>> {
+  K key;
+  V value;
+  int freq;
+
+  _LFUNode(this.key, this.value, this.freq);
+}
+
 /// **Thread-safe LFU (Least Frequently Used) Cache with Monitoring**
 ///
 /// This class extends [ThreadSafeCache] and ensures thread-safety using a **`Lock`**.
@@ -24,8 +32,9 @@ class MonitoredLFUCache<K, V> extends ThreadSafeCache<K, V>
     with CacheMonitoring<K, V>
     implements Disposable {
   final int maxSize;
-  final LinkedHashMap<K, V> _cache = LinkedHashMap();
-  final Map<K, int> _usageCounts = {};
+  final HashMap<K, _LFUNode<K, V>> _keyMap = HashMap();
+  final HashMap<int, LinkedList<_LFUNode<K, V>>> _freqMap = HashMap();
+  int _minFreq = 0;
   final _lock = Lock();
 
   /// Cache monitoring alert manager
@@ -68,8 +77,28 @@ class MonitoredLFUCache<K, V> extends ThreadSafeCache<K, V>
   @override
   Future<Iterable<K>> getKeys() async {
     return await _lock.synchronized(() {
-      return Map<K, V>.of(_cache).keys;
+      return _keyMap.keys.toList();
     });
+  }
+
+  void _promoteFreq(_LFUNode<K, V> node) {
+    final oldFreq = node.freq;
+    final oldBucket = _freqMap[oldFreq]!;
+    node.unlink();
+    if (oldBucket.isEmpty) {
+      _freqMap.remove(oldFreq);
+      if (oldFreq == _minFreq) _minFreq = oldFreq + 1;
+    }
+    node.freq = oldFreq + 1;
+    _freqMap
+        .putIfAbsent(node.freq, LinkedList<_LFUNode<K, V>>.new)
+        .addFirst(node);
+  }
+
+  void _refreshInBucket(_LFUNode<K, V> node) {
+    final bucket = _freqMap[node.freq]!;
+    node.unlink();
+    bucket.addFirst(node);
   }
 
   /// Retrieves the value for the specified key and increments its usage count.
@@ -82,10 +111,10 @@ class MonitoredLFUCache<K, V> extends ThreadSafeCache<K, V>
   Future<V?> get(K key) async {
     return await monitoredGet(key, () async {
       return await _lock.synchronized(() {
-        if (!_cache.containsKey(key)) return null;
-
-        _usageCounts[key] = (_usageCounts[key] ?? 0) + 1;
-        return _cache[key];
+        final node = _keyMap[key];
+        if (node == null) return null;
+        _promoteFreq(node);
+        return node.value;
       });
     });
   }
@@ -99,28 +128,32 @@ class MonitoredLFUCache<K, V> extends ThreadSafeCache<K, V>
   @override
   Future<void> set(K key, V value) async {
     await _lock.synchronized(() {
-      if (_cache.containsKey(key)) {
-        _cache[key] = value;
+      final existing = _keyMap[key];
+      if (existing != null) {
+        existing.value = value;
+        _refreshInBucket(existing);
         return;
       }
-      if (_cache.length >= maxSize) {
+      if (_keyMap.length >= maxSize) {
         _evictLFUEntry();
         metrics.recordEviction();
       }
-      _cache[key] = value;
-      _usageCounts[key] = 1;
+      final node = _LFUNode(key, value, 1);
+      _keyMap[key] = node;
+      _freqMap.putIfAbsent(1, LinkedList<_LFUNode<K, V>>.new).addFirst(node);
+      _minFreq = 1;
     });
   }
 
   /// Performs eviction using the LFU (Least Frequently Used) policy.
   void _evictLFUEntry() {
-    if (_cache.isEmpty) return;
+    if (_keyMap.isEmpty) return;
 
-    final K lfuKey =
-        _usageCounts.entries.reduce((a, b) => a.value < b.value ? a : b).key;
-
-    _cache.remove(lfuKey);
-    _usageCounts.remove(lfuKey);
+    final evictBucket = _freqMap[_minFreq]!;
+    final victim = evictBucket.last;
+    victim.unlink();
+    if (evictBucket.isEmpty) _freqMap.remove(_minFreq);
+    _keyMap.remove(victim.key);
   }
 
   /// Removes the entry with the given key from the cache.
@@ -133,9 +166,14 @@ class MonitoredLFUCache<K, V> extends ThreadSafeCache<K, V>
   @override
   Future<void> remove(K key) async {
     await _lock.synchronized(() {
-      if (_cache.containsKey(key)) {
-        _cache.remove(key);
-        _usageCounts.remove(key);
+      final node = _keyMap.remove(key);
+      if (node != null) {
+        final bucket = _freqMap[node.freq]!;
+        node.unlink();
+        if (bucket.isEmpty) {
+          _freqMap.remove(node.freq);
+          if (_keyMap.isEmpty) _minFreq = 0;
+        }
         metrics.recordEviction();
       }
     });
@@ -149,8 +187,9 @@ class MonitoredLFUCache<K, V> extends ThreadSafeCache<K, V>
   @override
   Future<void> clear() async {
     await _lock.synchronized(() {
-      _cache.clear();
-      _usageCounts.clear();
+      _keyMap.clear();
+      _freqMap.clear();
+      _minFreq = 0;
     });
   }
 
@@ -164,7 +203,8 @@ class MonitoredLFUCache<K, V> extends ThreadSafeCache<K, V>
   /// **This method is thread-safe**.
   @override
   String toString() {
-    final snapshot = Map.of(_cache);
-    return snapshot.toString();
+    return Map.fromEntries(
+      _keyMap.values.toList().map((node) => MapEntry(node.key, node.value)),
+    ).toString();
   }
 }

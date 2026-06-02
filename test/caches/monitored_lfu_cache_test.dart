@@ -179,6 +179,26 @@ void main() {
       expect(await cache.get('keyC'), equals('valueC'));
     });
 
+    test(
+      'set() on an existing key refreshes recency among same-frequency entries',
+      () async {
+        final cache = MonitoredLFUCache<String, String>(
+          maxSize: 2,
+          alertConfig: config,
+        );
+        addTearDown(cache.dispose);
+        await cache.set('keyA', 'valueA');
+        await cache.set('keyB', 'valueB');
+
+        await cache.set('keyB', 'updatedB');
+        await cache.set('keyC', 'valueC');
+
+        expect(await cache.get('keyA'), isNull);
+        expect(await cache.get('keyB'), equals('updatedB'));
+        expect(await cache.get('keyC'), equals('valueC'));
+      },
+    );
+
     test('Should throw an exception if maxSize is 0 or negative', () {
       expect(
         () =>
