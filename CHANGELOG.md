@@ -8,11 +8,13 @@
 ### New Features
 
 - Added `peek()` to simple, async-safe, monitored, and TTL cache variants so callers can read values without updating cache eviction state.
+- Added `size`, `isEmpty`, and `isNotEmpty` to simple, async-safe, monitored, and TTL cache variants so callers can inspect cache occupancy without materializing keys directly.
 
 ### Maintenance
 
 - Updated dependency constraints for `synchronized` and `lints` to the newest resolvable versions for the current SDK range.
 - Added regression coverage for `peek()` nullable-value behavior, policy side effects, monitored traffic metrics, and TTL expiry.
+- Added regression coverage for cache occupancy APIs across standard, simple, monitored, ephemeral, and TTL caches.
 
 ## 2.2.0 - Simple TTL Cache, Cache-Aside Helpers, and Contract Coverage
 

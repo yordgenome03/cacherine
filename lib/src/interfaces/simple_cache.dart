@@ -9,6 +9,17 @@ abstract class SimpleCache<K, V> {
   /// **Returns:** A list of all keys in the cache.
   Iterable<K> getKeys();
 
+  /// **Returns the number of entries currently stored in the cache.**
+  ///
+  /// TTL cache implementations count only live, non-expired entries.
+  int get size => getKeys().length;
+
+  /// **Returns whether the cache currently has no entries.**
+  bool get isEmpty => size == 0;
+
+  /// **Returns whether the cache currently has one or more entries.**
+  bool get isNotEmpty => !isEmpty;
+
   /// **Retrieves the value associated with the specified key.**
   ///
   /// - **Returns `null` if the key does not exist.**

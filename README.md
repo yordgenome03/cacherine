@@ -44,6 +44,7 @@ Whether you need a simple synchronous cache or an async-compatible solution that
 - **CacheStatsDashboard** (Wraps a MonitoredCache's metrics to provide point-in-time snapshots and periodic streams; `formatDashboard()` renders a Unicode terminal panel)
 - **`containsKey()` support** (distinguishes missing keys from stored `null` values without changing cache eviction state)
 - **`peek()` support** (reads a value without changing cache eviction state or consuming EphemeralFIFO entries)
+- **`size`, `isEmpty`, and `isNotEmpty` support** (reads cache occupancy without recording monitored traffic metrics)
 - **Simple versions (e.g., SimpleFIFOCache) for synchronous usage, and standard versions that serialize concurrent async calls within the same isolate**
 
 ## Installation
@@ -200,6 +201,8 @@ Use `peek()` when you need to read a value without changing cache policy state. 
 `getOrSet()` and `getOrCompute()` use `containsKey()` semantics before reading, so stored `null` values are treated as present. On monitored caches, `getOrCompute()` records one hit when the key already exists and one miss when the callback is used to populate the key.
 
 `getKeys()` returns a snapshot. FIFO and TTL caches return insertion order for live entries. LRU and MRU caches return least-to-most recently used order. Ephemeral FIFO caches omit entries already consumed by `get()`. LFU cache key order is unspecified.
+
+`size`, `isEmpty`, and `isNotEmpty` report the current cache occupancy. TTL caches count only live, non-expired entries. These APIs do not update cache eviction state and monitored caches do not record hit/miss/latency metrics for them.
 
 Use `SimpleTTLCacheInterface` or `ThreadSafeTTLCacheInterface` when code needs an abstraction that still exposes per-entry TTL overrides:
 
