@@ -110,16 +110,20 @@ metrics for custom dashboards or alert integrations. It returns a
 latency, eviction rate, total requests, and capture time.
 
 ```dart
-final cache = MonitoredLRUCache<String, String>(maxSize: 100);
+import 'package:cacherine/cacherine.dart';
 
-await cache.set('key', 'value');
-await cache.get('key');
+Future<void> main() async {
+  final cache = MonitoredLRUCache<String, String>(maxSize: 100);
 
-final snapshot = cache.metrics.snapshot(Duration(minutes: 1));
-print(snapshot.hitRate);
-print(snapshot.p95Latency);
+  await cache.set('key', 'value');
+  await cache.get('key');
 
-cache.dispose();
+  final snapshot = cache.metrics.snapshot(const Duration(minutes: 1));
+  print(snapshot.hitRate);
+  print(snapshot.p95Latency);
+
+  cache.dispose();
+}
 ```
 
 ## Why Use MonitoredCache?
