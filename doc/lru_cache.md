@@ -45,7 +45,15 @@ The eviction policy of an LRU Cache follows these rules:
 `getKeys()` returns keys from least recently used to most recently used. A
 successful `get()` or `set()` of an existing key moves that key to the end.
 
-### 3.4 Example: LRUCache Operations and State Changes
+### 3.4 Cache-Aside Population (`getOrSet` / `getOrCompute`)
+
+Use `getOrSet()` on `SimpleLRUCache` or `getOrCompute()` on `LRUCache` and
+`MonitoredLRUCache` to return an existing value, or compute and store a value
+when the key is missing. Existing keys are treated as successful reads and move
+to the most recently used position. Newly computed values are inserted like
+`set()` and can trigger LRU eviction when the cache is full.
+
+### 3.5 Example: LRUCache Operations and State Changes
 
 1. Initial State: LRUCache<maxCount: 3>
 

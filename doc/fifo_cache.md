@@ -45,7 +45,15 @@ The FIFO Cache eviction policy follows these rules:
 `getKeys()` returns keys in FIFO insertion order. Updating an existing key
 changes its value but keeps its current position.
 
-### 3.4 Example: FIFO Cache Operations and State Changes
+### 3.4 Cache-Aside Population (`getOrSet` / `getOrCompute`)
+
+Use `getOrSet()` on `SimpleFIFOCache` or `getOrCompute()` on `FIFOCache` and
+`MonitoredFIFOCache` to return an existing value, or compute and store a value
+when the key is missing. Existing keys keep their FIFO position. Newly computed
+values are inserted like `set()` and can trigger FIFO eviction when the cache is
+full.
+
+### 3.5 Example: FIFO Cache Operations and State Changes
 
 1. Initial State: FIFOCache<maxCount: 3>
 
