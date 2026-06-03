@@ -50,7 +50,7 @@ Check the latest version on [pub.dev](https://pub.dev/packages/cacherine) and ad
 
 ```yaml
 dependencies:
-  cacherine: ^latest_version
+  cacherine: ^2.1.0
 ```
 
 Then, run the following command in your terminal:
@@ -110,7 +110,7 @@ void main() async {
 
 ### Monitoring Usage
 
-If you want to monitor the performance of your cache and optimize the algorithm, use MonitoredCache.
+If you want to monitor the performance of your cache and optimize the algorithm, use a monitored cache variant such as `MonitoredLRUCache` or `MonitoredTTLCache`.
 [Learn more about MonitoredCache and performance monitoring.](doc/monitored_cache.md)
 
 ### Stats Dashboard Usage
@@ -177,6 +177,7 @@ The standard and monitored cache variants use `Future` APIs and an internal lock
 - [MonitoredTTLCache<K, V>](lib/src/caches/monitored_ttl_cache.dart): TTL-based cache with monitoring
 
 - [CacheStatsDashboard](lib/src/monitorings/cache_stats_dashboard.dart): Wraps `CacheMetrics` to provide `snapshot(Duration window)` and `stream(Duration window, Duration interval)`
+- [CacheMetricsSnapshot](lib/src/monitorings/cache_metrics.dart): Typed point-in-time metrics snapshot returned by `CacheMetrics.snapshot(Duration window)`
 - [DashboardSnapshot](lib/src/monitorings/cache_stats_dashboard.dart): Immutable point-in-time snapshot (hitRate, missRate, latency percentiles, evictionsPerMinute, totalRequests, capturedAt)
 - [formatDashboard()](lib/src/monitorings/cache_stats_dashboard.dart): Renders a `DashboardSnapshot` as a Unicode box-drawing terminal panel
 

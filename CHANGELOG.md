@@ -1,9 +1,36 @@
-## Unreleased
+## 2.1.0 - Monitored TTL Cache, containsKey API, and Monitoring Improvements
 
 ### New Features
 
 - **MonitoredTTLCache**: Added a monitored TTL cache variant with hit/miss and latency metrics, eviction tracking for expiry/capacity/manual removals, alert support, and the same TTL configuration options as `TTLCache`.
 - **containsKey() API**: Added `containsKey()` to simple, async-safe, monitored, and TTL cache variants so callers can distinguish stored `null` values from missing keys without mutating eviction state.
+- **CacheMetricsSnapshot**: Added a typed `CacheMetrics.snapshot(Duration window)` API with hit/miss rates, latency percentiles, eviction rate, total requests, and capture time.
+- **Monitored cache constructors**: Made `CacheAlertConfig` optional for monitored cache variants by providing a default no-op alert callback and default thresholds.
+
+### Performance
+
+- **MonitoredLFUCache**: Replaced O(n) eviction scans with frequency buckets for constant-time LFU eviction.
+- **CacheMetrics**: Reused a single sorted latency snapshot when computing multiple percentiles for metrics snapshots and dashboards.
+- **TTLCache**: Added a capacity benchmark to quantify expired-entry cleanup and FIFO capacity enforcement costs.
+
+### Bug Fixes
+
+- **Nullable monitored values**: Fixed monitored caches so stored `null` values are recorded as hits when the key exists.
+- **TTLCache**: Validates `sweepInterval` and per-entry TTL values so zero or negative intervals fail fast.
+- **CacheStatsDashboard**: Migrated dashboard snapshots to the typed metrics snapshot source for consistent captured timestamps and metric values.
+
+### Documentation
+
+- Clarified async-safe cache contracts and isolate boundaries for `ThreadSafeCache` implementations.
+- Documented `containsKey()` semantics, nullable value behavior, and TTL expiry behavior.
+- Documented MonitoredTTLCache usage in the TTL guide and README.
+- Clarified monitored cache `toString()` output as diagnostic point-in-time state.
+
+### Maintenance
+
+- Split CI formatting suggestions into a separate least-privilege Reviewdog job.
+- Reduced default workflow token permissions to read-only for CI jobs.
+- Added regression coverage for nullable cached values, `containsKey()` policy side effects, monitored cache constructors, metrics snapshots, and MonitoredTTLCache expiry paths.
 
 ## 2.0.1 - LFU Performance Improvements, Bug Fixes, and Maintenance
 
