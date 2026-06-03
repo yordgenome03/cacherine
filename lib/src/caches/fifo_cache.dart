@@ -50,6 +50,14 @@ class FIFOCache<K, V> extends ThreadSafeCache<K, V> {
     });
   }
 
+  /// Checks whether [key] exists in the cache.
+  ///
+  /// **This method is async-safe.**
+  @override
+  Future<bool> containsKey(K key) async {
+    return await _lock.synchronized(() => _cache.containsKey(key));
+  }
+
   /// Stores the specified key-value pair in the cache.
   ///
   /// - If `set()` is called on an existing key, **the value is updated**.

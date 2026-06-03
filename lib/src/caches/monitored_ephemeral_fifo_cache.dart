@@ -88,6 +88,14 @@ class MonitoredEphemeralFIFOCache<K, V> extends ThreadSafeCache<K, V>
     }, found: () => found);
   }
 
+  /// Checks whether [key] exists in the cache without removing it or recording metrics.
+  ///
+  /// **This method is async-safe**.
+  @override
+  Future<bool> containsKey(K key) async {
+    return await _lock.synchronized(() => _cache.containsKey(key));
+  }
+
   /// Stores the specified key and value in the cache.
   ///
   /// - If the key already exists, `set()` will **update its value** without changing its position.

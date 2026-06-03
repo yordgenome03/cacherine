@@ -121,6 +121,14 @@ class MonitoredLFUCache<K, V> extends ThreadSafeCache<K, V>
     }, found: () => found);
   }
 
+  /// Checks whether [key] exists without incrementing frequency or recording metrics.
+  ///
+  /// **This method is async-safe**.
+  @override
+  Future<bool> containsKey(K key) async {
+    return await _lock.synchronized(() => _keyMap.containsKey(key));
+  }
+
   /// Stores the specified key and value in the cache.
   ///
   /// - If the key already exists, `set()` will **update its value** without resetting its usage count.

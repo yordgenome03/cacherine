@@ -21,6 +21,17 @@ abstract class ThreadSafeCache<K, V> {
   /// **Returns:** `Future<V?>` (The value associated with the key, or `null`).
   Future<V?> get(K key);
 
+  /// **Checks whether the specified key is currently stored in the cache.**
+  ///
+  /// This method distinguishes a present key with a `null` value from an
+  /// absent key.
+  ///
+  /// **Arguments:**
+  /// - `key`: The key to check.
+  ///
+  /// **Returns:** `Future<bool>` (`true` if the key exists, otherwise `false`).
+  Future<bool> containsKey(K key);
+
   /// **Stores the specified key-value pair in the cache (asynchronously).**
   ///
   /// - If the key already exists, its corresponding value is updated.

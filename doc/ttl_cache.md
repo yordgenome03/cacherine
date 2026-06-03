@@ -44,7 +44,15 @@ When `maxSize` is specified, `set()` enforces a cap on the number of **live** (n
 2. If the key exists but its TTL has elapsed → remove the entry, return `null` (lazy eviction).
 3. If the key exists and is still within its TTL → return the value.
 
-### 3.2 Data Insertion (`set` operation)
+### 3.2 Existence Check (`containsKey` operation)
+
+1. If the key does not exist → return `false`.
+2. If the key exists but its TTL has elapsed → remove the entry, return `false`.
+3. If the key exists and is still within its TTL → return `true`.
+
+Use `containsKey()` to distinguish a missing key from a stored `null` value.
+
+### 3.3 Data Insertion (`set` operation)
 
 1. If the key already exists, remove it first (so the refreshed entry gets a new insertion timestamp, affecting FIFO order).
 2. If `maxSize` is set and the number of live entries would reach `maxSize`:
@@ -52,7 +60,7 @@ When `maxSize` is specified, `set()` enforces a cap on the number of **live** (n
    b. If still at or over capacity, remove the oldest-inserted live entry (FIFO).
 3. Store the entry with expiry = `clock() + ttl`.
 
-### 3.3 Example: TTLCache Operations and State Changes
+### 3.4 Example: TTLCache Operations and State Changes
 
 Setup: `TTLCache(ttl: Duration(seconds: 10), maxSize: 3)`  
 (clock starts at t=0)
@@ -131,6 +139,7 @@ cache.dispose();
 |--------|-------------|
 | `set(K key, V value, {Duration? ttl})` | Store an entry. `ttl:` overrides the global TTL for this entry. |
 | `get(K key)` | Retrieve a value, or `null` if missing or expired (lazy eviction). |
+| `containsKey(K key)` | Return whether a non-expired entry exists for the key. Expired entries are removed and return `false`. |
 | `getKeys()` | Return only keys whose TTL has not elapsed. |
 | `remove(K key)` | Remove a single entry; no-op if absent. |
 | `clear()` | Remove all entries. |

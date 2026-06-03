@@ -48,6 +48,12 @@ class SimpleMRUCache<K, V> extends SimpleCache<K, V> {
     return value;
   }
 
+  /// Checks whether [key] exists in the cache without updating MRU order.
+  ///
+  /// **This method is not thread-safe.**
+  @override
+  bool containsKey(K key) => _cache.containsKey(key);
+
   /// Stores the specified key-value pair in the cache.
   ///
   /// - If `set()` is called on an existing key, **its value is updated**,

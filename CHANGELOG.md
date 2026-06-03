@@ -3,6 +3,7 @@
 ### New Features
 
 - **MonitoredTTLCache**: Added a monitored TTL cache variant with hit/miss and latency metrics, eviction tracking for expiry/capacity/manual removals, alert support, and the same TTL configuration options as `TTLCache`.
+- **containsKey() API**: Added `containsKey()` to simple, async-safe, monitored, and TTL cache variants so callers can distinguish stored `null` values from missing keys without mutating eviction state.
 
 ## 2.0.1 - LFU Performance Improvements, Bug Fixes, and Maintenance
 
