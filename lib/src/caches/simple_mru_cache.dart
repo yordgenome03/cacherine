@@ -48,6 +48,12 @@ class SimpleMRUCache<K, V> extends SimpleCache<K, V> {
     return value;
   }
 
+  /// Retrieves [key] without updating MRU order.
+  ///
+  /// **This method is not thread-safe.**
+  @override
+  V? peek(K key) => _cache[key];
+
   /// Checks whether [key] exists in the cache without updating MRU order.
   ///
   /// **This method is not thread-safe.**

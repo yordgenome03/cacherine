@@ -94,6 +94,14 @@ class MonitoredMRUCache<K, V> extends ThreadSafeCache<K, V>
     }, found: () => found);
   }
 
+  /// Retrieves [key] without updating MRU order or recording metrics.
+  ///
+  /// **This method is async-safe**.
+  @override
+  Future<V?> peek(K key) async {
+    return await _lock.synchronized(() => _cache[key]);
+  }
+
   /// Checks whether [key] exists without updating MRU order or recording metrics.
   ///
   /// **This method is async-safe**.

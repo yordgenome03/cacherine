@@ -95,6 +95,22 @@ class SimpleTTLCache<K, V> extends SimpleTTLCacheInterface<K, V> {
     return entry.value;
   }
 
+  /// Retrieves [key] without changing insertion order.
+  ///
+  /// Expired entries are removed lazily and treated as absent.
+  ///
+  /// **This method is not thread-safe.**
+  @override
+  V? peek(K key) {
+    final entry = _cache[key];
+    if (entry == null) return null;
+    if (_isExpired(entry)) {
+      _cache.remove(key);
+      return null;
+    }
+    return entry.value;
+  }
+
   /// Checks whether [key] exists and has not expired.
   ///
   /// Use this method to distinguish a present key with a `null` value from an

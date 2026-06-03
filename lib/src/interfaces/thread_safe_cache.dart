@@ -23,6 +23,16 @@ abstract class ThreadSafeCache<K, V> {
   /// **Returns:** `Future<V?>` (The value associated with the key, or `null`).
   Future<V?> get(K key);
 
+  /// **Retrieves the value for [key] without updating cache access state.**
+  ///
+  /// This method returns `null` if the key does not exist. Package cache
+  /// implementations override this method so it does not update eviction policy
+  /// state such as LRU/MRU order, LFU frequency, or Ephemeral FIFO consumption.
+  ///
+  /// Custom cache implementations should override this method when [get] has
+  /// side effects.
+  Future<V?> peek(K key) => get(key);
+
   /// **Checks whether the specified key is currently stored in the cache.**
   ///
   /// This method distinguishes a present key with a `null` value from an
