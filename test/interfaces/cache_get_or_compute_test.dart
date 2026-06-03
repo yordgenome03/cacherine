@@ -1,6 +1,34 @@
 import 'package:cacherine/cacherine.dart';
 import 'package:test/test.dart';
 
+class _DefaultSimpleCache<K, V> extends SimpleCache<K, V> {
+  final Map<K, V> _cache = {};
+
+  @override
+  Iterable<K> getKeys() => _cache.keys.toList();
+
+  @override
+  V? get(K key) => _cache[key];
+
+  @override
+  bool containsKey(K key) => _cache.containsKey(key);
+
+  @override
+  void set(K key, V value) {
+    _cache[key] = value;
+  }
+
+  @override
+  void remove(K key) {
+    _cache.remove(key);
+  }
+
+  @override
+  void clear() {
+    _cache.clear();
+  }
+}
+
 class _DefaultThreadSafeCache<K, V> extends ThreadSafeCache<K, V> {
   final Map<K, V> _cache = {};
 
@@ -9,9 +37,6 @@ class _DefaultThreadSafeCache<K, V> extends ThreadSafeCache<K, V> {
 
   @override
   Future<V?> get(K key) async => _cache[key];
-
-  @override
-  Future<V?> peek(K key) async => _cache[key];
 
   @override
   Future<bool> containsKey(K key) async => _cache.containsKey(key);
@@ -44,9 +69,6 @@ class _DefaultThreadSafeTTLCache<K, V>
   Future<V?> get(K key) async => _cache[key];
 
   @override
-  Future<V?> peek(K key) async => _cache[key];
-
-  @override
   Future<bool> containsKey(K key) async => _cache.containsKey(key);
 
   @override
@@ -69,6 +91,32 @@ class _DefaultThreadSafeTTLCache<K, V>
 }
 
 void main() {
+  group('default peek()', () {
+    test('SimpleCache default delegates to get()', () {
+      final cache = _DefaultSimpleCache<String, String?>();
+
+      cache.set('present', null);
+      cache.set('value', 'stored');
+
+      expect(cache.peek('present'), isNull);
+      expect(cache.containsKey('present'), isTrue);
+      expect(cache.peek('value'), equals('stored'));
+      expect(cache.peek('missing'), isNull);
+    });
+
+    test('ThreadSafeCache default delegates to get()', () async {
+      final cache = _DefaultThreadSafeCache<String, String?>();
+
+      await cache.set('present', null);
+      await cache.set('value', 'stored');
+
+      expect(await cache.peek('present'), isNull);
+      expect(await cache.containsKey('present'), isTrue);
+      expect(await cache.peek('value'), equals('stored'));
+      expect(await cache.peek('missing'), isNull);
+    });
+  });
+
   group('SimpleCache.getOrSet()', () {
     final factories = <String, SimpleCache<String, String?> Function()>{
       'SimpleFIFOCache': () => SimpleFIFOCache<String, String?>(2),
