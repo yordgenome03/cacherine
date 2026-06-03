@@ -4,7 +4,7 @@ import 'dart:collection';
 import 'package:synchronized/synchronized.dart';
 
 import '../interfaces/disposable.dart';
-import '../interfaces/thread_safe_cache.dart';
+import '../interfaces/thread_safe_ttl_cache.dart';
 
 class _TTLEntry<V> {
   final V value;
@@ -19,7 +19,8 @@ class _TTLEntry<V> {
 /// expired entries proactively to reclaim memory.
 ///
 /// Implements [Disposable] — call [dispose] to cancel the sweep timer.
-class TTLCache<K, V> extends ThreadSafeCache<K, V> implements Disposable {
+class TTLCache<K, V> extends ThreadSafeTTLCacheInterface<K, V>
+    implements Disposable {
   final Duration _globalTTL;
   final int? _maxSize;
   final DateTime Function() _clock;

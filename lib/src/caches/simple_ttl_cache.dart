@@ -1,6 +1,6 @@
 import 'dart:collection';
 
-import '../interfaces/simple_cache.dart';
+import '../interfaces/simple_ttl_cache.dart';
 
 class _SimpleTTLEntry<V> {
   final V value;
@@ -18,7 +18,7 @@ class _SimpleTTLEntry<V> {
 /// or scenarios where **concurrent access is not required**.
 /// Since it is not thread-safe and does not perform synchronization,
 /// **use `TTLCache` if async-safe access is needed.**
-class SimpleTTLCache<K, V> extends SimpleCache<K, V> {
+class SimpleTTLCache<K, V> extends SimpleTTLCacheInterface<K, V> {
   final Duration _globalTTL;
   final int? _maxSize;
   final DateTime Function() _clock;

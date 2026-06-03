@@ -4,7 +4,7 @@ import 'dart:collection';
 import 'package:synchronized/synchronized.dart';
 
 import '../interfaces/disposable.dart';
-import '../interfaces/thread_safe_cache.dart';
+import '../interfaces/thread_safe_ttl_cache.dart';
 import '../monitorings/cache_alert_manager.dart';
 import '../monitorings/cache_monitoring.dart';
 
@@ -24,7 +24,7 @@ class _TTLEntry<V> {
 /// This cache records hit/miss latency through [CacheMonitoring] and records
 /// eviction events when entries are removed due to expiry, capacity limits, or
 /// explicit [remove] calls.
-class MonitoredTTLCache<K, V> extends ThreadSafeCache<K, V>
+class MonitoredTTLCache<K, V> extends ThreadSafeTTLCacheInterface<K, V>
     with CacheMonitoring<K, V>
     implements Disposable {
   final Duration _globalTTL;

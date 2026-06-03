@@ -3,7 +3,9 @@ library;
 // Interfaces
 export 'src/interfaces/disposable.dart';
 export 'src/interfaces/simple_cache.dart';
+export 'src/interfaces/simple_ttl_cache.dart';
 export 'src/interfaces/thread_safe_cache.dart';
+export 'src/interfaces/thread_safe_ttl_cache.dart';
 
 // Monitorings
 export 'src/monitorings/cache_alert_manager.dart';
