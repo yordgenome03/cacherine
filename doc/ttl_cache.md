@@ -25,6 +25,8 @@ Lazy eviction is the correctness guarantee — the cache is always accurate. The
 
 `SimpleTTLCache` provides the same expiry, per-entry TTL, `containsKey()`, and optional `maxSize` behavior for synchronous single-threaded usage. It does not start a background sweep timer and does not implement `Disposable`; expired entries are removed lazily or ignored by read APIs.
 
+Use `SimpleTTLCacheInterface` or `ThreadSafeTTLCacheInterface` when you need a cache abstraction that preserves access to the per-entry `ttl:` override.
+
 ### 2.3 Global TTL vs Per-Entry TTL Override
 
 ```

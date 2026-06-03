@@ -177,6 +177,15 @@ The standard and monitored cache variants use `Future` APIs and an internal lock
 
 `get()` returns `null` when a key is absent. Use `containsKey()` to distinguish a missing key from a stored `null` value, such as `Cache<String, String?>`. `containsKey()` does not update LRU/MRU/LFU access state, does not remove entries from EphemeralFIFO caches, and does not record monitored cache hit/miss metrics. For TTL caches, expired entries return `false`.
 
+Use `SimpleTTLCacheInterface` or `ThreadSafeTTLCacheInterface` when code needs an abstraction that still exposes per-entry TTL overrides:
+
+```dart
+final ThreadSafeTTLCacheInterface<String, String> cache =
+    TTLCache(ttl: const Duration(minutes: 5));
+
+await cache.set('token', 'abc123', ttl: const Duration(seconds: 30));
+```
+
 `toString()` is synchronous. It returns a point-in-time representation of the cache contents and should be treated as diagnostic output, not as a synchronized cache operation.
 
 ## API Reference
