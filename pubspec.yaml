@@ -1,6 +1,6 @@
 name: cacherine
 description: A Dart in-memory cache library with FIFO, LRU, MRU, LFU, TTL expiry, async-safe variants, and monitoring metrics.
-version: 2.1.0
+version: 2.2.0
 repository: https://github.com/yordgenome03/cacherine
 
 environment:

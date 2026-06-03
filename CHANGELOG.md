@@ -1,4 +1,4 @@
-## Unreleased
+## 2.2.0 - Simple TTL Cache, Cache-Aside Helpers, and Contract Coverage
 
 ### New Features
 
