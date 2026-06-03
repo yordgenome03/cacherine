@@ -1,3 +1,13 @@
+## Unreleased
+
+### Documentation
+
+- Expanded the runnable example and README cache-aside snippets to cover both `getOrSet()` and TTL-aware `getOrCompute()`.
+
+### Maintenance
+
+- Updated dependency constraints for `synchronized` and `lints` to the newest resolvable versions for the current SDK range.
+
 ## 2.2.0 - Simple TTL Cache, Cache-Aside Helpers, and Contract Coverage
 
 ### New Features
