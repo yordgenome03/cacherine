@@ -48,7 +48,15 @@ The LFU Cache eviction policy follows these rules:
 `getKeys()` returns a snapshot of current keys, but the order is unspecified.
 Do not use it to infer frequency, recency, or eviction order.
 
-### 3.4 Example: LFUCache operations and state changes
+### 3.4 Cache-Aside Population (`getOrSet` / `getOrCompute`)
+
+Use `getOrSet()` on `SimpleLFUCache` or `getOrCompute()` on `LFUCache` and
+`MonitoredLFUCache` to return an existing value, or compute and store a value
+when the key is missing. Existing keys are treated as successful reads and their
+frequency is incremented. Newly computed values are inserted like `set()` with
+an initial frequency of 1 and can trigger LFU eviction when the cache is full.
+
+### 3.5 Example: LFUCache operations and state changes
 
 1. Initial state: LFUCache<maxCount: 3>
 
