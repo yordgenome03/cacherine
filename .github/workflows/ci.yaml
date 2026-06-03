@@ -108,6 +108,7 @@ jobs:
         timeout-minutes: 2
 
       - name: Upload coverage to Codecov
+        if: matrix.sdk == '3.8.0'
         uses: codecov/codecov-action@v5
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
