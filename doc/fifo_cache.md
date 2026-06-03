@@ -58,7 +58,13 @@ when the key is missing. Existing keys keep their FIFO position. Newly computed
 values are inserted like `set()` and can trigger FIFO eviction when the cache is
 full.
 
-### 3.6 Example: FIFO Cache Operations and State Changes
+### 3.6 Occupancy (`size` / `isEmpty` / `isNotEmpty` operations)
+
+`size`, `isEmpty`, and `isNotEmpty` report the current number of cached entries
+without changing FIFO insertion order. Monitored FIFO caches do not record
+hit/miss/latency metrics for these reads.
+
+### 3.7 Example: FIFO Cache Operations and State Changes
 
 1. Initial State: FIFOCache<maxCount: 3>
 

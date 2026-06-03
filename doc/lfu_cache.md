@@ -62,7 +62,13 @@ when the key is missing. Existing keys are treated as successful reads and their
 frequency is incremented. Newly computed values are inserted like `set()` with
 an initial frequency of 1 and can trigger LFU eviction when the cache is full.
 
-### 3.6 Example: LFUCache operations and state changes
+### 3.6 Occupancy (`size` / `isEmpty` / `isNotEmpty` operations)
+
+`size`, `isEmpty`, and `isNotEmpty` report the current number of cached entries
+without incrementing frequency or changing recency within frequency buckets.
+Monitored LFU caches do not record hit/miss/latency metrics for these reads.
+
+### 3.7 Example: LFUCache operations and state changes
 
 1. Initial state: LFUCache<maxCount: 3>
 

@@ -58,7 +58,13 @@ when the key is missing. Existing keys are treated as successful reads and move
 to the most recently used position. Newly computed values are inserted like
 `set()` and can trigger LRU eviction when the cache is full.
 
-### 3.6 Example: LRUCache Operations and State Changes
+### 3.6 Occupancy (`size` / `isEmpty` / `isNotEmpty` operations)
+
+`size`, `isEmpty`, and `isNotEmpty` report the current number of cached entries
+without changing recency order. Monitored LRU caches do not record
+hit/miss/latency metrics for these reads.
+
+### 3.7 Example: LRUCache Operations and State Changes
 
 1. Initial State: LRUCache<maxCount: 3>
 
