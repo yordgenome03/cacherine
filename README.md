@@ -108,11 +108,17 @@ Use `getOrSet()` on synchronous caches or `getOrCompute()` on async caches when
 you want to populate a missing key from a callback:
 
 ```dart
-final cache = LRUCache<String, String>(100);
+final syncCache = SimpleLRUCache<String, String>(100);
+final syncValue = syncCache.getOrSet('profile:42', () => 'computed value');
 
-final value = await cache.getOrCompute('profile:42', () async {
-  return 'computed value';
-});
+final ttlCache = TTLCache<String, String>(ttl: const Duration(minutes: 5));
+final asyncValue = await ttlCache.getOrCompute(
+  'session:42',
+  () async {
+    return 'computed value';
+  },
+  ttl: const Duration(minutes: 1),
+);
 ```
 
 ### TTL Usage

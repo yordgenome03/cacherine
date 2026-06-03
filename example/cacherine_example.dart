@@ -3,6 +3,7 @@ import 'package:cacherine/cacherine.dart';
 Future<void> main() async {
   synchronousTTLExample();
   await asyncTTLExample();
+  await cacheAsideExample();
   await monitoredCacheExample();
 }
 
@@ -31,6 +32,26 @@ Future<void> asyncTTLExample() async {
   print('TTLCache user: ${await cache.get('user:1')}');
 
   cache.dispose();
+}
+
+Future<void> cacheAsideExample() async {
+  final simpleCache = SimpleLRUCache<String, String>(10);
+  final syncValue = simpleCache.getOrSet('profile:1', () => 'Ada');
+
+  final ttlCache = TTLCache<String, String>(
+    ttl: const Duration(minutes: 5),
+    maxSize: 10,
+  );
+  final asyncValue = await ttlCache.getOrCompute(
+    'session:1',
+    () async => 'active',
+    ttl: const Duration(minutes: 1),
+  );
+
+  print('SimpleLRUCache computed value: $syncValue');
+  print('TTLCache computed value: $asyncValue');
+
+  ttlCache.dispose();
 }
 
 Future<void> monitoredCacheExample() async {
