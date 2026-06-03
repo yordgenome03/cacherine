@@ -84,6 +84,12 @@ class SimpleLFUCache<K, V> extends SimpleCache<K, V> {
     return node.value;
   }
 
+  /// Checks whether [key] exists in the cache without incrementing its frequency.
+  ///
+  /// **This method is not thread-safe.**
+  @override
+  bool containsKey(K key) => _keyMap.containsKey(key);
+
   /// Stores the specified key-value pair in the cache.
   ///
   /// - If `set()` is called on an existing key, **its value is updated**,

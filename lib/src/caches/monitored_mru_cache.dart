@@ -93,6 +93,14 @@ class MonitoredMRUCache<K, V> extends ThreadSafeCache<K, V>
     }, found: () => found);
   }
 
+  /// Checks whether [key] exists without updating MRU order or recording metrics.
+  ///
+  /// **This method is async-safe**.
+  @override
+  Future<bool> containsKey(K key) async {
+    return await _lock.synchronized(() => _cache.containsKey(key));
+  }
+
   /// Stores the specified key and value in the cache.
   ///
   /// - If the key already exists, `set()` will **update its value** and move it to the most recently used position.

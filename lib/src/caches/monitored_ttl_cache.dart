@@ -145,6 +145,20 @@ class MonitoredTTLCache<K, V> extends ThreadSafeCache<K, V>
     }, found: () => found);
   }
 
+  @override
+  Future<bool> containsKey(K key) async {
+    return await _lock.synchronized(() {
+      final entry = _cache[key];
+      if (entry == null) return false;
+      if (!entry.expiry.isAfter(_clock())) {
+        _cache.remove(key);
+        metrics.recordEviction();
+        return false;
+      }
+      return true;
+    });
+  }
+
   /// Stores [key]/[value] in the cache.
   ///
   /// - [ttl]: Per-entry TTL override. When omitted, the global TTL is used.

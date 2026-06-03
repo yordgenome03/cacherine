@@ -41,6 +41,7 @@ Whether you need a simple synchronous cache or an async-compatible solution that
   — [Learn more](doc/monitored_cache.md)
 - **MonitoredTTLCache** (TTL-based expiry with the same monitoring metrics and alerts as other monitored cache variants)
 - **CacheStatsDashboard** (Wraps a MonitoredCache's metrics to provide point-in-time snapshots and periodic streams; `formatDashboard()` renders a Unicode terminal panel)
+- **`containsKey()` support** (distinguishes missing keys from stored `null` values without changing cache eviction state)
 - **Simple versions (e.g., SimpleFIFOCache) for synchronous usage, and standard versions that serialize concurrent async calls within the same isolate**
 
 ## Installation
@@ -155,7 +156,7 @@ void main() async {
 
 The standard and monitored cache variants use `Future` APIs and an internal lock to serialize concurrent async calls on the same cache instance within the same isolate. They are not shared-memory synchronization primitives across Dart isolates.
 
-`get()` returns `null` when a key is absent. Because the current API does not expose `containsKey()` or an entry wrapper, storing nullable values such as `Cache<String, String?>` is not supported: a stored `null` cannot be distinguished from a missing key.
+`get()` returns `null` when a key is absent. Use `containsKey()` to distinguish a missing key from a stored `null` value, such as `Cache<String, String?>`. `containsKey()` does not update LRU/MRU/LFU access state, does not remove entries from EphemeralFIFO caches, and does not record monitored cache hit/miss metrics. For TTL caches, expired entries return `false`.
 
 `toString()` is synchronous. It returns a point-in-time representation of the cache contents and should be treated as diagnostic output, not as a synchronized cache operation.
 

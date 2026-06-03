@@ -19,6 +19,17 @@ abstract class SimpleCache<K, V> {
   /// **Returns:** The value associated with the key, or `null`.
   V? get(K key);
 
+  /// **Checks whether the specified key is currently stored in the cache.**
+  ///
+  /// This method distinguishes a present key with a `null` value from an
+  /// absent key.
+  ///
+  /// **Arguments:**
+  /// - `key`: The key to check.
+  ///
+  /// **Returns:** `true` if the key exists, otherwise `false`.
+  bool containsKey(K key);
+
   /// **Stores the specified key-value pair in the cache.**
   ///
   /// - If the key already exists, its corresponding value is updated.
