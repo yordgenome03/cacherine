@@ -102,6 +102,26 @@ The alert system in MonitoredCache tracks the following key metrics:
 - Evictions: The number of items removed from the cache due to size limitations (e.g., when the cache exceeds the maximum size).
   - Evictions are tracked as events and can be monitored over time.
 
+## Reading Metrics
+
+Use `CacheMetrics.snapshot(Duration window)` when you need typed point-in-time
+metrics for custom dashboards or alert integrations. It returns a
+`CacheMetricsSnapshot` with hit/miss rates, average latency, p50/p95/p99
+latency, eviction rate, total requests, and capture time.
+
+```dart
+final cache = MonitoredLRUCache<String, String>(maxSize: 100);
+
+await cache.set('key', 'value');
+await cache.get('key');
+
+final snapshot = cache.metrics.snapshot(Duration(minutes: 1));
+print(snapshot.hitRate);
+print(snapshot.p95Latency);
+
+cache.dispose();
+```
+
 ## Why Use MonitoredCache?
 
 - Real-time Monitoring: Continuously monitor your cache's health, even in production environments.
