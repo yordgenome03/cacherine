@@ -37,6 +37,7 @@ Whether you need a simple synchronous cache or an async-compatible solution that
   — [Learn more](doc/lfu_cache.md)
 - **TTL** (Time-To-Live — entries auto-expire after a configurable duration; optional per-entry TTL override and background sweep)
   — [Learn more](doc/ttl_cache.md)
+- **SimpleTTLCache** (synchronous TTL cache for single-threaded usage)
 - **MonitoredCache** (Includes performance monitoring with hit/miss rates, latency, and eviction alerts)
   — [Learn more](doc/monitored_cache.md)
 - **MonitoredTTLCache** (TTL-based expiry with the same monitoring metrics and alerts as other monitored cache variants)
@@ -70,6 +71,24 @@ void main() {
   final cache = SimpleFIFOCache<String, String>(maxSize: 5);
   cache.set('key1', 'value1');
   print(cache.get('key1')); // 'value1'
+}
+```
+
+For synchronous single-threaded usage, use `SimpleTTLCache`:
+
+```Dart
+import 'package:cacherine/cacherine.dart';
+
+void main() {
+  final cache = SimpleTTLCache<String, String>(
+    ttl: const Duration(minutes: 5),
+    maxSize: 100,
+  );
+
+  cache.set('token', 'abc123');
+  cache.set('rate', '42', ttl: const Duration(seconds: 30));
+
+  print(cache.get('token')); // 'abc123' (if within TTL)
 }
 ```
 
@@ -161,6 +180,13 @@ The standard and monitored cache variants use `Future` APIs and an internal lock
 `toString()` is synchronous. It returns a point-in-time representation of the cache contents and should be treated as diagnostic output, not as a synchronized cache operation.
 
 ## API Reference
+
+- [SimpleFIFOCache<K, V>](lib/src/caches/simple_fifo_cache.dart): Synchronous FIFO-based cache
+- [SimpleEphemeralFIFOCache<K, V>](lib/src/caches/simple_ephemeral_fifo_cache.dart): Synchronous Ephemeral FIFO cache
+- [SimpleLRUCache<K, V>](lib/src/caches/simple_lru_cache.dart): Synchronous LRU-based cache
+- [SimpleMRUCache<K, V>](lib/src/caches/simple_mru_cache.dart): Synchronous MRU-based cache
+- [SimpleLFUCache<K, V>](lib/src/caches/simple_lfu_cache.dart): Synchronous LFU-based cache
+- [SimpleTTLCache<K, V>](lib/src/caches/simple_ttl_cache.dart): Synchronous TTL-based cache
 
 - [FIFOCache<K, V>](lib/src/caches/fifo_cache.dart): FIFO-based cache
 - [EphemeralFIFOCache<K, V>](lib/src/caches/ephemeral_fifo_cache.dart): FIFO-based cache where the key is removed after being accessed (One-Time Read Cache)
