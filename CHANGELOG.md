@@ -1,3 +1,9 @@
+## Unreleased
+
+### New Features
+
+- **MonitoredTTLCache**: Added a monitored TTL cache variant with hit/miss and latency metrics, eviction tracking for expiry/capacity/manual removals, alert support, and the same TTL configuration options as `TTLCache`.
+
 ## 2.0.1 - LFU Performance Improvements, Bug Fixes, and Maintenance
 
 ### Performance

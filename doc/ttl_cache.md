@@ -99,7 +99,33 @@ cache.dispose(); // cancel sweep timer
 
 `dispose()` is idempotent — calling it multiple times is safe. After `dispose()`, `get()` and `set()` continue to work; only the background sweep stops.
 
-## 5. API Reference
+## 5. Monitoring
+
+Use `MonitoredTTLCache` when you need TTL expiry together with `CacheMetrics`,
+`CacheStatsDashboard`, or alert thresholds. It supports the same TTL options as
+`TTLCache` (`ttl`, per-entry `ttl:`, `maxSize`, `sweepInterval`, and `clock`) and
+records:
+
+- Hits and misses for `get()` calls.
+- Latency for each `get()` call.
+- Evictions when entries are removed by expiry, capacity limits, or explicit `remove()` calls.
+
+```dart
+final cache = MonitoredTTLCache<String, String>(
+  ttl: Duration(minutes: 5),
+  maxSize: 100,
+);
+
+await cache.set('token', 'abc123');
+await cache.get('token');
+
+final snapshot = cache.metrics.snapshot(Duration(minutes: 1));
+print(snapshot.hitRate);
+
+cache.dispose();
+```
+
+## 6. API Reference
 
 | Method | Description |
 |--------|-------------|
@@ -110,7 +136,7 @@ cache.dispose(); // cancel sweep timer
 | `clear()` | Remove all entries. |
 | `dispose()` | Cancel the background sweep timer. Idempotent. |
 
-## 6. Constructor Parameters
+## 7. Constructor Parameters
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
@@ -119,7 +145,7 @@ cache.dispose(); // cancel sweep timer
 | `sweepInterval` | `Duration?` | No | Interval for background expired-entry removal. No sweep if omitted. |
 | `clock` | `DateTime Function()?` | No | Time source. Defaults to `DateTime.now`. Inject a fake clock in tests. |
 
-## 7. Suitable Use Cases
+## 8. Suitable Use Cases
 
 TTL Cache is well-suited for data with a natural validity window:
 
@@ -128,7 +154,7 @@ TTL Cache is well-suited for data with a natural validity window:
 - **Computed values with bounded validity**: Cache expensive computations that are known to be stale after a fixed interval (e.g., exchange rates, configuration snapshots).
 - **Rate-limiting state**: Track per-key counters that should reset after a time window.
 
-## 8. Choosing Between TTLCache and Capacity-Based Caches
+## 9. Choosing Between TTLCache and Capacity-Based Caches
 
 | | Capacity-based (FIFO/LRU/etc.) | TTLCache |
 |-|-------------------------------|----------|
