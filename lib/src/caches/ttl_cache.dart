@@ -65,19 +65,27 @@ class TTLCache<K, V> extends ThreadSafeTTLCacheInterface<K, V>
   void _sweep() {
     // Called from timer callback — must be synchronous; Lock is reentrant-safe.
     _lock.synchronized(() {
-      final now = _clock();
-      _cache.removeWhere((_, entry) => !entry.expiry.isAfter(now));
+      _removeExpired(_clock());
     });
+  }
+
+  int _removeExpired(DateTime now) {
+    var removed = 0;
+    _cache.removeWhere((_, entry) {
+      final expired = !entry.expiry.isAfter(now);
+      if (expired) removed++;
+      return expired;
+    });
+    return removed;
   }
 
   void _evictIfNeeded() {
     final maxSize = _maxSize;
     // Skip the scan entirely when below capacity — the common case.
     if (maxSize == null || _cache.length < maxSize) return;
-    final now = _clock();
     // Full scan required: expired entries anywhere in the map must not count
     // toward capacity, so we cannot safely stop at the first live entry.
-    _cache.removeWhere((_, entry) => !entry.expiry.isAfter(now));
+    _removeExpired(_clock());
     while (_cache.length >= maxSize) {
       _cache.remove(_cache.keys.first);
     }
@@ -92,6 +100,11 @@ class TTLCache<K, V> extends ThreadSafeTTLCacheInterface<K, V>
           .map((e) => e.key)
           .toList();
     });
+  }
+
+  @override
+  Future<int> purgeExpired() async {
+    return await _lock.synchronized(() => _removeExpired(_clock()));
   }
 
   @override

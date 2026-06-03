@@ -45,6 +45,7 @@ Whether you need a simple synchronous cache or an async-compatible solution that
 - **`containsKey()` support** (distinguishes missing keys from stored `null` values without changing cache eviction state)
 - **`peek()` support** (reads a value without changing cache eviction state or consuming EphemeralFIFO entries)
 - **`size`, `isEmpty`, and `isNotEmpty` support** (reads cache occupancy without recording monitored traffic metrics)
+- **`purgeExpired()` support for TTL caches** (explicitly removes expired TTL entries and returns the number removed)
 - **Simple versions (e.g., SimpleFIFOCache) for synchronous usage, and standard versions that serialize concurrent async calls within the same isolate**
 
 ## Installation
@@ -141,6 +142,7 @@ void main() async {
   await cache.set('rate', '42', ttl: Duration(seconds: 30)); // expires in 30 s
 
   print(await cache.get('token')); // 'abc123' (if within TTL)
+  print(await cache.purgeExpired()); // number of expired entries removed
 
   cache.dispose(); // cancel background sweep timer when done
 }
@@ -204,6 +206,10 @@ Use `peek()` when you need to read a value without changing cache policy state. 
 
 `size`, `isEmpty`, and `isNotEmpty` report the current cache occupancy. TTL caches count only live, non-expired entries. These APIs do not update cache eviction state and monitored caches do not record hit/miss/latency metrics for them.
 
+TTL caches expose `purgeExpired()` to remove all expired entries immediately and
+return the number removed. `MonitoredTTLCache` records one eviction per entry
+removed by `purgeExpired()`.
+
 Use `SimpleTTLCacheInterface` or `ThreadSafeTTLCacheInterface` when code needs an abstraction that still exposes per-entry TTL overrides:
 
 ```dart
@@ -211,6 +217,7 @@ final ThreadSafeTTLCacheInterface<String, String> cache =
     TTLCache(ttl: const Duration(minutes: 5));
 
 await cache.set('token', 'abc123', ttl: const Duration(seconds: 30));
+await cache.purgeExpired();
 ```
 
 `toString()` is synchronous. It returns a point-in-time representation of the cache contents and should be treated as diagnostic output, not as a synchronized cache operation.

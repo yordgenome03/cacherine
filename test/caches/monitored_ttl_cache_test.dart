@@ -254,6 +254,28 @@ void main() {
         equals(0),
       );
     });
+
+    test('purgeExpired records one eviction per removed entry', () async {
+      final cache = MonitoredTTLCache<String, String>(
+        ttl: const Duration(seconds: 10),
+        clock: fakeClock,
+        alertConfig: config,
+      );
+      addTearDown(cache.dispose);
+
+      await cache.set('expired-a', '1', ttl: const Duration(seconds: 5));
+      await cache.set('expired-b', '2', ttl: const Duration(seconds: 5));
+      await cache.set('live', '3');
+
+      fakeNow = fakeNow.add(const Duration(seconds: 6));
+
+      expect(await cache.purgeExpired(), equals(2));
+      expect(await cache.getKeys(), equals(['live']));
+      expect(
+        cache.metrics.snapshot(const Duration(minutes: 1)).evictionsPerMinute,
+        equals(2),
+      );
+    });
   });
 
   group('MonitoredTTLCache - lifecycle', () {

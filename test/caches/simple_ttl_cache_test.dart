@@ -145,6 +145,37 @@ void main() {
     });
   });
 
+  group('SimpleTTLCache - purgeExpired()', () {
+    test('removes expired entries and returns the removed count', () {
+      final cache = SimpleTTLCache<String, String>(
+        ttl: const Duration(seconds: 10),
+        clock: fakeClock,
+      );
+
+      cache.set('expired-a', '1', ttl: const Duration(seconds: 5));
+      cache.set('expired-b', '2', ttl: const Duration(seconds: 5));
+      cache.set('live', '3');
+
+      fakeNow = fakeNow.add(const Duration(seconds: 6));
+
+      expect(cache.purgeExpired(), equals(2));
+      expect(cache.getKeys(), equals(['live']));
+      expect(cache.get('live'), equals('3'));
+    });
+
+    test('returns zero when no entries are expired', () {
+      final cache = SimpleTTLCache<String, String>(
+        ttl: const Duration(seconds: 10),
+        clock: fakeClock,
+      );
+
+      cache.set('key', 'value');
+
+      expect(cache.purgeExpired(), equals(0));
+      expect(cache.getKeys(), equals(['key']));
+    });
+  });
+
   group('SimpleTTLCache - maxSize FIFO eviction', () {
     test('maxSize evicts oldest FIFO entry when capacity is exceeded', () {
       final cache = SimpleTTLCache<String, String>(

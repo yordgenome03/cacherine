@@ -20,6 +20,7 @@ A `TTLCache` stores each entry together with an **expiry timestamp** computed at
 |-----------|--------------|--------------|
 | **Lazy eviction** | On every `get()` call | Returns `null` and removes the entry if its TTL has elapsed |
 | **Background sweep** | Periodically (when `sweepInterval` is set) | Removes all expired entries from memory without waiting for `get()` |
+| **Explicit purge** | When `purgeExpired()` is called | Removes all expired entries immediately and returns how many were removed |
 
 Lazy eviction is the correctness guarantee — the cache is always accurate. The background sweep is purely a memory optimisation for use cases where keys may expire without ever being accessed again.
 
@@ -87,7 +88,16 @@ omitted even if they have not yet been swept from memory.
 `size`, `isEmpty`, and `isNotEmpty` report only live entries. Expired entries
 are omitted even if they have not yet been swept from memory.
 
-### 3.8 Example: TTLCache Operations and State Changes
+### 3.8 Explicit Expiry Cleanup (`purgeExpired` operation)
+
+`purgeExpired()` removes all expired entries immediately and returns the number
+of entries removed. Use it when you do not configure a background
+`sweepInterval` but still want to reclaim memory on your own schedule.
+
+For `MonitoredTTLCache`, each entry removed by `purgeExpired()` is recorded as
+an eviction.
+
+### 3.9 Example: TTLCache Operations and State Changes
 
 Setup: `TTLCache(ttl: Duration(seconds: 10), maxSize: 3)`  
 (clock starts at t=0)
@@ -149,8 +159,8 @@ cache.dispose(); // cancel sweep timer
 ```
 
 `dispose()` is idempotent — calling it multiple times is safe. After
-`dispose()`, `get()`, `set()`, `getOrCompute()`, `remove()`, and `clear()`
-continue to work; only the background sweep stops.
+`dispose()`, `get()`, `set()`, `getOrCompute()`, `purgeExpired()`, `remove()`,
+and `clear()` continue to work; only the background sweep stops.
 
 ## 6. Monitoring
 
@@ -161,7 +171,7 @@ records:
 
 - Hits and misses for `get()` calls.
 - Latency for each `get()` call.
-- Evictions when entries are removed by expiry, capacity limits, or explicit `remove()` calls.
+- Evictions when entries are removed by expiry, capacity limits, `purgeExpired()`, or explicit `remove()` calls.
 
 ```dart
 final cache = MonitoredTTLCache<String, String>(
@@ -189,6 +199,7 @@ cache.dispose();
 | `containsKey(K key)` | Return whether a non-expired entry exists for the key. Expired entries are removed and return `false`. |
 | `getKeys()` | Return only keys whose TTL has not elapsed. |
 | `size` / `isEmpty` / `isNotEmpty` | Return live-entry occupancy state. |
+| `purgeExpired()` | Remove all expired entries and return how many entries were removed. |
 | `remove(K key)` | Remove a single entry; no-op if absent. |
 | `clear()` | Remove all entries. |
 | `dispose()` | Cancel the background sweep timer. Idempotent. Supported by `TTLCache` and `MonitoredTTLCache`; not supported by `SimpleTTLCache`. |

@@ -7,6 +7,9 @@ import 'simple_cache.dart';
 /// Use this interface when code needs a synchronous cache abstraction that can
 /// override expiry duration for individual entries.
 abstract class SimpleTTLCacheInterface<K, V> extends SimpleCache<K, V> {
+  /// **Removes expired entries and returns how many entries were removed.**
+  int purgeExpired();
+
   /// **Stores the specified key-value pair with an optional per-entry TTL.**
   ///
   /// - If [ttl] is omitted, the cache implementation's default TTL is used.

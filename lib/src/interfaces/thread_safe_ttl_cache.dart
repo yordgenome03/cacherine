@@ -9,6 +9,9 @@ import 'thread_safe_cache.dart';
 /// Use this interface when code needs an async-safe cache abstraction that can
 /// override expiry duration for individual entries.
 abstract class ThreadSafeTTLCacheInterface<K, V> extends ThreadSafeCache<K, V> {
+  /// **Removes expired entries and returns how many entries were removed.**
+  Future<int> purgeExpired();
+
   /// **Stores the specified key-value pair with an optional per-entry TTL.**
   ///
   /// - If [ttl] is omitted, the cache implementation's default TTL is used.
