@@ -4,16 +4,19 @@
 
 - **SimpleTTLCache**: Added a synchronous TTL cache variant with global and per-entry TTL, lazy expiry, `containsKey()`, optional `maxSize`, and FIFO capacity eviction.
 - **TTL cache interfaces**: Added `SimpleTTLCacheInterface` and `ThreadSafeTTLCacheInterface` so abstract cache references can still expose per-entry TTL overrides.
+- **Cache-aside population**: Added `getOrSet()` to simple caches and `getOrCompute()` to async-safe caches, including TTL per-entry override support through TTL-specific interfaces.
 
 ### Documentation
 
 - Added runnable package examples covering `SimpleTTLCache`, `TTLCache`, and monitored cache dashboard snapshots.
 - Documented synchronous TTL usage in the README and TTL guide.
 - Documented TTL-specific interfaces for callers that need per-entry expiry through cache abstractions.
+- Documented `getKeys()` ordering contracts, `Disposable` lifecycle behavior, and bounded `CacheMetrics` sample storage.
 
 ### Maintenance
 
 - Added regression coverage for `SimpleTTLCache`, `TTLCache`, and `MonitoredTTLCache` through the new TTL-specific interfaces.
+- Added regression coverage for cache-aside population, `dispose()` idempotency, post-dispose operations, and `getKeys()` ordering contracts.
 
 ## 2.1.0 - Monitored TTL Cache, containsKey API, and Monitoring Improvements
 

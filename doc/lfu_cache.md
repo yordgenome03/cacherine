@@ -43,7 +43,12 @@ The LFU Cache eviction policy follows these rules:
    - If the cache exceeds the [maxSize], evict entries based on LFU policy.
    - Add the new key-value pair and initialize the frequency counter to 1.
 
-### 3.3 Example: LFUCache operations and state changes
+### 3.3 Key Snapshot (`getKeys` operation)
+
+`getKeys()` returns a snapshot of current keys, but the order is unspecified.
+Do not use it to infer frequency, recency, or eviction order.
+
+### 3.4 Example: LFUCache operations and state changes
 
 1. Initial state: LFUCache<maxCount: 3>
 

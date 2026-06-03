@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:collection';
 
 import 'package:synchronized/synchronized.dart';
@@ -122,6 +123,29 @@ class MonitoredLRUCache<K, V> extends ThreadSafeCache<K, V>
       }
       _cache[key] = value;
     });
+  }
+
+  @override
+  Future<V> getOrCompute(K key, FutureOr<V> Function() valueFactory) async {
+    var found = false;
+    return await monitoredGet(key, () async {
+          return await _lock.synchronized(() async {
+            if (_cache.containsKey(key)) {
+              found = true;
+              final value = _cache.remove(key);
+              _cache[key] = value as V;
+              return value;
+            }
+            final value = await valueFactory();
+            if (_cache.length >= maxSize) {
+              _cache.remove(_cache.keys.first);
+              metrics.recordEviction();
+            }
+            _cache[key] = value;
+            return value;
+          });
+        }, found: () => found)
+        as V;
   }
 
   /// Removes the entry with the given key from the cache.

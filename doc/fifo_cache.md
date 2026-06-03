@@ -40,7 +40,12 @@ The FIFO Cache eviction policy follows these rules:
    - If the cache exceeds the [maxSize], evict the first inserted entry based on FIFO policy.
    - Add the new key-value pair.
 
-### 3.3 Example: FIFO Cache Operations and State Changes
+### 3.3 Key Snapshot (`getKeys` operation)
+
+`getKeys()` returns keys in FIFO insertion order. Updating an existing key
+changes its value but keeps its current position.
+
+### 3.4 Example: FIFO Cache Operations and State Changes
 
 1. Initial State: FIFOCache<maxCount: 3>
 

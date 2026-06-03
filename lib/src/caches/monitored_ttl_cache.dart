@@ -177,6 +177,37 @@ class MonitoredTTLCache<K, V> extends ThreadSafeTTLCacheInterface<K, V>
   }
 
   @override
+  Future<V> getOrCompute(
+    K key,
+    FutureOr<V> Function() valueFactory, {
+    Duration? ttl,
+  }) async {
+    if (ttl != null && ttl <= Duration.zero) {
+      throw ArgumentError('ttl must be greater than zero.');
+    }
+    var found = false;
+    return await monitoredGet(key, () async {
+          return await _lock.synchronized(() async {
+            final entry = _cache[key];
+            final now = _clock();
+            if (entry != null) {
+              if (entry.expiry.isAfter(now)) {
+                found = true;
+                return entry.value;
+              }
+              _cache.remove(key);
+              metrics.recordEviction();
+            }
+            final value = await valueFactory();
+            _evictIfNeeded();
+            _cache[key] = _TTLEntry(value, _clock().add(ttl ?? _globalTTL));
+            return value;
+          });
+        }, found: () => found)
+        as V;
+  }
+
+  @override
   Future<void> remove(K key) async {
     await _lock.synchronized(() {
       if (_cache.remove(key) != null) {

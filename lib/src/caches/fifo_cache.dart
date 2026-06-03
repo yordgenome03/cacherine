@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:collection';
 import 'package:synchronized/synchronized.dart';
 
@@ -74,6 +75,19 @@ class FIFOCache<K, V> extends ThreadSafeCache<K, V> {
         ); // Remove the oldest element following FIFO
       }
       _cache[key] = value; // Update value (order remains unchanged)
+    });
+  }
+
+  @override
+  Future<V> getOrCompute(K key, FutureOr<V> Function() valueFactory) async {
+    return await _lock.synchronized(() async {
+      if (_cache.containsKey(key)) return _cache[key] as V;
+      final value = await valueFactory();
+      if (_cache.length >= maxSize) {
+        _cache.remove(_cache.keys.first);
+      }
+      _cache[key] = value;
+      return value;
     });
   }
 

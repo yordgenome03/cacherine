@@ -47,7 +47,12 @@ The eviction policy of the Ephemeral FIFO Cache follows these rules:
    - If the cache exceeds the `[maxSize]`, the oldest data is removed based on the FIFO policy.
    - Add the new key-value pair to the cache.
 
-### 3.3 Example: Ephemeral FIFO Cache Operations and State Changes
+### 3.3 Key Snapshot (`getKeys` operation)
+
+`getKeys()` returns the remaining keys in FIFO insertion order. Keys already
+retrieved by `get()` are removed from the cache and are not included.
+
+### 3.4 Example: Ephemeral FIFO Cache Operations and State Changes
 
 1. Initial State: EphemeralFIFOCache<maxCount: 3>
 

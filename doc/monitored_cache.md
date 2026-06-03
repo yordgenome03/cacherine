@@ -109,6 +109,12 @@ metrics for custom dashboards or alert integrations. It returns a
 `CacheMetricsSnapshot` with hit/miss rates, average latency, p50/p95/p99
 latency, eviction rate, total requests, and capture time.
 
+`CacheMetrics` uses bounded sample storage: it keeps the most recent 1,000
+latency samples and 10,000 eviction timestamps. Hit, miss, and total request
+counters are not capped. Average latency and percentiles are calculated from the
+retained latency samples; eviction rates are calculated from retained eviction
+timestamps inside the requested window.
+
 ```dart
 import 'package:cacherine/cacherine.dart';
 
@@ -125,6 +131,15 @@ Future<void> main() async {
   cache.dispose();
 }
 ```
+
+## Lifecycle
+
+Monitored caches implement `Disposable` because they own an alert-monitoring
+timer. `MonitoredTTLCache` may also own a TTL sweep timer. Call `dispose()` when
+the cache is no longer needed to stop those background timers.
+
+`dispose()` is idempotent. Cache operations continue to work after disposal, but
+alert checks and background TTL sweeps stop.
 
 ## Why Use MonitoredCache?
 

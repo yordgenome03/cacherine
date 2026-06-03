@@ -104,6 +104,17 @@ void main() async {
 }
 ```
 
+Use `getOrSet()` on synchronous caches or `getOrCompute()` on async caches when
+you want to populate a missing key from a callback:
+
+```dart
+final cache = LRUCache<String, String>(100);
+
+final value = await cache.getOrCompute('profile:42', () async {
+  return 'computed value';
+});
+```
+
 ### TTL Usage
 
 Entries expire automatically once their TTL elapses. Use `ttl:` on individual `set()` calls to override the global default for a single entry.
@@ -177,6 +188,10 @@ The standard and monitored cache variants use `Future` APIs and an internal lock
 
 `get()` returns `null` when a key is absent. Use `containsKey()` to distinguish a missing key from a stored `null` value, such as `Cache<String, String?>`. `containsKey()` does not update LRU/MRU/LFU access state, does not remove entries from EphemeralFIFO caches, and does not record monitored cache hit/miss metrics. For TTL caches, expired entries return `false`.
 
+`getOrSet()` and `getOrCompute()` use `containsKey()` semantics before reading, so stored `null` values are treated as present. On monitored caches, `getOrCompute()` records one hit when the key already exists and one miss when the callback is used to populate the key.
+
+`getKeys()` returns a snapshot. FIFO and TTL caches return insertion order for live entries. LRU and MRU caches return least-to-most recently used order. Ephemeral FIFO caches omit entries already consumed by `get()`. LFU cache key order is unspecified.
+
 Use `SimpleTTLCacheInterface` or `ThreadSafeTTLCacheInterface` when code needs an abstraction that still exposes per-entry TTL overrides:
 
 ```dart
@@ -187,6 +202,16 @@ await cache.set('token', 'abc123', ttl: const Duration(seconds: 30));
 ```
 
 `toString()` is synchronous. It returns a point-in-time representation of the cache contents and should be treated as diagnostic output, not as a synchronized cache operation.
+
+Caches that implement `Disposable` own a background timer for sweeping expired
+entries, checking alert thresholds, or both. Call `dispose()` when the cache is
+no longer needed. It is idempotent; after disposal, cache read/write operations
+continue to work, but background sweep and alert monitoring stop.
+
+`CacheMetrics` keeps bounded in-memory samples: the most recent 1,000 latency
+samples and 10,000 eviction timestamps. Hit, miss, and total request counters are
+not capped. Latency percentiles and eviction rates are calculated from the
+retained samples.
 
 ## API Reference
 

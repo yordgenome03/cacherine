@@ -138,6 +138,29 @@ class TTLCache<K, V> extends ThreadSafeTTLCacheInterface<K, V>
   }
 
   @override
+  Future<V> getOrCompute(
+    K key,
+    FutureOr<V> Function() valueFactory, {
+    Duration? ttl,
+  }) async {
+    if (ttl != null && ttl <= Duration.zero) {
+      throw ArgumentError('ttl must be greater than zero.');
+    }
+    return await _lock.synchronized(() async {
+      final entry = _cache[key];
+      final now = _clock();
+      if (entry != null) {
+        if (entry.expiry.isAfter(now)) return entry.value;
+        _cache.remove(key);
+      }
+      final value = await valueFactory();
+      _evictIfNeeded();
+      _cache[key] = _TTLEntry(value, _clock().add(ttl ?? _globalTTL));
+      return value;
+    });
+  }
+
+  @override
   Future<void> remove(K key) async {
     await _lock.synchronized(() {
       _cache.remove(key);

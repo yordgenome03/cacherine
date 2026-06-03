@@ -39,6 +39,22 @@ abstract class SimpleCache<K, V> {
   /// - `value`: The value of the data to store.
   void set(K key, V value);
 
+  /// **Returns the existing value for [key], or stores and returns a new one.**
+  ///
+  /// Presence is checked with [containsKey], so a stored `null` value is treated
+  /// as an existing value when `V` is nullable.
+  ///
+  /// Implementations that update access state from [get] apply the same access
+  /// behavior when the key already exists.
+  V getOrSet(K key, V Function() valueFactory) {
+    if (containsKey(key)) {
+      return get(key) as V;
+    }
+    final value = valueFactory();
+    set(key, value);
+    return value;
+  }
+
   /// **Removes the entry with the given key from the cache.**
   ///
   /// - If the key does not exist, this call is a no-op.

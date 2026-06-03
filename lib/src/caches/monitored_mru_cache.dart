@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:collection';
 import 'package:synchronized/synchronized.dart';
 
@@ -120,6 +121,29 @@ class MonitoredMRUCache<K, V> extends ThreadSafeCache<K, V>
       // Insert the key to mark it as the most recently used
       _cache[key] = value;
     });
+  }
+
+  @override
+  Future<V> getOrCompute(K key, FutureOr<V> Function() valueFactory) async {
+    var found = false;
+    return await monitoredGet(key, () async {
+          return await _lock.synchronized(() async {
+            if (_cache.containsKey(key)) {
+              found = true;
+              final value = _cache.remove(key);
+              _cache[key] = value as V;
+              return value;
+            }
+            final value = await valueFactory();
+            if (_cache.length >= maxSize) {
+              _evictMRUEntry();
+              metrics.recordEviction();
+            }
+            _cache[key] = value;
+            return value;
+          });
+        }, found: () => found)
+        as V;
   }
 
   /// Performs eviction (removal) using the MRU (Most Recently Used) policy.
