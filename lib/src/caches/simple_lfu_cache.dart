@@ -84,6 +84,12 @@ class SimpleLFUCache<K, V> extends SimpleCache<K, V> {
     return node.value;
   }
 
+  /// Retrieves [key] without incrementing its frequency.
+  ///
+  /// **This method is not thread-safe.**
+  @override
+  V? peek(K key) => _keyMap[key]?.value;
+
   /// Checks whether [key] exists in the cache without incrementing its frequency.
   ///
   /// **This method is not thread-safe.**

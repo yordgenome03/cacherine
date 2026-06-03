@@ -56,6 +56,14 @@ class MRUCache<K, V> extends ThreadSafeCache<K, V> {
     });
   }
 
+  /// Retrieves [key] without updating MRU order.
+  ///
+  /// **This method is async-safe.**
+  @override
+  Future<V?> peek(K key) async {
+    return await _lock.synchronized(() => _cache[key]);
+  }
+
   /// Checks whether [key] exists in the cache without updating MRU order.
   ///
   /// **This method is async-safe.**

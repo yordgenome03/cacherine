@@ -108,6 +108,19 @@ class TTLCache<K, V> extends ThreadSafeTTLCacheInterface<K, V>
   }
 
   @override
+  Future<V?> peek(K key) async {
+    return await _lock.synchronized(() {
+      final entry = _cache[key];
+      if (entry == null) return null;
+      if (!entry.expiry.isAfter(_clock())) {
+        _cache.remove(key);
+        return null;
+      }
+      return entry.value;
+    });
+  }
+
+  @override
   Future<bool> containsKey(K key) async {
     return await _lock.synchronized(() {
       final entry = _cache[key];

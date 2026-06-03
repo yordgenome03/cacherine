@@ -11,6 +11,9 @@ class _DefaultThreadSafeCache<K, V> extends ThreadSafeCache<K, V> {
   Future<V?> get(K key) async => _cache[key];
 
   @override
+  Future<V?> peek(K key) async => _cache[key];
+
+  @override
   Future<bool> containsKey(K key) async => _cache.containsKey(key);
 
   @override
@@ -39,6 +42,9 @@ class _DefaultThreadSafeTTLCache<K, V>
 
   @override
   Future<V?> get(K key) async => _cache[key];
+
+  @override
+  Future<V?> peek(K key) async => _cache[key];
 
   @override
   Future<bool> containsKey(K key) async => _cache.containsKey(key);

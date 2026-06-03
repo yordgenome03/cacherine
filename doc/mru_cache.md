@@ -46,7 +46,12 @@ The eviction policy of MRU Cache follows these rules:
 last key in the snapshot is the next eviction candidate if a new key is inserted
 while the cache is full.
 
-### 3.4 Cache-Aside Population (`getOrSet` / `getOrCompute`)
+### 3.4 Non-Mutating Read (`peek` operation)
+
+`peek()` returns the value for a key without moving it to the most recently used
+position. It returns `null` when the key is missing.
+
+### 3.5 Cache-Aside Population (`getOrSet` / `getOrCompute`)
 
 Use `getOrSet()` on `SimpleMRUCache` or `getOrCompute()` on `MRUCache` and
 `MonitoredMRUCache` to return an existing value, or compute and store a value
@@ -54,7 +59,7 @@ when the key is missing. Existing keys are treated as successful reads and move
 to the most recently used position. Newly computed values are inserted like
 `set()` and can trigger MRU eviction when the cache is full.
 
-### 3.5 Example: MRUCache Operations and State Changes
+### 3.6 Example: MRUCache Operations and State Changes
 
 1. Initial State: MRUCache<maxCount: 3>
 

@@ -3,10 +3,16 @@
 ### Documentation
 
 - Expanded the runnable example and README cache-aside snippets to cover both `getOrSet()` and TTL-aware `getOrCompute()`.
+- Documented the non-mutating `peek()` API across README and cache guides.
+
+### New Features
+
+- Added `peek()` to simple, async-safe, monitored, and TTL cache variants so callers can read values without updating cache eviction state.
 
 ### Maintenance
 
 - Updated dependency constraints for `synchronized` and `lints` to the newest resolvable versions for the current SDK range.
+- Added regression coverage for `peek()` nullable-value behavior, policy side effects, monitored traffic metrics, and TTL expiry.
 
 ## 2.2.0 - Simple TTL Cache, Cache-Aside Helpers, and Contract Coverage
 

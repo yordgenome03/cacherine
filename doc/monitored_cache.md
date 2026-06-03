@@ -115,6 +115,10 @@ counters are not capped. Average latency and percentiles are calculated from the
 retained latency samples; eviction rates are calculated from retained eviction
 timestamps inside the requested window.
 
+`peek()` and `containsKey()` do not record hit/miss/latency metrics. Use
+`peek()` when you need to inspect a value without updating cache policy state
+such as LRU/MRU order, LFU frequency, or Ephemeral FIFO consumption.
+
 ```dart
 import 'package:cacherine/cacherine.dart';
 

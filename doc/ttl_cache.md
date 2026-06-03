@@ -56,7 +56,13 @@ When `maxSize` is specified, `set()` enforces a cap on the number of **live** (n
 
 Use `containsKey()` to distinguish a missing key from a stored `null` value.
 
-### 3.3 Data Insertion (`set` operation)
+### 3.3 Non-Mutating Read (`peek` operation)
+
+`peek()` returns a live value without changing FIFO capacity order. If the key
+is missing or expired, it returns `null`; expired entries are removed lazily.
+Monitored TTL caches do not record hit/miss/latency metrics for `peek()`.
+
+### 3.4 Data Insertion (`set` operation)
 
 1. If the key already exists, remove it first (so the refreshed entry gets a new insertion timestamp, affecting FIFO order).
 2. If `maxSize` is set and the number of live entries would reach `maxSize`:
@@ -64,19 +70,19 @@ Use `containsKey()` to distinguish a missing key from a stored `null` value.
    b. If still at or over capacity, remove the oldest-inserted live entry (FIFO).
 3. Store the entry with expiry = `clock() + ttl`.
 
-### 3.4 Cache-Aside Population (`getOrSet` / `getOrCompute`)
+### 3.5 Cache-Aside Population (`getOrSet` / `getOrCompute`)
 
 Use `getOrSet()` on `SimpleTTLCache` or `getOrCompute()` on `TTLCache` and
 `MonitoredTTLCache` to return an existing live value or populate a missing or
 expired key from a callback. The optional `ttl:` argument applies only when the
 callback value is stored.
 
-### 3.5 Key Snapshot (`getKeys` operation)
+### 3.6 Key Snapshot (`getKeys` operation)
 
 `getKeys()` returns only live keys in insertion order. Expired entries are
 omitted even if they have not yet been swept from memory.
 
-### 3.6 Example: TTLCache Operations and State Changes
+### 3.7 Example: TTLCache Operations and State Changes
 
 Setup: `TTLCache(ttl: Duration(seconds: 10), maxSize: 3)`  
 (clock starts at t=0)
@@ -174,6 +180,7 @@ cache.dispose();
 | `set(K key, V value, {Duration? ttl})` | Store an entry. `ttl:` overrides the global TTL for this entry. |
 | `getOrCompute(K key, callback, {Duration? ttl})` | Return an existing live value, or compute and store a new value. `ttl:` applies to newly stored values only. |
 | `get(K key)` | Retrieve a value, or `null` if missing or expired (lazy eviction). |
+| `peek(K key)` | Retrieve a value without changing cache policy state, or `null` if missing or expired (lazy eviction). |
 | `containsKey(K key)` | Return whether a non-expired entry exists for the key. Expired entries are removed and return `false`. |
 | `getKeys()` | Return only keys whose TTL has not elapsed. |
 | `remove(K key)` | Remove a single entry; no-op if absent. |

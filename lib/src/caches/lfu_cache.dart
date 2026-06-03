@@ -93,6 +93,14 @@ class LFUCache<K, V> extends ThreadSafeCache<K, V> {
     });
   }
 
+  /// Retrieves [key] without incrementing its frequency.
+  ///
+  /// **This method is async-safe.**
+  @override
+  Future<V?> peek(K key) async {
+    return await _lock.synchronized(() => _keyMap[key]?.value);
+  }
+
   /// Checks whether [key] exists in the cache without incrementing its frequency.
   ///
   /// **This method is async-safe.**

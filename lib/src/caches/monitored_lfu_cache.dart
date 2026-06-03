@@ -122,6 +122,14 @@ class MonitoredLFUCache<K, V> extends ThreadSafeCache<K, V>
     }, found: () => found);
   }
 
+  /// Retrieves [key] without incrementing frequency or recording metrics.
+  ///
+  /// **This method is async-safe**.
+  @override
+  Future<V?> peek(K key) async {
+    return await _lock.synchronized(() => _keyMap[key]?.value);
+  }
+
   /// Checks whether [key] exists without incrementing frequency or recording metrics.
   ///
   /// **This method is async-safe**.

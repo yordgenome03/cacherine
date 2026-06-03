@@ -44,6 +44,12 @@ class SimpleFIFOCache<K, V> extends SimpleCache<K, V> {
     return _cache[key];
   }
 
+  /// Retrieves [key] without changing FIFO eviction order.
+  ///
+  /// **This method is not thread-safe.**
+  @override
+  V? peek(K key) => _cache[key];
+
   /// Checks whether [key] exists in the cache.
   ///
   /// **This method is not thread-safe.**

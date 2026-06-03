@@ -91,6 +91,14 @@ class MonitoredFIFOCache<K, V> extends ThreadSafeCache<K, V>
     }, found: () => found);
   }
 
+  /// Retrieves [key] without changing FIFO order or recording metrics.
+  ///
+  /// **This method is async-safe**.
+  @override
+  Future<V?> peek(K key) async {
+    return await _lock.synchronized(() => _cache[key]);
+  }
+
   /// Checks whether [key] exists in the cache without recording hit/miss metrics.
   ///
   /// **This method is async-safe**.

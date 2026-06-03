@@ -45,6 +45,12 @@ class SimpleEphemeralFIFOCache<K, V> extends SimpleCache<K, V> {
     return _cache.remove(key); // Remove after retrieval
   }
 
+  /// Retrieves [key] without removing it from the cache.
+  ///
+  /// **This method is not thread-safe.**
+  @override
+  V? peek(K key) => _cache[key];
+
   /// Checks whether [key] exists in the cache without removing it.
   ///
   /// **This method is not thread-safe.**
