@@ -52,6 +52,7 @@ void main() {
 
       expect(cache.purgeExpired(), equals(1));
       expect(cache.getKeys(), equals(['live']));
+      expect(cache.purgeExpired(), equals(0));
     });
 
     test('validates per-entry TTL overrides through the interface', () {
@@ -125,6 +126,7 @@ void main() {
 
         expect(await cache.purgeExpired(), equals(1));
         expect(await cache.getKeys(), equals(['live']));
+        expect(await cache.purgeExpired(), equals(0));
       },
     );
 
@@ -147,6 +149,13 @@ void main() {
 
         expect(await ttlCache.purgeExpired(), equals(1));
         expect(await ttlCache.getKeys(), equals(['live']));
+        expect(await ttlCache.purgeExpired(), equals(0));
+        expect(
+          cache.metrics.snapshot(const Duration(minutes: 1)).evictionsPerMinute,
+          equals(1),
+        );
+        expect(cache.metrics.hits, equals(0));
+        expect(cache.metrics.misses, equals(0));
       },
     );
 
