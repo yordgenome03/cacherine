@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:collection';
 import 'package:synchronized/synchronized.dart';
 
@@ -153,6 +154,34 @@ class MonitoredLFUCache<K, V> extends ThreadSafeCache<K, V>
       _freqMap.putIfAbsent(1, LinkedList<_LFUNode<K, V>>.new).addFirst(node);
       _minFreq = 1;
     });
+  }
+
+  @override
+  Future<V> getOrCompute(K key, FutureOr<V> Function() valueFactory) async {
+    var found = false;
+    return await monitoredGet(key, () async {
+          return await _lock.synchronized(() async {
+            final existing = _keyMap[key];
+            if (existing != null) {
+              found = true;
+              _promoteFreq(existing);
+              return existing.value;
+            }
+            final value = await valueFactory();
+            if (_keyMap.length >= maxSize) {
+              _evictLFUEntry();
+              metrics.recordEviction();
+            }
+            final node = _LFUNode(key, value, 1);
+            _keyMap[key] = node;
+            _freqMap
+                .putIfAbsent(1, LinkedList<_LFUNode<K, V>>.new)
+                .addFirst(node);
+            _minFreq = 1;
+            return value;
+          });
+        }, found: () => found)
+        as V;
   }
 
   /// Performs eviction using the LFU (Least Frequently Used) policy.

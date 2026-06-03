@@ -64,7 +64,19 @@ Use `containsKey()` to distinguish a missing key from a stored `null` value.
    b. If still at or over capacity, remove the oldest-inserted live entry (FIFO).
 3. Store the entry with expiry = `clock() + ttl`.
 
-### 3.4 Example: TTLCache Operations and State Changes
+### 3.4 Cache-Aside Population (`getOrSet` / `getOrCompute`)
+
+Use `getOrSet()` on `SimpleTTLCache` or `getOrCompute()` on `TTLCache` and
+`MonitoredTTLCache` to return an existing live value or populate a missing or
+expired key from a callback. The optional `ttl:` argument applies only when the
+callback value is stored.
+
+### 3.5 Key Snapshot (`getKeys` operation)
+
+`getKeys()` returns only live keys in insertion order. Expired entries are
+omitted even if they have not yet been swept from memory.
+
+### 3.6 Example: TTLCache Operations and State Changes
 
 Setup: `TTLCache(ttl: Duration(seconds: 10), maxSize: 3)`  
 (clock starts at t=0)
@@ -125,7 +137,9 @@ final cache = TTLCache<String, String>(
 cache.dispose(); // cancel sweep timer
 ```
 
-`dispose()` is idempotent — calling it multiple times is safe. After `dispose()`, `get()` and `set()` continue to work; only the background sweep stops.
+`dispose()` is idempotent — calling it multiple times is safe. After
+`dispose()`, `get()`, `set()`, `getOrCompute()`, `remove()`, and `clear()`
+continue to work; only the background sweep stops.
 
 ## 6. Monitoring
 
@@ -158,6 +172,7 @@ cache.dispose();
 | Method | Description |
 |--------|-------------|
 | `set(K key, V value, {Duration? ttl})` | Store an entry. `ttl:` overrides the global TTL for this entry. |
+| `getOrCompute(K key, callback, {Duration? ttl})` | Return an existing live value, or compute and store a new value. `ttl:` applies to newly stored values only. |
 | `get(K key)` | Retrieve a value, or `null` if missing or expired (lazy eviction). |
 | `containsKey(K key)` | Return whether a non-expired entry exists for the key. Expired entries are removed and return `false`. |
 | `getKeys()` | Return only keys whose TTL has not elapsed. |

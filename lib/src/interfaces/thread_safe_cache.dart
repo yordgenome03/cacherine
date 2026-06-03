@@ -1,3 +1,5 @@
+import 'dart:async';
+
 /// **Async-safe Cache Interface**
 ///
 /// An abstract class defining basic cache operations for asynchronous use.
@@ -40,6 +42,22 @@ abstract class ThreadSafeCache<K, V> {
   /// - `key`: The key for the data to store.
   /// - `value`: The value of the data to store.
   Future<void> set(K key, V value);
+
+  /// **Returns the existing value for [key], or computes, stores, and returns a new one.**
+  ///
+  /// Presence is checked with [containsKey], so a stored `null` value is treated
+  /// as an existing value when `V` is nullable.
+  ///
+  /// Implementations may override this method to make the check/compute/store
+  /// sequence atomic for their synchronization model.
+  Future<V> getOrCompute(K key, FutureOr<V> Function() valueFactory) async {
+    if (await containsKey(key)) {
+      return await get(key) as V;
+    }
+    final value = await valueFactory();
+    await set(key, value);
+    return value;
+  }
 
   /// **Removes the entry with the given key from the cache (asynchronously).**
   ///

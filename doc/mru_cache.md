@@ -40,7 +40,13 @@ The eviction policy of MRU Cache follows these rules:
    - If the cache exceeds the [maxSize], evict the most recently accessed entry based on the MRU policy.
    - Add the new key-value pair.
 
-### 3.3 Example: MRUCache Operations and State Changes
+### 3.3 Key Snapshot (`getKeys` operation)
+
+`getKeys()` returns keys from least recently used to most recently used. The
+last key in the snapshot is the next eviction candidate if a new key is inserted
+while the cache is full.
+
+### 3.4 Example: MRUCache Operations and State Changes
 
 1. Initial State: MRUCache<maxCount: 3>
 

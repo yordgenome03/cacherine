@@ -40,7 +40,12 @@ The eviction policy of an LRU Cache follows these rules:
    - If the cache exceeds the [maxSize], evict the least recently accessed entry based on the LRU policy.
    - Add the new key-value pair.
 
-### 3.3 Example: LRUCache Operations and State Changes
+### 3.3 Key Snapshot (`getKeys` operation)
+
+`getKeys()` returns keys from least recently used to most recently used. A
+successful `get()` or `set()` of an existing key moves that key to the end.
+
+### 3.4 Example: LRUCache Operations and State Changes
 
 1. Initial State: LRUCache<maxCount: 3>
 

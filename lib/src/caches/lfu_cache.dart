@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:collection';
 import 'package:synchronized/synchronized.dart';
 
@@ -137,6 +138,30 @@ class LFUCache<K, V> extends ThreadSafeCache<K, V> {
       _keyMap[key] = node;
       _freqMap.putIfAbsent(1, LinkedList<_LFUNode<K, V>>.new).addFirst(node);
       _minFreq = 1;
+    });
+  }
+
+  @override
+  Future<V> getOrCompute(K key, FutureOr<V> Function() valueFactory) async {
+    return await _lock.synchronized(() async {
+      final existing = _keyMap[key];
+      if (existing != null) {
+        _promoteFreq(existing);
+        return existing.value;
+      }
+      final value = await valueFactory();
+      if (_keyMap.length >= maxSize) {
+        final evictBucket = _freqMap[_minFreq]!;
+        final victim = evictBucket.last;
+        victim.unlink();
+        if (evictBucket.isEmpty) _freqMap.remove(_minFreq);
+        _keyMap.remove(victim.key);
+      }
+      final node = _LFUNode(key, value, 1);
+      _keyMap[key] = node;
+      _freqMap.putIfAbsent(1, LinkedList<_LFUNode<K, V>>.new).addFirst(node);
+      _minFreq = 1;
+      return value;
     });
   }
 

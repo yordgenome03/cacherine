@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:collection';
 import 'package:synchronized/synchronized.dart';
 
@@ -82,6 +83,23 @@ class LRUCache<K, V> extends ThreadSafeCache<K, V> {
         ); // Remove the least recently used element
       }
       _cache[key] = value;
+    });
+  }
+
+  @override
+  Future<V> getOrCompute(K key, FutureOr<V> Function() valueFactory) async {
+    return await _lock.synchronized(() async {
+      if (_cache.containsKey(key)) {
+        final value = _cache.remove(key);
+        _cache[key] = value as V;
+        return value;
+      }
+      final value = await valueFactory();
+      if (_cache.length >= maxSize) {
+        _cache.remove(_cache.keys.first);
+      }
+      _cache[key] = value;
+      return value;
     });
   }
 
