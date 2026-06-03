@@ -17,6 +17,7 @@ export 'src/caches/simple_fifo_cache.dart';
 export 'src/caches/simple_lru_cache.dart';
 export 'src/caches/simple_mru_cache.dart';
 export 'src/caches/simple_lfu_cache.dart';
+export 'src/caches/simple_ttl_cache.dart';
 
 // Standard Caches
 export 'src/caches/ephemeral_fifo_cache.dart';

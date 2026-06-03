@@ -23,6 +23,8 @@ A `TTLCache` stores each entry together with an **expiry timestamp** computed at
 
 Lazy eviction is the correctness guarantee — the cache is always accurate. The background sweep is purely a memory optimisation for use cases where keys may expire without ever being accessed again.
 
+`SimpleTTLCache` provides the same expiry, per-entry TTL, `containsKey()`, and optional `maxSize` behavior for synchronous single-threaded usage. It does not start a background sweep timer and does not implement `Disposable`; expired entries are removed lazily or ignored by read APIs.
+
 ### 2.3 Global TTL vs Per-Entry TTL Override
 
 ```
@@ -90,7 +92,23 @@ Setup: `TTLCache(ttl: Duration(seconds: 10), maxSize: 3)`
    |-----|--------|
    | D   | t=21   |
 
-## 4. Lifecycle and Disposal
+## 4. Synchronous Usage
+
+Use `SimpleTTLCache` when you need a synchronous cache and do not need async call serialization:
+
+```dart
+final cache = SimpleTTLCache<String, String>(
+  ttl: const Duration(minutes: 5),
+  maxSize: 100,
+);
+
+cache.set('token', 'abc123');
+cache.set('rate', '42', ttl: const Duration(seconds: 30));
+
+print(cache.get('token'));
+```
+
+## 5. Lifecycle and Disposal
 
 `TTLCache` implements `Disposable`. When a `sweepInterval` is configured, a background `Timer.periodic` is started in the constructor. Call `dispose()` to cancel it and stop further sweeps:
 
@@ -107,7 +125,7 @@ cache.dispose(); // cancel sweep timer
 
 `dispose()` is idempotent — calling it multiple times is safe. After `dispose()`, `get()` and `set()` continue to work; only the background sweep stops.
 
-## 5. Monitoring
+## 6. Monitoring
 
 Use `MonitoredTTLCache` when you need TTL expiry together with `CacheMetrics`,
 `CacheStatsDashboard`, or alert thresholds. It supports the same TTL options as
@@ -133,7 +151,7 @@ print(snapshot.hitRate);
 cache.dispose();
 ```
 
-## 6. API Reference
+## 7. API Reference
 
 | Method | Description |
 |--------|-------------|
@@ -143,18 +161,18 @@ cache.dispose();
 | `getKeys()` | Return only keys whose TTL has not elapsed. |
 | `remove(K key)` | Remove a single entry; no-op if absent. |
 | `clear()` | Remove all entries. |
-| `dispose()` | Cancel the background sweep timer. Idempotent. |
+| `dispose()` | Cancel the background sweep timer. Idempotent. Supported by `TTLCache` and `MonitoredTTLCache`; not supported by `SimpleTTLCache`. |
 
-## 7. Constructor Parameters
+## 8. Constructor Parameters
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
 | `ttl` | `Duration` | Yes | Global TTL applied to all `set()` calls. |
 | `maxSize` | `int?` | No | Maximum number of live entries. No limit if omitted. |
-| `sweepInterval` | `Duration?` | No | Interval for background expired-entry removal. No sweep if omitted. |
+| `sweepInterval` | `Duration?` | No | Interval for background expired-entry removal. No sweep if omitted. Supported by `TTLCache` and `MonitoredTTLCache`; not supported by `SimpleTTLCache`. |
 | `clock` | `DateTime Function()?` | No | Time source. Defaults to `DateTime.now`. Inject a fake clock in tests. |
 
-## 8. Suitable Use Cases
+## 9. Suitable Use Cases
 
 TTL Cache is well-suited for data with a natural validity window:
 
@@ -163,7 +181,7 @@ TTL Cache is well-suited for data with a natural validity window:
 - **Computed values with bounded validity**: Cache expensive computations that are known to be stale after a fixed interval (e.g., exchange rates, configuration snapshots).
 - **Rate-limiting state**: Track per-key counters that should reset after a time window.
 
-## 9. Choosing Between TTLCache and Capacity-Based Caches
+## 10. Choosing Between TTLCache and Capacity-Based Caches
 
 | | Capacity-based (FIFO/LRU/etc.) | TTLCache |
 |-|-------------------------------|----------|
