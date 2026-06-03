@@ -240,5 +240,16 @@ void main() {
 
       expect(cache.toString(), isNot(contains('a: 1')));
     });
+
+    test('toString() includes live entries', () {
+      final cache = SimpleTTLCache<String, String>(
+        ttl: const Duration(seconds: 10),
+        clock: fakeClock,
+      );
+
+      cache.set('a', '1');
+
+      expect(cache.toString(), contains('a: 1'));
+    });
   });
 }
