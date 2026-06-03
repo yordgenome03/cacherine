@@ -128,6 +128,15 @@ class MonitoredTTLCache<K, V> extends ThreadSafeTTLCacheInterface<K, V>
   }
 
   @override
+  Future<int> purgeExpired() async {
+    return await _lock.synchronized(() {
+      final evicted = _removeExpired(_clock());
+      _recordEvictions(evicted);
+      return evicted;
+    });
+  }
+
+  @override
   Future<V?> get(K key) async {
     var found = false;
     return await monitoredGet(key, () async {

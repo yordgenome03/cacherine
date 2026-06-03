@@ -38,6 +38,22 @@ void main() {
       expect(cache.containsKey('short'), isFalse);
     });
 
+    test('allows expired entries to be purged through the interface', () {
+      final SimpleTTLCacheInterface<String, String> cache =
+          SimpleTTLCache<String, String>(
+            ttl: const Duration(seconds: 30),
+            clock: fakeClock,
+          );
+
+      cache.set('expired', 'old', ttl: const Duration(seconds: 5));
+      cache.set('live', 'new');
+
+      fakeNow = fakeNow.add(const Duration(seconds: 10));
+
+      expect(cache.purgeExpired(), equals(1));
+      expect(cache.getKeys(), equals(['live']));
+    });
+
     test('validates per-entry TTL overrides through the interface', () {
       final SimpleTTLCacheInterface<String, String> cache =
           SimpleTTLCache<String, String>(
@@ -92,6 +108,47 @@ void main() {
       expect(await cache.containsKey('default'), isTrue);
       expect(await cache.containsKey('short'), isFalse);
     });
+
+    test(
+      'allows expired entries to be purged through TTLCache interface',
+      () async {
+        final ThreadSafeTTLCacheInterface<String, String> cache =
+            TTLCache<String, String>(
+              ttl: const Duration(seconds: 30),
+              clock: fakeClock,
+            );
+
+        await cache.set('expired', 'old', ttl: const Duration(seconds: 5));
+        await cache.set('live', 'new');
+
+        fakeNow = fakeNow.add(const Duration(seconds: 10));
+
+        expect(await cache.purgeExpired(), equals(1));
+        expect(await cache.getKeys(), equals(['live']));
+      },
+    );
+
+    test(
+      'allows expired entries to be purged through MonitoredTTLCache interface',
+      () async {
+        final cache = MonitoredTTLCache<String, String>(
+          ttl: const Duration(seconds: 30),
+          clock: fakeClock,
+          alertConfig: CacheAlertConfig(notifyCallback: (_) {}),
+        );
+        addTearDown(cache.dispose);
+
+        final ThreadSafeTTLCacheInterface<String, String> ttlCache = cache;
+
+        await ttlCache.set('expired', 'old', ttl: const Duration(seconds: 5));
+        await ttlCache.set('live', 'new');
+
+        fakeNow = fakeNow.add(const Duration(seconds: 10));
+
+        expect(await ttlCache.purgeExpired(), equals(1));
+        expect(await ttlCache.getKeys(), equals(['live']));
+      },
+    );
 
     test(
       'allows per-entry TTL overrides through MonitoredTTLCache interface',

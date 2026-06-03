@@ -72,6 +72,9 @@ class _DefaultThreadSafeTTLCache<K, V>
   Future<bool> containsKey(K key) async => _cache.containsKey(key);
 
   @override
+  Future<int> purgeExpired() async => 0;
+
+  @override
   Future<void> set(K key, V value, {Duration? ttl}) async {
     _cache[key] = value;
     setTtls[key] = ttl;

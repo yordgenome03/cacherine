@@ -51,9 +51,15 @@ class SimpleTTLCache<K, V> extends SimpleTTLCacheInterface<K, V> {
 
   bool _isExpired(_SimpleTTLEntry<V> entry) => !entry.expiry.isAfter(_clock());
 
-  void _removeExpiredEntries() {
+  int _removeExpiredEntries() {
     final now = _clock();
-    _cache.removeWhere((_, entry) => !entry.expiry.isAfter(now));
+    var removed = 0;
+    _cache.removeWhere((_, entry) {
+      final expired = !entry.expiry.isAfter(now);
+      if (expired) removed++;
+      return expired;
+    });
+    return removed;
   }
 
   void _evictIfNeeded() {
@@ -77,6 +83,12 @@ class SimpleTTLCache<K, V> extends SimpleTTLCacheInterface<K, V> {
         .map((e) => e.key)
         .toList();
   }
+
+  /// Removes expired entries and returns how many entries were removed.
+  ///
+  /// **This method is not thread-safe.**
+  @override
+  int purgeExpired() => _removeExpiredEntries();
 
   /// Retrieves the value associated with the specified key.
   ///

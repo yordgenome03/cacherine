@@ -185,6 +185,37 @@ void main() {
     });
   });
 
+  group('TTLCache - purgeExpired()', () {
+    test('removes expired entries and returns the removed count', () async {
+      final cache = TTLCache<String, String>(
+        ttl: const Duration(seconds: 10),
+        clock: fakeClock,
+      );
+
+      await cache.set('expired-a', '1', ttl: const Duration(seconds: 5));
+      await cache.set('expired-b', '2', ttl: const Duration(seconds: 5));
+      await cache.set('live', '3');
+
+      fakeNow = fakeNow.add(const Duration(seconds: 6));
+
+      expect(await cache.purgeExpired(), equals(2));
+      expect(await cache.getKeys(), equals(['live']));
+      expect(await cache.get('live'), equals('3'));
+    });
+
+    test('returns zero when no entries are expired', () async {
+      final cache = TTLCache<String, String>(
+        ttl: const Duration(seconds: 10),
+        clock: fakeClock,
+      );
+
+      await cache.set('key', 'value');
+
+      expect(await cache.purgeExpired(), equals(0));
+      expect(await cache.getKeys(), equals(['key']));
+    });
+  });
+
   group('TTLCache - remove() and clear()', () {
     test('remove() deletes a specific entry', () async {
       final cache = TTLCache<String, String>(
