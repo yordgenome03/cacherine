@@ -118,6 +118,7 @@ timestamps inside the requested window.
 `peek()` and `containsKey()` do not record hit/miss/latency metrics. Use
 `peek()` when you need to inspect a value without updating cache policy state
 such as LRU/MRU order, LFU frequency, or Ephemeral FIFO consumption.
+`size`, `isEmpty`, and `isNotEmpty` also do not record traffic metrics.
 
 ```dart
 import 'package:cacherine/cacherine.dart';

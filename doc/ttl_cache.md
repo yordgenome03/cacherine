@@ -82,7 +82,12 @@ callback value is stored.
 `getKeys()` returns only live keys in insertion order. Expired entries are
 omitted even if they have not yet been swept from memory.
 
-### 3.7 Example: TTLCache Operations and State Changes
+### 3.7 Occupancy (`size` / `isEmpty` / `isNotEmpty` operations)
+
+`size`, `isEmpty`, and `isNotEmpty` report only live entries. Expired entries
+are omitted even if they have not yet been swept from memory.
+
+### 3.8 Example: TTLCache Operations and State Changes
 
 Setup: `TTLCache(ttl: Duration(seconds: 10), maxSize: 3)`  
 (clock starts at t=0)
@@ -183,6 +188,7 @@ cache.dispose();
 | `peek(K key)` | Retrieve a value without changing cache policy state, or `null` if missing or expired (lazy eviction). |
 | `containsKey(K key)` | Return whether a non-expired entry exists for the key. Expired entries are removed and return `false`. |
 | `getKeys()` | Return only keys whose TTL has not elapsed. |
+| `size` / `isEmpty` / `isNotEmpty` | Return live-entry occupancy state. |
 | `remove(K key)` | Remove a single entry; no-op if absent. |
 | `clear()` | Remove all entries. |
 | `dispose()` | Cancel the background sweep timer. Idempotent. Supported by `TTLCache` and `MonitoredTTLCache`; not supported by `SimpleTTLCache`. |

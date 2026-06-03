@@ -13,6 +13,17 @@ abstract class ThreadSafeCache<K, V> {
   /// **Returns:** A snapshot of all keys in the cache at the time of the call.
   Future<Iterable<K>> getKeys();
 
+  /// **Returns the number of entries currently stored in the cache.**
+  ///
+  /// TTL cache implementations count only live, non-expired entries.
+  Future<int> get size async => (await getKeys()).length;
+
+  /// **Returns whether the cache currently has no entries.**
+  Future<bool> get isEmpty async => (await size) == 0;
+
+  /// **Returns whether the cache currently has one or more entries.**
+  Future<bool> get isNotEmpty async => !(await isEmpty);
+
   /// **Retrieves the value associated with the specified key (asynchronously).**
   ///
   /// - **Returns `null` if the key does not exist.**
