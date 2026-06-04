@@ -76,6 +76,32 @@ abstract class SimpleCache<K, V> {
     return value;
   }
 
+  /// **Stores and returns a value only when [key] is absent.**
+  ///
+  /// If [key] is already present, the existing value is returned and
+  /// [valueFactory] is not called. Stored `null` values are treated as present.
+  V putIfAbsent(K key, V Function() valueFactory) =>
+      getOrSet(key, valueFactory);
+
+  /// **Updates the value for [key] and returns the new value.**
+  ///
+  /// If [key] is absent and [ifAbsent] is provided, [ifAbsent] supplies the
+  /// value to store. If [key] is absent and [ifAbsent] is omitted, this throws
+  /// [StateError].
+  V update(K key, V Function(V value) update, {V Function()? ifAbsent}) {
+    if (containsKey(key)) {
+      final value = update(get(key) as V);
+      set(key, value);
+      return value;
+    }
+    if (ifAbsent == null) {
+      throw StateError('Cannot update missing cache key: $key');
+    }
+    final value = ifAbsent();
+    set(key, value);
+    return value;
+  }
+
   /// **Removes the entry with the given key from the cache.**
   ///
   /// - If the key does not exist, this call is a no-op.
@@ -83,6 +109,20 @@ abstract class SimpleCache<K, V> {
   /// **Arguments:**
   /// - `key`: The key of the entry to remove.
   void remove(K key);
+
+  /// **Removes all entries that match [test].**
+  ///
+  /// The predicate receives a snapshot value for each key that is still present
+  /// when it is visited.
+  void removeWhere(bool Function(K key, V value) test) {
+    for (final key in getKeys().toList()) {
+      if (!containsKey(key)) continue;
+      final value = peek(key) as V;
+      if (test(key, value)) {
+        remove(key);
+      }
+    }
+  }
 
   /// **Removes all data stored in the cache.**
   void clear();

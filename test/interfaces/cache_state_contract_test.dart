@@ -129,6 +129,56 @@ void main() {
       expect(cache.containsKey('b'), isTrue);
       expect(cache.containsKey('c'), isTrue);
     });
+
+    test('putIfAbsent returns existing stored null without computing', () {
+      final cache = _DefaultSimpleCache<String, String?>();
+      var computes = 0;
+
+      cache.set('key', null);
+
+      expect(
+        cache.putIfAbsent('key', () {
+          computes++;
+          return 'computed';
+        }),
+        isNull,
+      );
+      expect(computes, equals(0));
+    });
+
+    test('update changes existing values and supports ifAbsent', () {
+      final cache = _DefaultSimpleCache<String, int>();
+
+      cache.set('key', 1);
+
+      expect(cache.update('key', (value) => value + 1), equals(2));
+      expect(cache.get('key'), equals(2));
+      expect(
+        cache.update('missing', (value) => value + 1, ifAbsent: () => 10),
+        equals(10),
+      );
+      expect(cache.get('missing'), equals(10));
+      expect(() => cache.update('absent', (value) => value), throwsStateError);
+    });
+
+    test(
+      'removeWhere removes matching entries without consuming peekable state',
+      () {
+        final SimpleCache<String, String> cache =
+            SimpleEphemeralFIFOCache<String, String>(3);
+
+        cache.set('a', 'A');
+        cache.set('b', 'B');
+        cache.set('c', 'C');
+
+        cache.removeWhere((key, value) => key == 'b' || value == 'C');
+
+        expect(cache.containsKey('a'), isTrue);
+        expect(cache.containsKey('b'), isFalse);
+        expect(cache.containsKey('c'), isFalse);
+        expect(cache.get('a'), equals('A'));
+      },
+    );
   });
 
   group('ThreadSafeCache state contract', () {
@@ -146,5 +196,70 @@ void main() {
       expect(await cache.isEmpty, isFalse);
       expect(await cache.isNotEmpty, isTrue);
     });
+
+    test(
+      'putIfAbsent returns existing stored null without computing',
+      () async {
+        final cache = _DefaultThreadSafeCache<String, String?>();
+        var computes = 0;
+
+        await cache.set('key', null);
+
+        expect(
+          await cache.putIfAbsent('key', () {
+            computes++;
+            return 'computed';
+          }),
+          isNull,
+        );
+        expect(computes, equals(0));
+      },
+    );
+
+    test(
+      'update changes existing values and supports async ifAbsent',
+      () async {
+        final cache = _DefaultThreadSafeCache<String, int>();
+
+        await cache.set('key', 1);
+
+        expect(await cache.update('key', (value) => value + 1), equals(2));
+        expect(await cache.get('key'), equals(2));
+        expect(
+          await cache.update(
+            'missing',
+            (value) => value + 1,
+            ifAbsent: () async => 10,
+          ),
+          equals(10),
+        );
+        expect(await cache.get('missing'), equals(10));
+        await expectLater(
+          () => cache.update('absent', (value) => value),
+          throwsStateError,
+        );
+      },
+    );
+
+    test(
+      'removeWhere removes matching entries without updating LRU recency',
+      () async {
+        final ThreadSafeCache<String, String> cache = LRUCache<String, String>(
+          3,
+        );
+
+        await cache.set('a', 'A');
+        await cache.set('b', 'B');
+        await cache.set('c', 'C');
+
+        await cache.removeWhere((key, value) => key == 'b' || value == 'C');
+        await cache.set('d', 'D');
+
+        expect(await cache.containsKey('a'), isTrue);
+        expect(await cache.containsKey('b'), isFalse);
+        expect(await cache.containsKey('c'), isFalse);
+        expect(await cache.containsKey('d'), isTrue);
+      },
+    );
   });
 }

@@ -58,6 +58,11 @@ when the key is missing. Existing keys keep their FIFO position. Newly computed
 values are inserted like `set()` and can trigger FIFO eviction when the cache is
 full.
 
+Use `putIfAbsent()` as the conditional-store form of cache-aside population.
+Use `update()` to replace an existing value or store an `ifAbsent` value, and
+`removeWhere()` to remove entries selected from a key snapshot without changing
+FIFO insertion order.
+
 ### 3.6 Occupancy (`size` / `isEmpty` / `isNotEmpty` operations)
 
 `size`, `isEmpty`, and `isNotEmpty` report the current number of cached entries

@@ -78,6 +78,11 @@ Use `getOrSet()` on `SimpleTTLCache` or `getOrCompute()` on `TTLCache` and
 expired key from a callback. The optional `ttl:` argument applies only when the
 callback value is stored.
 
+Use `putIfAbsent()` as the conditional-store form of cache-aside population.
+Use `update()` to replace an existing live value or store an `ifAbsent` value.
+Both methods accept `ttl:` through TTL cache abstractions when they store a
+value. Use `removeWhere()` to remove live entries selected from a key snapshot.
+
 ### 3.6 Key Snapshot (`getKeys` operation)
 
 `getKeys()` returns only live keys in insertion order. Expired entries are
@@ -194,12 +199,15 @@ cache.dispose();
 |--------|-------------|
 | `set(K key, V value, {Duration? ttl})` | Store an entry. `ttl:` overrides the global TTL for this entry. |
 | `getOrCompute(K key, callback, {Duration? ttl})` | Return an existing live value, or compute and store a new value. `ttl:` applies to newly stored values only. |
+| `putIfAbsent(K key, callback, {Duration? ttl})` | Store and return a value only when the key is absent or expired. `ttl:` applies to newly stored values only. |
+| `update(K key, callback, {ifAbsent, Duration? ttl})` | Replace an existing live value, or store `ifAbsent` when provided. `ttl:` applies when a value is stored. |
 | `get(K key)` | Retrieve a value, or `null` if missing or expired (lazy eviction). |
 | `peek(K key)` | Retrieve a value without changing cache policy state, or `null` if missing or expired (lazy eviction). |
 | `containsKey(K key)` | Return whether a non-expired entry exists for the key. Expired entries are removed and return `false`. |
 | `getKeys()` | Return only keys whose TTL has not elapsed. |
 | `size` / `isEmpty` / `isNotEmpty` | Return live-entry occupancy state. |
 | `purgeExpired()` | Remove all expired entries and return how many entries were removed. |
+| `removeWhere(test)` | Remove live entries that match the predicate. |
 | `remove(K key)` | Remove a single entry; no-op if absent. |
 | `clear()` | Remove all entries. |
 | `dispose()` | Cancel the background sweep timer. Idempotent. Supported by `TTLCache` and `MonitoredTTLCache`; not supported by `SimpleTTLCache`. |

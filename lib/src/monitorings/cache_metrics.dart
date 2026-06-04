@@ -43,11 +43,19 @@ class CacheMetrics {
   static const int maxLatencySamples = 1000;
   static const int maxEvictionSamples = 10000;
 
+  final DateTime Function() _clock;
+
   int _hits = 0;
   int _misses = 0;
   int _totalRequests = 0;
   final Queue<Duration> _latencies = Queue();
   final Queue<DateTime> _evictions = Queue();
+
+  /// Creates a metrics collector.
+  ///
+  /// [clock] defaults to [DateTime.now] and can be injected in tests to make
+  /// time-window calculations deterministic.
+  CacheMetrics({DateTime Function()? clock}) : _clock = clock ?? DateTime.now;
 
   /// The number of cache hits
   int get hits => _hits;
@@ -100,7 +108,7 @@ class CacheMetrics {
   /// Records a cache eviction event
   void recordEviction() {
     if (_evictions.length >= maxEvictionSamples) _evictions.removeFirst();
-    _evictions.add(DateTime.now());
+    _evictions.add(_clock());
   }
 
   /// Captures a typed point-in-time snapshot within a given time window.
@@ -112,7 +120,7 @@ class CacheMetrics {
         'window must be a positive Duration, but was $window',
       );
     }
-    final now = DateTime.now();
+    final now = _clock();
     final windowStart = now.subtract(window);
     final recentEvictions = _evictions
         .where((t) => t.isAfter(windowStart))

@@ -2,6 +2,13 @@ import 'package:cacherine/src/monitorings/cache_metrics.dart';
 import 'package:test/test.dart';
 
 void main() {
+  late DateTime now;
+  DateTime clock() => now;
+
+  setUp(() {
+    now = DateTime(2026, 5, 15, 12);
+  });
+
   group('CacheMetrics - Basic Functionality', () {
     test('Hit and miss recording works correctly', () {
       final metrics = CacheMetrics();
@@ -80,15 +87,13 @@ void main() {
 
   group('CacheMetrics - Time Window Stats', () {
     test('snapshot() returns typed metric values', () {
-      final metrics = CacheMetrics()
+      final metrics = CacheMetrics(clock: clock)
         ..recordHit(const Duration(milliseconds: 10))
         ..recordHit(const Duration(milliseconds: 20))
         ..recordMiss(const Duration(milliseconds: 30))
         ..recordEviction();
 
-      final before = DateTime.now();
       final snapshot = metrics.snapshot(const Duration(minutes: 1));
-      final after = DateTime.now();
 
       expect(snapshot.hitRate, closeTo(2 / 3, 0.001));
       expect(snapshot.missRate, closeTo(1 / 3, 0.001));
@@ -98,11 +103,7 @@ void main() {
       expect(snapshot.p99Latency, const Duration(milliseconds: 20));
       expect(snapshot.evictionsPerMinute, equals(1));
       expect(snapshot.totalRequests, equals(3));
-      expect(
-        !snapshot.capturedAt.isBefore(before) &&
-            !snapshot.capturedAt.isAfter(after),
-        isTrue,
-      );
+      expect(snapshot.capturedAt, equals(now));
     });
 
     test('getRecentStats() is backed by snapshot values', () {
@@ -121,17 +122,15 @@ void main() {
     });
 
     test(
-      'getRecentStats() filters events correctly based on time window',
-      () async {
-        final metrics = CacheMetrics();
+      'getRecentStats() filters eviction events based on the injected clock',
+      () {
+        final metrics = CacheMetrics(clock: clock);
 
         metrics.recordHit(const Duration(milliseconds: 15));
         metrics.recordMiss(Duration.zero);
         metrics.recordEviction();
 
-        await Future.delayed(
-          const Duration(seconds: 2),
-        ); // Simulate passage of time
+        now = now.add(const Duration(seconds: 2));
 
         metrics.recordHit(const Duration(milliseconds: 25));
         metrics.recordMiss(Duration.zero);
@@ -139,12 +138,9 @@ void main() {
 
         final recentStats = metrics.getRecentStats(const Duration(seconds: 1));
 
-        expect(
-          recentStats['hit_rate'],
-          equals(0.5),
-        ); // Only the last hit/miss counts
+        expect(recentStats['hit_rate'], equals(0.5));
         expect(recentStats['miss_rate'], equals(0.5));
-        expect(recentStats['evictions_per_minute'], greaterThan(0));
+        expect(recentStats['evictions_per_minute'], equals(60));
       },
     );
   });

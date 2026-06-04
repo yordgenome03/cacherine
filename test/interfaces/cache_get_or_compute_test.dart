@@ -57,6 +57,41 @@ class _DefaultThreadSafeCache<K, V> extends ThreadSafeCache<K, V> {
   }
 }
 
+class _DefaultSimpleTTLCache<K, V> extends SimpleTTLCacheInterface<K, V> {
+  final Map<K, V> _cache = {};
+  final Map<K, Duration?> setTtls = {};
+
+  @override
+  Iterable<K> getKeys() => _cache.keys.toList();
+
+  @override
+  V? get(K key) => _cache[key];
+
+  @override
+  bool containsKey(K key) => _cache.containsKey(key);
+
+  @override
+  int purgeExpired() => 0;
+
+  @override
+  void set(K key, V value, {Duration? ttl}) {
+    _cache[key] = value;
+    setTtls[key] = ttl;
+  }
+
+  @override
+  void remove(K key) {
+    _cache.remove(key);
+    setTtls.remove(key);
+  }
+
+  @override
+  void clear() {
+    _cache.clear();
+    setTtls.clear();
+  }
+}
+
 class _DefaultThreadSafeTTLCache<K, V>
     extends ThreadSafeTTLCacheInterface<K, V> {
   final Map<K, V> _cache = {};
@@ -376,6 +411,118 @@ void main() {
       },
     );
 
+    test('SimpleTTLCacheInterface putIfAbsent forwards ttl override', () {
+      final SimpleTTLCacheInterface<String, String> cache = SimpleTTLCache(
+        ttl: const Duration(seconds: 30),
+        clock: clock,
+      );
+
+      expect(
+        cache.putIfAbsent(
+          'short',
+          () => 'value',
+          ttl: const Duration(seconds: 5),
+        ),
+        equals('value'),
+      );
+      now = now.add(const Duration(seconds: 10));
+
+      expect(cache.get('short'), isNull);
+    });
+
+    test('SimpleTTLCacheInterface update forwards ttl override', () {
+      final SimpleTTLCacheInterface<String, String> cache = SimpleTTLCache(
+        ttl: const Duration(seconds: 30),
+        clock: clock,
+      );
+
+      cache.set('short', 'old');
+      expect(
+        cache.update(
+          'short',
+          (value) => '$value-new',
+          ttl: const Duration(seconds: 5),
+        ),
+        equals('old-new'),
+      );
+      now = now.add(const Duration(seconds: 10));
+
+      expect(cache.get('short'), isNull);
+    });
+
+    test(
+      'ThreadSafeTTLCacheInterface putIfAbsent forwards ttl override',
+      () async {
+        final ThreadSafeTTLCacheInterface<String, String> cache = TTLCache(
+          ttl: const Duration(seconds: 30),
+          clock: clock,
+        );
+
+        expect(
+          await cache.putIfAbsent(
+            'short',
+            () => 'value',
+            ttl: const Duration(seconds: 5),
+          ),
+          equals('value'),
+        );
+        now = now.add(const Duration(seconds: 10));
+
+        expect(await cache.get('short'), isNull);
+      },
+    );
+
+    test('ThreadSafeTTLCacheInterface update forwards ttl override', () async {
+      final ThreadSafeTTLCacheInterface<String, String> cache = TTLCache(
+        ttl: const Duration(seconds: 30),
+        clock: clock,
+      );
+
+      await cache.set('short', 'old');
+      expect(
+        await cache.update(
+          'short',
+          (value) async => '$value-new',
+          ttl: const Duration(seconds: 5),
+        ),
+        equals('old-new'),
+      );
+      now = now.add(const Duration(seconds: 10));
+
+      expect(await cache.get('short'), isNull);
+    });
+
+    test('SimpleTTLCacheInterface default update covers all branches', () {
+      final cache = _DefaultSimpleTTLCache<String, int>();
+
+      cache.set('present', 1);
+
+      expect(
+        cache.update(
+          'present',
+          (value) => value + 1,
+          ttl: const Duration(seconds: 5),
+        ),
+        equals(2),
+      );
+      expect(cache.get('present'), equals(2));
+      expect(cache.setTtls['present'], equals(const Duration(seconds: 5)));
+
+      expect(
+        cache.update(
+          'missing',
+          (value) => value + 1,
+          ifAbsent: () => 10,
+          ttl: const Duration(seconds: 10),
+        ),
+        equals(10),
+      );
+      expect(cache.get('missing'), equals(10));
+      expect(cache.setTtls['missing'], equals(const Duration(seconds: 10)));
+
+      expect(() => cache.update('absent', (value) => value), throwsStateError);
+    });
+
     test(
       'ThreadSafeTTLCacheInterface default implementation forwards ttl override',
       () async {
@@ -406,6 +553,43 @@ void main() {
       },
     );
 
+    test(
+      'ThreadSafeTTLCacheInterface default update covers all branches',
+      () async {
+        final cache = _DefaultThreadSafeTTLCache<String, int>();
+
+        await cache.set('present', 1);
+
+        expect(
+          await cache.update(
+            'present',
+            (value) async => value + 1,
+            ttl: const Duration(seconds: 5),
+          ),
+          equals(2),
+        );
+        expect(await cache.get('present'), equals(2));
+        expect(cache.setTtls['present'], equals(const Duration(seconds: 5)));
+
+        expect(
+          await cache.update(
+            'missing',
+            (value) => value + 1,
+            ifAbsent: () async => 10,
+            ttl: const Duration(seconds: 10),
+          ),
+          equals(10),
+        );
+        expect(await cache.get('missing'), equals(10));
+        expect(cache.setTtls['missing'], equals(const Duration(seconds: 10)));
+
+        await expectLater(
+          () => cache.update('absent', (value) => value),
+          throwsStateError,
+        );
+      },
+    );
+
     test('MonitoredTTLCache records getOrCompute miss and hit', () async {
       final cache = MonitoredTTLCache<String, String>(
         ttl: const Duration(seconds: 30),
@@ -420,6 +604,57 @@ void main() {
       expect(cache.metrics.misses, equals(1));
       expect(cache.metrics.hits, equals(1));
     });
+
+    test('TTLCache serializes concurrent computations per instance', () async {
+      final cache = TTLCache<String, String>(
+        ttl: const Duration(seconds: 30),
+        clock: clock,
+      );
+      var computes = 0;
+
+      final results = await Future.wait([
+        cache.getOrCompute('key', () async {
+          computes++;
+          await Future<void>.delayed(const Duration(milliseconds: 1));
+          return 'computed';
+        }),
+        cache.getOrCompute('key', () {
+          computes++;
+          return 'other';
+        }),
+      ]);
+
+      expect(results, equals(['computed', 'computed']));
+      expect(computes, equals(1));
+    });
+
+    test(
+      'MonitoredTTLCache serializes concurrent computations per instance',
+      () async {
+        final cache = MonitoredTTLCache<String, String>(
+          ttl: const Duration(seconds: 30),
+          clock: clock,
+          alertConfig: CacheAlertConfig(notifyCallback: (_) {}),
+        );
+        addTearDown(cache.dispose);
+        var computes = 0;
+
+        final results = await Future.wait([
+          cache.getOrCompute('key', () async {
+            computes++;
+            await Future<void>.delayed(const Duration(milliseconds: 1));
+            return 'computed';
+          }),
+          cache.getOrCompute('key', () {
+            computes++;
+            return 'other';
+          }),
+        ]);
+
+        expect(results, equals(['computed', 'computed']));
+        expect(computes, equals(1));
+      },
+    );
 
     test(
       'TTLCache getOrCompute validates ttl and replaces expired entries',

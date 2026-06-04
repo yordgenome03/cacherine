@@ -62,6 +62,11 @@ when the key is missing. Existing keys are treated as successful reads and their
 frequency is incremented. Newly computed values are inserted like `set()` with
 an initial frequency of 1 and can trigger LFU eviction when the cache is full.
 
+Use `putIfAbsent()` as the conditional-store form of cache-aside population.
+Use `update()` to replace an existing value or store an `ifAbsent` value, and
+`removeWhere()` to remove entries selected from a key snapshot without
+incrementing LFU frequency while testing entries.
+
 ### 3.6 Occupancy (`size` / `isEmpty` / `isNotEmpty` operations)
 
 `size`, `isEmpty`, and `isNotEmpty` report the current number of cached entries

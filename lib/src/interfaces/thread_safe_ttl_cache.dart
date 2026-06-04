@@ -36,4 +36,39 @@ abstract class ThreadSafeTTLCacheInterface<K, V> extends ThreadSafeCache<K, V> {
     await set(key, value, ttl: ttl);
     return value;
   }
+
+  /// **Stores and returns a value only when [key] is absent.**
+  ///
+  /// When a new value is stored, [ttl] overrides the implementation's default
+  /// TTL for that entry.
+  @override
+  Future<V> putIfAbsent(
+    K key,
+    FutureOr<V> Function() valueFactory, {
+    Duration? ttl,
+  }) => getOrCompute(key, valueFactory, ttl: ttl);
+
+  /// **Updates the value for [key] and returns the new value.**
+  ///
+  /// When a value is stored, [ttl] overrides the implementation's default TTL
+  /// for that entry.
+  @override
+  Future<V> update(
+    K key,
+    FutureOr<V> Function(V value) update, {
+    FutureOr<V> Function()? ifAbsent,
+    Duration? ttl,
+  }) async {
+    if (await containsKey(key)) {
+      final value = await update(await get(key) as V);
+      await set(key, value, ttl: ttl);
+      return value;
+    }
+    if (ifAbsent == null) {
+      throw StateError('Cannot update missing cache key: $key');
+    }
+    final value = await ifAbsent();
+    await set(key, value, ttl: ttl);
+    return value;
+  }
 }
