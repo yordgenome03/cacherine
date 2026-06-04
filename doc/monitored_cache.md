@@ -122,6 +122,9 @@ such as LRU/MRU order, LFU frequency, or Ephemeral FIFO consumption.
 `putIfAbsent()` and `update()` follow `getOrCompute()` hit/miss semantics when
 implemented by monitored caches. `removeWhere()` tests entries with `peek()`;
 entries it removes are recorded as evictions through the normal removal path.
+`getAll()` records the same traffic metrics as repeated `get()` calls for keys
+that are present; missing keys are omitted after `containsKey()` checks and do
+not record misses.
 
 ```dart
 import 'package:cacherine/cacherine.dart';
