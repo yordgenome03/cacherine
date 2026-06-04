@@ -119,6 +119,9 @@ timestamps inside the requested window.
 `peek()` when you need to inspect a value without updating cache policy state
 such as LRU/MRU order, LFU frequency, or Ephemeral FIFO consumption.
 `size`, `isEmpty`, and `isNotEmpty` also do not record traffic metrics.
+`putIfAbsent()` and `update()` follow `getOrCompute()` hit/miss semantics when
+implemented by monitored caches. `removeWhere()` tests entries with `peek()`;
+entries it removes are recorded as evictions through the normal removal path.
 
 ```dart
 import 'package:cacherine/cacherine.dart';

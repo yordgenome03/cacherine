@@ -46,6 +46,7 @@ Whether you need a simple synchronous cache or an async-compatible solution that
 - **`peek()` support** (reads a value without changing cache eviction state or consuming EphemeralFIFO entries)
 - **`size`, `isEmpty`, and `isNotEmpty` support** (reads cache occupancy without recording monitored traffic metrics)
 - **`purgeExpired()` support for TTL caches** (explicitly removes expired TTL entries and returns the number removed)
+- **Conditional mutation helpers**: `putIfAbsent()`, `update()`, and `removeWhere()` for cache-aside writes, targeted updates, and predicate-based cleanup
 - **Simple versions (e.g., SimpleFIFOCache) for synchronous usage, and standard versions that serialize concurrent async calls within the same isolate**
 
 ## Installation
@@ -124,6 +125,17 @@ final asyncValue = await ttlCache.getOrCompute(
 );
 ```
 
+Use `putIfAbsent()`, `update()`, and `removeWhere()` when you need conditional
+mutation without open-coding the same presence checks:
+
+```dart
+final cache = LRUCache<String, int>(100);
+
+final count = await cache.putIfAbsent('requests', () => 0);
+await cache.update('requests', (value) => value + 1);
+await cache.removeWhere((key, value) => value == 0);
+```
+
 ### TTL Usage
 
 Entries expire automatically once their TTL elapses. Use `ttl:` on individual `set()` calls to override the global default for a single entry.
@@ -200,7 +212,9 @@ The standard and monitored cache variants use `Future` APIs and an internal lock
 
 Use `peek()` when you need to read a value without changing cache policy state. It does not update LRU/MRU order, does not increment LFU frequency, and does not remove entries from EphemeralFIFO caches. For TTL caches, expired entries return `null` and are removed lazily. Monitored caches do not record hit/miss/latency metrics for `peek()`.
 
-`getOrSet()` and `getOrCompute()` use `containsKey()` semantics before reading, so stored `null` values are treated as present. On monitored caches, `getOrCompute()` records one hit when the key already exists and one miss when the callback is used to populate the key.
+`getOrSet()`, `getOrCompute()`, and `putIfAbsent()` use `containsKey()` semantics before reading, so stored `null` values are treated as present. Package async-safe cache implementations serialize the check/compute/store sequence on the same cache instance, so concurrent calls for the same missing key compute once and later callers observe the stored value. On monitored caches, `getOrCompute()` records one hit when the key already exists and one miss when the callback is used to populate the key.
+
+`update()` changes an existing value or stores `ifAbsent()` when provided. It throws `StateError` for missing keys when `ifAbsent` is omitted. `removeWhere()` iterates a key snapshot and reads candidate values with `peek()`, so it does not update LRU/MRU order, increment LFU frequency, or consume EphemeralFIFO entries while deciding what to remove.
 
 `getKeys()` returns a snapshot. FIFO and TTL caches return insertion order for live entries. LRU and MRU caches return least-to-most recently used order. Ephemeral FIFO caches omit entries already consumed by `get()`. LFU cache key order is unspecified.
 
