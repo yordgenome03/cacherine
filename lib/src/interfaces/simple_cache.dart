@@ -41,7 +41,10 @@ abstract class SimpleCache<K, V> {
     final values = <K, V>{};
     for (final key in keys) {
       if (containsKey(key)) {
-        values[key] = get(key) as V;
+        final value = get(key);
+        if (value != null || null is V) {
+          values[key] = value as V;
+        }
       }
     }
     return values;

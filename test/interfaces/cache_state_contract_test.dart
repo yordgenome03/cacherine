@@ -29,6 +29,11 @@ class _DefaultSimpleCache<K, V> extends SimpleCache<K, V> {
   }
 }
 
+class _NullAfterContainsSimpleCache<K, V> extends _DefaultSimpleCache<K, V> {
+  @override
+  bool containsKey(K key) => true;
+}
+
 class _DefaultThreadSafeCache<K, V> extends ThreadSafeCache<K, V> {
   final Map<K, V> _cache = {};
 
@@ -55,6 +60,12 @@ class _DefaultThreadSafeCache<K, V> extends ThreadSafeCache<K, V> {
   Future<void> clear() async {
     _cache.clear();
   }
+}
+
+class _NullAfterContainsThreadSafeCache<K, V>
+    extends _DefaultThreadSafeCache<K, V> {
+  @override
+  Future<bool> containsKey(K key) async => true;
 }
 
 void main() {
@@ -158,6 +169,15 @@ void main() {
       );
     });
 
+    test(
+      'getAll omits null returned after containsKey for non-nullable values',
+      () {
+        final cache = _NullAfterContainsSimpleCache<String, String>();
+
+        expect(cache.getAll(['expired']), isEmpty);
+      },
+    );
+
     test('setAll stores entries and removeAll removes matching keys', () {
       final cache = _DefaultSimpleCache<String, int>();
 
@@ -260,6 +280,15 @@ void main() {
         equals({'present': 'value', 'null': null}),
       );
     });
+
+    test(
+      'getAll omits null returned after containsKey for non-nullable values',
+      () async {
+        final cache = _NullAfterContainsThreadSafeCache<String, String>();
+
+        expect(await cache.getAll(['expired']), isEmpty);
+      },
+    );
 
     test('setAll stores entries and removeAll removes matching keys', () async {
       final cache = _DefaultThreadSafeCache<String, int>();

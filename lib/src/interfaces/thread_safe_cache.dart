@@ -45,7 +45,10 @@ abstract class ThreadSafeCache<K, V> {
     final values = <K, V>{};
     for (final key in keys) {
       if (await containsKey(key)) {
-        values[key] = await get(key) as V;
+        final value = await get(key);
+        if (value != null || null is V) {
+          values[key] = value as V;
+        }
       }
     }
     return values;
