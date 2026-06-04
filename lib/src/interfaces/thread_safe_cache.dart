@@ -80,6 +80,42 @@ abstract class ThreadSafeCache<K, V> {
     return value;
   }
 
+  /// **Stores and returns a value only when [key] is absent.**
+  ///
+  /// If [key] is already present, the existing value is returned and
+  /// [valueFactory] is not called. Stored `null` values are treated as present.
+  ///
+  /// Implementations may override this method to make the
+  /// check/compute/store sequence atomic for their synchronization model.
+  Future<V> putIfAbsent(K key, FutureOr<V> Function() valueFactory) =>
+      getOrCompute(key, valueFactory);
+
+  /// **Updates the value for [key] and returns the new value.**
+  ///
+  /// If [key] is absent and [ifAbsent] is provided, [ifAbsent] supplies the
+  /// value to store. If [key] is absent and [ifAbsent] is omitted, this throws
+  /// [StateError].
+  ///
+  /// Implementations may override this method to make the read/update/store
+  /// sequence atomic for their synchronization model.
+  Future<V> update(
+    K key,
+    FutureOr<V> Function(V value) update, {
+    FutureOr<V> Function()? ifAbsent,
+  }) async {
+    if (await containsKey(key)) {
+      final value = await update(await get(key) as V);
+      await set(key, value);
+      return value;
+    }
+    if (ifAbsent == null) {
+      throw StateError('Cannot update missing cache key: $key');
+    }
+    final value = await ifAbsent();
+    await set(key, value);
+    return value;
+  }
+
   /// **Removes the entry with the given key from the cache (asynchronously).**
   ///
   /// - If the key does not exist, this call is a no-op.
@@ -88,6 +124,20 @@ abstract class ThreadSafeCache<K, V> {
   /// **Arguments:**
   /// - `key`: The key of the entry to remove.
   Future<void> remove(K key);
+
+  /// **Removes all entries that match [test].**
+  ///
+  /// The predicate receives a snapshot value for each key that is still present
+  /// when it is visited.
+  Future<void> removeWhere(FutureOr<bool> Function(K key, V value) test) async {
+    for (final key in (await getKeys()).toList()) {
+      if (!await containsKey(key)) continue;
+      final value = await peek(key) as V;
+      if (await test(key, value)) {
+        await remove(key);
+      }
+    }
+  }
 
   /// **Removes all data stored in the cache (asynchronously).**
   Future<void> clear();
