@@ -4,15 +4,18 @@
 
 - Added `putIfAbsent()`, `update()`, and `removeWhere()` default APIs to simple, async-safe, and TTL cache interfaces.
 - Added TTL-aware `putIfAbsent()` and `update()` overloads so new or updated entries can receive per-entry TTL overrides through TTL abstractions.
+- Added `getAll()`, `setAll()`, and `removeAll()` bulk operation APIs to simple, async-safe, and TTL cache interfaces.
+- Added TTL-aware `setAll()` overloads so batches can receive a shared per-entry TTL override through TTL abstractions.
 
 ### Documentation
 
 - Documented conditional mutation helpers and clarified `getOrCompute()` same-instance serialization semantics.
+- Documented bulk operation helpers and their cache policy side effects.
 
 ### Maintenance
 
 - Added injectable clock support to `CacheMetrics` for deterministic eviction-window and dashboard tests.
-- Expanded contract coverage for conditional mutation helpers, TTL helper forwarding, and TTL `getOrCompute()` concurrent computation behavior.
+- Expanded contract coverage for conditional mutation helpers, bulk operations, TTL helper forwarding, and TTL `getOrCompute()` concurrent computation behavior.
 
 ## 2.3.0 - Peek, Occupancy APIs, and TTL Purge Cleanup
 

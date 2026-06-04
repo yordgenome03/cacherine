@@ -47,6 +47,7 @@ Whether you need a simple synchronous cache or an async-compatible solution that
 - **`size`, `isEmpty`, and `isNotEmpty` support** (reads cache occupancy without recording monitored traffic metrics)
 - **`purgeExpired()` support for TTL caches** (explicitly removes expired TTL entries and returns the number removed)
 - **Conditional mutation helpers**: `putIfAbsent()`, `update()`, and `removeWhere()` for cache-aside writes, targeted updates, and predicate-based cleanup
+- **Bulk operations**: `getAll()`, `setAll()`, and `removeAll()` for multi-key reads, writes, and invalidation
 - **Simple versions (e.g., SimpleFIFOCache) for synchronous usage, and standard versions that serialize concurrent async calls within the same isolate**
 
 ## Installation
@@ -136,6 +137,17 @@ await cache.update('requests', (value) => value + 1);
 await cache.removeWhere((key, value) => value == 0);
 ```
 
+Use `getAll()`, `setAll()`, and `removeAll()` when you need to read, warm, or
+invalidate multiple keys:
+
+```dart
+final cache = LRUCache<String, String>(100);
+
+await cache.setAll({'user:1': 'Ada', 'user:2': 'Linus'});
+final users = await cache.getAll(['user:1', 'missing', 'user:2']);
+await cache.removeAll(users.keys);
+```
+
 ### TTL Usage
 
 Entries expire automatically once their TTL elapses. Use `ttl:` on individual `set()` calls to override the global default for a single entry.
@@ -215,6 +227,13 @@ Use `peek()` when you need to read a value without changing cache policy state. 
 `getOrSet()`, `getOrCompute()`, and `putIfAbsent()` use `containsKey()` semantics before reading, so stored `null` values are treated as present. Package async-safe cache implementations serialize the check/compute/store sequence on the same cache instance, so concurrent calls for the same missing key compute once and later callers observe the stored value. On monitored caches, `getOrCompute()` records one hit when the key already exists and one miss when the callback is used to populate the key.
 
 `update()` changes an existing value or stores `ifAbsent()` when provided. It throws `StateError` for missing keys when `ifAbsent` is omitted. `removeWhere()` iterates a key snapshot and reads candidate values with `peek()`, so it does not update LRU/MRU order, increment LFU frequency, or consume EphemeralFIFO entries while deciding what to remove.
+
+`getAll()` returns a map containing only currently present keys. Stored `null`
+values are included when `V` is nullable. Each present key is read with `get()`,
+so eviction policy side effects match repeated single-key reads. `setAll()` and
+`removeAll()` apply the same behavior as repeated `set()` and `remove()` calls.
+TTL abstractions accept `ttl:` on `setAll()` to apply the same per-entry TTL to
+all inserted entries.
 
 `getKeys()` returns a snapshot. FIFO and TTL caches return insertion order for live entries. LRU and MRU caches return least-to-most recently used order. Ephemeral FIFO caches omit entries already consumed by `get()`. LFU cache key order is unspecified.
 

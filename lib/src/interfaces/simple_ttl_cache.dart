@@ -17,6 +17,17 @@ abstract class SimpleTTLCacheInterface<K, V> extends SimpleCache<K, V> {
   @override
   void set(K key, V value, {Duration? ttl});
 
+  /// **Stores all key-value pairs from [entries].**
+  ///
+  /// - If [ttl] is omitted, the cache implementation's default TTL is used.
+  /// - If a key already exists, its value and expiry are updated.
+  @override
+  void setAll(Map<K, V> entries, {Duration? ttl}) {
+    for (final entry in entries.entries) {
+      set(entry.key, entry.value, ttl: ttl);
+    }
+  }
+
   /// **Returns the existing value for [key], or stores and returns a new one.**
   ///
   /// When a new value is stored, [ttl] overrides the implementation's default

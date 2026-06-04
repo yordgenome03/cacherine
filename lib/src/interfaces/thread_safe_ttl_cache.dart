@@ -19,6 +19,17 @@ abstract class ThreadSafeTTLCacheInterface<K, V> extends ThreadSafeCache<K, V> {
   @override
   Future<void> set(K key, V value, {Duration? ttl});
 
+  /// **Stores all key-value pairs from [entries].**
+  ///
+  /// - If [ttl] is omitted, the cache implementation's default TTL is used.
+  /// - If a key already exists, its value and expiry are updated.
+  @override
+  Future<void> setAll(Map<K, V> entries, {Duration? ttl}) async {
+    for (final entry in entries.entries) {
+      await set(entry.key, entry.value, ttl: ttl);
+    }
+  }
+
   /// **Returns the existing value for [key], or computes, stores, and returns a new one.**
   ///
   /// When a new value is stored, [ttl] overrides the implementation's default
