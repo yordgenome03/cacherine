@@ -30,6 +30,26 @@ abstract class SimpleCache<K, V> {
   /// **Returns:** The value associated with the key, or `null`.
   V? get(K key);
 
+  /// **Retrieves values for all currently present [keys].**
+  ///
+  /// Missing keys are omitted from the returned map. Stored `null` values are
+  /// included when `V` is nullable.
+  ///
+  /// Implementations that update access state from [get] apply the same access
+  /// behavior for each present key.
+  Map<K, V> getAll(Iterable<K> keys) {
+    final values = <K, V>{};
+    for (final key in keys) {
+      if (containsKey(key)) {
+        final value = get(key);
+        if (value != null || null is V) {
+          values[key] = value as V;
+        }
+      }
+    }
+    return values;
+  }
+
   /// **Retrieves the value for [key] without updating cache access state.**
   ///
   /// This method returns `null` if the key does not exist. Package cache
@@ -59,6 +79,16 @@ abstract class SimpleCache<K, V> {
   /// - `key`: The key for the data to store.
   /// - `value`: The value of the data to store.
   void set(K key, V value);
+
+  /// **Stores all key-value pairs from [entries].**
+  ///
+  /// Each entry follows the same behavior as [set], including eviction policy
+  /// effects.
+  void setAll(Map<K, V> entries) {
+    for (final entry in entries.entries) {
+      set(entry.key, entry.value);
+    }
+  }
 
   /// **Returns the existing value for [key], or stores and returns a new one.**
   ///
@@ -109,6 +139,15 @@ abstract class SimpleCache<K, V> {
   /// **Arguments:**
   /// - `key`: The key of the entry to remove.
   void remove(K key);
+
+  /// **Removes all entries with keys in [keys].**
+  ///
+  /// Missing keys are ignored.
+  void removeAll(Iterable<K> keys) {
+    for (final key in keys) {
+      remove(key);
+    }
+  }
 
   /// **Removes all entries that match [test].**
   ///

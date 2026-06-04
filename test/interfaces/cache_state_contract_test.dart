@@ -29,6 +29,11 @@ class _DefaultSimpleCache<K, V> extends SimpleCache<K, V> {
   }
 }
 
+class _NullAfterContainsSimpleCache<K, V> extends _DefaultSimpleCache<K, V> {
+  @override
+  bool containsKey(K key) => true;
+}
+
 class _DefaultThreadSafeCache<K, V> extends ThreadSafeCache<K, V> {
   final Map<K, V> _cache = {};
 
@@ -55,6 +60,12 @@ class _DefaultThreadSafeCache<K, V> extends ThreadSafeCache<K, V> {
   Future<void> clear() async {
     _cache.clear();
   }
+}
+
+class _NullAfterContainsThreadSafeCache<K, V>
+    extends _DefaultThreadSafeCache<K, V> {
+  @override
+  Future<bool> containsKey(K key) async => true;
 }
 
 void main() {
@@ -146,6 +157,36 @@ void main() {
       expect(computes, equals(0));
     });
 
+    test('getAll returns present values including stored nulls', () {
+      final cache = _DefaultSimpleCache<String, String?>();
+
+      cache.set('present', 'value');
+      cache.set('null', null);
+
+      expect(
+        cache.getAll(['present', 'missing', 'null']),
+        equals({'present': 'value', 'null': null}),
+      );
+    });
+
+    test(
+      'getAll omits null returned after containsKey for non-nullable values',
+      () {
+        final cache = _NullAfterContainsSimpleCache<String, String>();
+
+        expect(cache.getAll(['expired']), isEmpty);
+      },
+    );
+
+    test('setAll stores entries and removeAll removes matching keys', () {
+      final cache = _DefaultSimpleCache<String, int>();
+
+      cache.setAll({'a': 1, 'b': 2, 'c': 3});
+      cache.removeAll(['b', 'missing']);
+
+      expect(cache.getAll(['a', 'b', 'c']), equals({'a': 1, 'c': 3}));
+    });
+
     test('update changes existing values and supports ifAbsent', () {
       final cache = _DefaultSimpleCache<String, int>();
 
@@ -179,6 +220,18 @@ void main() {
         expect(cache.get('a'), equals('A'));
       },
     );
+
+    test('getAll applies get policy side effects for present keys', () {
+      final SimpleCache<String, String> cache =
+          SimpleEphemeralFIFOCache<String, String>(3);
+
+      cache.set('a', 'A');
+      cache.set('b', 'B');
+
+      expect(cache.getAll(['a', 'missing', 'b']), equals({'a': 'A', 'b': 'B'}));
+      expect(cache.containsKey('a'), isFalse);
+      expect(cache.containsKey('b'), isFalse);
+    });
   });
 
   group('ThreadSafeCache state contract', () {
@@ -215,6 +268,36 @@ void main() {
         expect(computes, equals(0));
       },
     );
+
+    test('getAll returns present values including stored nulls', () async {
+      final cache = _DefaultThreadSafeCache<String, String?>();
+
+      await cache.set('present', 'value');
+      await cache.set('null', null);
+
+      expect(
+        await cache.getAll(['present', 'missing', 'null']),
+        equals({'present': 'value', 'null': null}),
+      );
+    });
+
+    test(
+      'getAll omits null returned after containsKey for non-nullable values',
+      () async {
+        final cache = _NullAfterContainsThreadSafeCache<String, String>();
+
+        expect(await cache.getAll(['expired']), isEmpty);
+      },
+    );
+
+    test('setAll stores entries and removeAll removes matching keys', () async {
+      final cache = _DefaultThreadSafeCache<String, int>();
+
+      await cache.setAll({'a': 1, 'b': 2, 'c': 3});
+      await cache.removeAll(['b', 'missing']);
+
+      expect(await cache.getAll(['a', 'b', 'c']), equals({'a': 1, 'c': 3}));
+    });
 
     test(
       'update changes existing values and supports async ifAbsent',
@@ -261,5 +344,20 @@ void main() {
         expect(await cache.containsKey('d'), isTrue);
       },
     );
+
+    test('getAll applies get policy side effects for present keys', () async {
+      final ThreadSafeCache<String, String> cache =
+          EphemeralFIFOCache<String, String>(3);
+
+      await cache.set('a', 'A');
+      await cache.set('b', 'B');
+
+      expect(
+        await cache.getAll(['a', 'missing', 'b']),
+        equals({'a': 'A', 'b': 'B'}),
+      );
+      expect(await cache.containsKey('a'), isFalse);
+      expect(await cache.containsKey('b'), isFalse);
+    });
   });
 }

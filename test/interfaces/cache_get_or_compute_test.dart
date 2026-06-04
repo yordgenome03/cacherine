@@ -430,6 +430,21 @@ void main() {
       expect(cache.get('short'), isNull);
     });
 
+    test('SimpleTTLCacheInterface setAll forwards ttl override', () {
+      final SimpleTTLCacheInterface<String, String> cache = SimpleTTLCache(
+        ttl: const Duration(seconds: 30),
+        clock: clock,
+      );
+
+      cache.setAll({
+        'short-a': 'A',
+        'short-b': 'B',
+      }, ttl: const Duration(seconds: 5));
+      now = now.add(const Duration(seconds: 10));
+
+      expect(cache.getAll(['short-a', 'short-b']), isEmpty);
+    });
+
     test('SimpleTTLCacheInterface update forwards ttl override', () {
       final SimpleTTLCacheInterface<String, String> cache = SimpleTTLCache(
         ttl: const Duration(seconds: 30),
@@ -471,6 +486,21 @@ void main() {
         expect(await cache.get('short'), isNull);
       },
     );
+
+    test('ThreadSafeTTLCacheInterface setAll forwards ttl override', () async {
+      final ThreadSafeTTLCacheInterface<String, String> cache = TTLCache(
+        ttl: const Duration(seconds: 30),
+        clock: clock,
+      );
+
+      await cache.setAll({
+        'short-a': 'A',
+        'short-b': 'B',
+      }, ttl: const Duration(seconds: 5));
+      now = now.add(const Duration(seconds: 10));
+
+      expect(await cache.getAll(['short-a', 'short-b']), isEmpty);
+    });
 
     test('ThreadSafeTTLCacheInterface update forwards ttl override', () async {
       final ThreadSafeTTLCacheInterface<String, String> cache = TTLCache(
@@ -521,6 +551,16 @@ void main() {
       expect(cache.setTtls['missing'], equals(const Duration(seconds: 10)));
 
       expect(() => cache.update('absent', (value) => value), throwsStateError);
+    });
+
+    test('SimpleTTLCacheInterface default setAll forwards ttl override', () {
+      final cache = _DefaultSimpleTTLCache<String, int>();
+
+      cache.setAll({'a': 1, 'b': 2}, ttl: const Duration(seconds: 5));
+
+      expect(cache.getAll(['a', 'b']), equals({'a': 1, 'b': 2}));
+      expect(cache.setTtls['a'], equals(const Duration(seconds: 5)));
+      expect(cache.setTtls['b'], equals(const Duration(seconds: 5)));
     });
 
     test(
@@ -587,6 +627,19 @@ void main() {
           () => cache.update('absent', (value) => value),
           throwsStateError,
         );
+      },
+    );
+
+    test(
+      'ThreadSafeTTLCacheInterface default setAll forwards ttl override',
+      () async {
+        final cache = _DefaultThreadSafeTTLCache<String, int>();
+
+        await cache.setAll({'a': 1, 'b': 2}, ttl: const Duration(seconds: 5));
+
+        expect(await cache.getAll(['a', 'b']), equals({'a': 1, 'b': 2}));
+        expect(cache.setTtls['a'], equals(const Duration(seconds: 5)));
+        expect(cache.setTtls['b'], equals(const Duration(seconds: 5)));
       },
     );
 

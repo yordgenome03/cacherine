@@ -34,6 +34,26 @@ abstract class ThreadSafeCache<K, V> {
   /// **Returns:** `Future<V?>` (The value associated with the key, or `null`).
   Future<V?> get(K key);
 
+  /// **Retrieves values for all currently present [keys].**
+  ///
+  /// Missing keys are omitted from the returned map. Stored `null` values are
+  /// included when `V` is nullable.
+  ///
+  /// Implementations that update access state from [get] apply the same access
+  /// behavior for each present key.
+  Future<Map<K, V>> getAll(Iterable<K> keys) async {
+    final values = <K, V>{};
+    for (final key in keys) {
+      if (await containsKey(key)) {
+        final value = await get(key);
+        if (value != null || null is V) {
+          values[key] = value as V;
+        }
+      }
+    }
+    return values;
+  }
+
   /// **Retrieves the value for [key] without updating cache access state.**
   ///
   /// This method returns `null` if the key does not exist. Package cache
@@ -63,6 +83,16 @@ abstract class ThreadSafeCache<K, V> {
   /// - `key`: The key for the data to store.
   /// - `value`: The value of the data to store.
   Future<void> set(K key, V value);
+
+  /// **Stores all key-value pairs from [entries].**
+  ///
+  /// Each entry follows the same behavior as [set], including eviction policy
+  /// effects.
+  Future<void> setAll(Map<K, V> entries) async {
+    for (final entry in entries.entries) {
+      await set(entry.key, entry.value);
+    }
+  }
 
   /// **Returns the existing value for [key], or computes, stores, and returns a new one.**
   ///
@@ -124,6 +154,15 @@ abstract class ThreadSafeCache<K, V> {
   /// **Arguments:**
   /// - `key`: The key of the entry to remove.
   Future<void> remove(K key);
+
+  /// **Removes all entries with keys in [keys].**
+  ///
+  /// Missing keys are ignored.
+  Future<void> removeAll(Iterable<K> keys) async {
+    for (final key in keys) {
+      await remove(key);
+    }
+  }
 
   /// **Removes all entries that match [test].**
   ///

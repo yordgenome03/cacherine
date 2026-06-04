@@ -164,11 +164,20 @@ void main() {
     });
 
     test('Triggers alert when eviction rate exceeds threshold', () async {
+      alertManager.dispose();
+      final config = CacheAlertConfig(
+        notifyCallback: (alert) => receivedAlerts.add(alert),
+        evictionsPerMinuteThreshold: 1000,
+        alertCheckInterval: const Duration(seconds: 1),
+      );
+      alertManager = CacheAlertManager(metrics, config);
+
       // Run the monitor
       alertManager.monitor();
 
-      // Wait enough time for evictions to accumulate (2 seconds in this case)
-      await Future.delayed(const Duration(milliseconds: 2000));
+      // Record evictions after the monitor starts so they are inside the first
+      // one-second snapshot window even on slower SDK/runtime combinations.
+      await Future.delayed(const Duration(milliseconds: 100));
 
       // Record evictions in bulk to reduce the loop overhead
       for (int i = 0; i < 500; i++) {
@@ -176,7 +185,7 @@ void main() {
       }
 
       // Wait to ensure the monitoring catches the evictions
-      await Future.delayed(const Duration(milliseconds: 500));
+      await Future.delayed(const Duration(milliseconds: 1200));
 
       // Check if the alert for high eviction rate was triggered
       expect(
