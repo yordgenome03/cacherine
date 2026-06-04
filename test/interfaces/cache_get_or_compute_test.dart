@@ -57,6 +57,41 @@ class _DefaultThreadSafeCache<K, V> extends ThreadSafeCache<K, V> {
   }
 }
 
+class _DefaultSimpleTTLCache<K, V> extends SimpleTTLCacheInterface<K, V> {
+  final Map<K, V> _cache = {};
+  final Map<K, Duration?> setTtls = {};
+
+  @override
+  Iterable<K> getKeys() => _cache.keys.toList();
+
+  @override
+  V? get(K key) => _cache[key];
+
+  @override
+  bool containsKey(K key) => _cache.containsKey(key);
+
+  @override
+  int purgeExpired() => 0;
+
+  @override
+  void set(K key, V value, {Duration? ttl}) {
+    _cache[key] = value;
+    setTtls[key] = ttl;
+  }
+
+  @override
+  void remove(K key) {
+    _cache.remove(key);
+    setTtls.remove(key);
+  }
+
+  @override
+  void clear() {
+    _cache.clear();
+    setTtls.clear();
+  }
+}
+
 class _DefaultThreadSafeTTLCache<K, V>
     extends ThreadSafeTTLCacheInterface<K, V> {
   final Map<K, V> _cache = {};
@@ -457,6 +492,37 @@ void main() {
       expect(await cache.get('short'), isNull);
     });
 
+    test('SimpleTTLCacheInterface default update covers all branches', () {
+      final cache = _DefaultSimpleTTLCache<String, int>();
+
+      cache.set('present', 1);
+
+      expect(
+        cache.update(
+          'present',
+          (value) => value + 1,
+          ttl: const Duration(seconds: 5),
+        ),
+        equals(2),
+      );
+      expect(cache.get('present'), equals(2));
+      expect(cache.setTtls['present'], equals(const Duration(seconds: 5)));
+
+      expect(
+        cache.update(
+          'missing',
+          (value) => value + 1,
+          ifAbsent: () => 10,
+          ttl: const Duration(seconds: 10),
+        ),
+        equals(10),
+      );
+      expect(cache.get('missing'), equals(10));
+      expect(cache.setTtls['missing'], equals(const Duration(seconds: 10)));
+
+      expect(() => cache.update('absent', (value) => value), throwsStateError);
+    });
+
     test(
       'ThreadSafeTTLCacheInterface default implementation forwards ttl override',
       () async {
@@ -484,6 +550,43 @@ void main() {
 
         expect(computes, equals(1));
         expect(cache.setTtls['missing'], equals(const Duration(seconds: 5)));
+      },
+    );
+
+    test(
+      'ThreadSafeTTLCacheInterface default update covers all branches',
+      () async {
+        final cache = _DefaultThreadSafeTTLCache<String, int>();
+
+        await cache.set('present', 1);
+
+        expect(
+          await cache.update(
+            'present',
+            (value) async => value + 1,
+            ttl: const Duration(seconds: 5),
+          ),
+          equals(2),
+        );
+        expect(await cache.get('present'), equals(2));
+        expect(cache.setTtls['present'], equals(const Duration(seconds: 5)));
+
+        expect(
+          await cache.update(
+            'missing',
+            (value) => value + 1,
+            ifAbsent: () async => 10,
+            ttl: const Duration(seconds: 10),
+          ),
+          equals(10),
+        );
+        expect(await cache.get('missing'), equals(10));
+        expect(cache.setTtls['missing'], equals(const Duration(seconds: 10)));
+
+        await expectLater(
+          () => cache.update('absent', (value) => value),
+          throwsStateError,
+        );
       },
     );
 
