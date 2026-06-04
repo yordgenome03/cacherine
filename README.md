@@ -56,7 +56,7 @@ Check the latest version on [pub.dev](https://pub.dev/packages/cacherine) and ad
 
 ```yaml
 dependencies:
-  cacherine: ^2.3.0
+  cacherine: ^2.4.0
 ```
 
 Then, run the following command in your terminal:
@@ -218,15 +218,25 @@ void main() async {
 
 ## API Contracts
 
+### Async Safety
+
 The standard and monitored cache variants use `Future` APIs and an internal lock to serialize concurrent async calls on the same cache instance within the same isolate. They are not shared-memory synchronization primitives across Dart isolates.
+
+### Presence and Nullable Values
 
 `get()` returns `null` when a key is absent. Use `containsKey()` to distinguish a missing key from a stored `null` value, such as `Cache<String, String?>`. `containsKey()` does not update LRU/MRU/LFU access state, does not remove entries from EphemeralFIFO caches, and does not record monitored cache hit/miss metrics. For TTL caches, expired entries return `false`.
 
+### Non-Mutating Reads
+
 Use `peek()` when you need to read a value without changing cache policy state. It does not update LRU/MRU order, does not increment LFU frequency, and does not remove entries from EphemeralFIFO caches. For TTL caches, expired entries return `null` and are removed lazily. Monitored caches do not record hit/miss/latency metrics for `peek()`.
+
+### Cache-Aside and Mutation Helpers
 
 `getOrSet()`, `getOrCompute()`, and `putIfAbsent()` use `containsKey()` semantics before reading, so stored `null` values are treated as present. Package async-safe cache implementations serialize the check/compute/store sequence on the same cache instance, so concurrent calls for the same missing key compute once and later callers observe the stored value. On monitored caches, `getOrCompute()` records one hit when the key already exists and one miss when the callback is used to populate the key.
 
 `update()` changes an existing value or stores `ifAbsent()` when provided. It throws `StateError` for missing keys when `ifAbsent` is omitted. `removeWhere()` iterates a key snapshot and reads candidate values with `peek()`, so it does not update LRU/MRU order, increment LFU frequency, or consume EphemeralFIFO entries while deciding what to remove.
+
+### Bulk Operations
 
 `getAll()` returns a map containing only currently present keys. Stored `null`
 values are included when `V` is nullable. Each present key is read with `get()`,
@@ -235,13 +245,19 @@ so eviction policy side effects match repeated single-key reads. `setAll()` and
 TTL abstractions accept `ttl:` on `setAll()` to apply the same per-entry TTL to
 all inserted entries.
 
+### Key Order and Occupancy
+
 `getKeys()` returns a snapshot. FIFO and TTL caches return insertion order for live entries. LRU and MRU caches return least-to-most recently used order. Ephemeral FIFO caches omit entries already consumed by `get()`. LFU cache key order is unspecified.
 
 `size`, `isEmpty`, and `isNotEmpty` report the current cache occupancy. TTL caches count only live, non-expired entries. These APIs do not update cache eviction state and monitored caches do not record hit/miss/latency metrics for them.
 
+### TTL Expiry
+
 TTL caches expose `purgeExpired()` to remove all expired entries immediately and
 return the number removed. `MonitoredTTLCache` records one eviction per entry
 removed by `purgeExpired()`.
+
+### TTL Interfaces
 
 Use `SimpleTTLCacheInterface` or `ThreadSafeTTLCacheInterface` when code needs an abstraction that still exposes per-entry TTL overrides:
 
@@ -253,12 +269,16 @@ await cache.set('token', 'abc123', ttl: const Duration(seconds: 30));
 await cache.purgeExpired();
 ```
 
+### Diagnostics and Lifecycle
+
 `toString()` is synchronous. It returns a point-in-time representation of the cache contents and should be treated as diagnostic output, not as a synchronized cache operation.
 
 Caches that implement `Disposable` own a background timer for sweeping expired
 entries, checking alert thresholds, or both. Call `dispose()` when the cache is
 no longer needed. It is idempotent; after disposal, cache read/write operations
 continue to work, but background sweep and alert monitoring stop.
+
+### Metrics Retention
 
 `CacheMetrics` keeps bounded in-memory samples: the most recent 1,000 latency
 samples and 10,000 eviction timestamps. Hit, miss, and total request counters are

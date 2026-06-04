@@ -67,6 +67,10 @@ Use `update()` to replace an existing value or store an `ifAbsent` value, and
 `removeWhere()` to remove entries selected from a key snapshot without
 incrementing LFU frequency while testing entries.
 
+Use `getAll()`, `setAll()`, and `removeAll()` when you need to read, warm, or
+invalidate multiple keys. Each present key follows the same LFU frequency
+effects as the equivalent single-key operation.
+
 ### 3.6 Occupancy (`size` / `isEmpty` / `isNotEmpty` operations)
 
 `size`, `isEmpty`, and `isNotEmpty` report the current number of cached entries

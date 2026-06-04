@@ -1,4 +1,4 @@
-## Unreleased
+## 2.4.0 - Conditional Mutation Helpers and Bulk Operations
 
 ### New Features
 

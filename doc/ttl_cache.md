@@ -83,6 +83,10 @@ Use `update()` to replace an existing live value or store an `ifAbsent` value.
 Both methods accept `ttl:` through TTL cache abstractions when they store a
 value. Use `removeWhere()` to remove live entries selected from a key snapshot.
 
+Use `getAll()`, `setAll()`, and `removeAll()` when you need to read, warm, or
+invalidate multiple keys. TTL cache abstractions accept `ttl:` on `setAll()` to
+apply the same per-entry TTL to every stored value in the batch.
+
 ### 3.6 Key Snapshot (`getKeys` operation)
 
 `getKeys()` returns only live keys in insertion order. Expired entries are
@@ -198,10 +202,12 @@ cache.dispose();
 | Method | Description |
 |--------|-------------|
 | `set(K key, V value, {Duration? ttl})` | Store an entry. `ttl:` overrides the global TTL for this entry. |
+| `setAll(Map<K, V> entries, {Duration? ttl})` | Store multiple entries. `ttl:` applies to every stored entry in the batch. |
 | `getOrCompute(K key, callback, {Duration? ttl})` | Return an existing live value, or compute and store a new value. `ttl:` applies to newly stored values only. |
 | `putIfAbsent(K key, callback, {Duration? ttl})` | Store and return a value only when the key is absent or expired. `ttl:` applies to newly stored values only. |
 | `update(K key, callback, {ifAbsent, Duration? ttl})` | Replace an existing live value, or store `ifAbsent` when provided. `ttl:` applies when a value is stored. |
 | `get(K key)` | Retrieve a value, or `null` if missing or expired (lazy eviction). |
+| `getAll(Iterable<K> keys)` | Retrieve currently live values for multiple keys. Missing or expired keys are omitted. |
 | `peek(K key)` | Retrieve a value without changing cache policy state, or `null` if missing or expired (lazy eviction). |
 | `containsKey(K key)` | Return whether a non-expired entry exists for the key. Expired entries are removed and return `false`. |
 | `getKeys()` | Return only keys whose TTL has not elapsed. |
@@ -209,6 +215,7 @@ cache.dispose();
 | `purgeExpired()` | Remove all expired entries and return how many entries were removed. |
 | `removeWhere(test)` | Remove live entries that match the predicate. |
 | `remove(K key)` | Remove a single entry; no-op if absent. |
+| `removeAll(Iterable<K> keys)` | Remove multiple entries; missing keys are ignored. |
 | `clear()` | Remove all entries. |
 | `dispose()` | Cancel the background sweep timer. Idempotent. Supported by `TTLCache` and `MonitoredTTLCache`; not supported by `SimpleTTLCache`. |
 
