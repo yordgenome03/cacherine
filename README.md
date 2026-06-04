@@ -54,7 +54,7 @@ Check the latest version on [pub.dev](https://pub.dev/packages/cacherine) and ad
 
 ```yaml
 dependencies:
-  cacherine: ^2.2.0
+  cacherine: ^2.3.0
 ```
 
 Then, run the following command in your terminal:

@@ -1,9 +1,10 @@
-## Unreleased
+## 2.3.0 - Peek, Occupancy APIs, and TTL Purge Cleanup
 
 ### Documentation
 
 - Expanded the runnable example and README cache-aside snippets to cover both `getOrSet()` and TTL-aware `getOrCompute()`.
 - Documented the non-mutating `peek()` API across README and cache guides.
+- Documented occupancy APIs (`size`, `isEmpty`, and `isNotEmpty`) across README and cache guides.
 - Documented explicit TTL expiry cleanup with `purgeExpired()`.
 
 ### New Features
