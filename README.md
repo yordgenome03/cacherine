@@ -48,6 +48,9 @@ Whether you need a simple synchronous cache or an async-compatible solution that
 - **`purgeExpired()` support for TTL caches** (explicitly removes expired TTL entries and returns the number removed)
 - **Conditional mutation helpers**: `putIfAbsent()`, `update()`, and `removeWhere()` for cache-aside writes, targeted updates, and predicate-based cleanup
 - **Bulk operations**: `getAll()`, `setAll()`, and `removeAll()` for multi-key reads, writes, and invalidation
+- **Weight-based eviction** (`SimpleWeightedLRUCache`/`WeightedLRUCache`/`MonitoredWeightedLRUCache`): bound a cache by a caller-supplied per-entry weight — e.g. an estimated byte size — instead of (or alongside) entry count
+  — [Learn more](doc/weighted_lru_cache.md)
+- **Composable cache engine** (`Cache`/`AsyncCache`/`MonitoredCache` + `CacheStore`): every named cache class is a thin facade over this engine; combine capacity, weight, and TTL directly for combinations without a dedicated name
 - **Simple versions (e.g., SimpleFIFOCache) for synchronous usage, and standard versions that serialize concurrent async calls within the same isolate**
 
 ## Installation
@@ -172,6 +175,27 @@ void main() async {
 }
 ```
 
+### Weighted Cache Usage
+
+Bound a cache by a per-entry weight (e.g. estimated byte size) instead of just entry count.
+[Learn more about weight-based eviction.](doc/weighted_lru_cache.md)
+
+```Dart
+import 'package:cacherine/cacherine.dart';
+
+void main() {
+  final cache = SimpleWeightedLRUCache<String, List<int>>(
+    maxWeight: 1024 * 1024, // 1 MB
+    weigher: (key, value) => value.length,
+  );
+
+  cache.set('small', List.filled(100, 0));
+  cache.set('large', List.filled(900 * 1024, 0));
+
+  print(cache.currentWeight); // sum of the weights of stored entries
+}
+```
+
 ### Monitoring Usage
 
 If you want to monitor the performance of your cache and optimize the algorithm, use a monitored cache variant such as `MonitoredLRUCache` or `MonitoredTTLCache`.
@@ -293,6 +317,7 @@ retained samples.
 - [SimpleMRUCache<K, V>](lib/src/caches/simple_mru_cache.dart): Synchronous MRU-based cache
 - [SimpleLFUCache<K, V>](lib/src/caches/simple_lfu_cache.dart): Synchronous LFU-based cache
 - [SimpleTTLCache<K, V>](lib/src/caches/simple_ttl_cache.dart): Synchronous TTL-based cache
+- [SimpleWeightedLRUCache<K, V>](lib/src/caches/simple_weighted_lru_cache.dart): Synchronous LRU-based cache bounded by a per-entry weight instead of just entry count
 
 - [FIFOCache<K, V>](lib/src/caches/fifo_cache.dart): FIFO-based cache
 - [EphemeralFIFOCache<K, V>](lib/src/caches/ephemeral_fifo_cache.dart): FIFO-based cache where the key is removed after being accessed (One-Time Read Cache)
@@ -300,6 +325,7 @@ retained samples.
 - [MRUCache<K, V>](lib/src/caches/mru_cache.dart): Cache that removes the most recently used items
 - [LFUCache<K, V>](lib/src/caches/lfu_cache.dart): Cache that removes the least frequently used items
 - [TTLCache<K, V>](lib/src/caches/ttl_cache.dart): Cache with time-based expiry; global TTL with optional per-entry override, lazy eviction, optional background sweep, and optional capacity limit
+- [WeightedLRUCache<K, V>](lib/src/caches/weighted_lru_cache.dart): LRU-based cache bounded by a per-entry weight instead of just entry count
 
 - [MonitoredFIFOCache<K, V>](lib/src/caches/monitored_fifo_cache.dart): FIFO-based cache with monitoring
 - [MonitoredEphemeralFIFOCache<K, V>](lib/src/caches/monitored_ephemeral_fifo_cache.dart): Ephemeral FIFO cache with monitoring
@@ -307,6 +333,12 @@ retained samples.
 - [MonitoredMRUCache<K, V>](lib/src/caches/monitored_mru_cache.dart): MRU-based cache with monitoring
 - [MonitoredLFUCache<K, V>](lib/src/caches/monitored_lfu_cache.dart): LFU-based cache with monitoring
 - [MonitoredTTLCache<K, V>](lib/src/caches/monitored_ttl_cache.dart): TTL-based cache with monitoring
+- [MonitoredWeightedLRUCache<K, V>](lib/src/caches/monitored_weighted_lru_cache.dart): Weight-bounded LRU cache with monitoring
+
+- [Cache<K, V>](lib/src/caches/cache.dart): The synchronous, composable engine every cache above is a facade over — configure a `CacheStore`, `maxSize`, `weigher`/`maxWeight`, and/or `ttl` directly for combinations without a dedicated class
+- [AsyncCache<K, V>](lib/src/caches/async_cache.dart): Async-safe wrapper around `Cache`
+- [MonitoredCache<K, V>](lib/src/caches/monitored_cache.dart): `AsyncCache` plus hit/miss/latency/eviction monitoring
+- [CacheStore<K, V>](lib/src/stores/cache_store.dart): The eviction-policy contract (`LRUStore`, `MRUStore`, `FIFOStore`, `EphemeralFIFOStore`, `LFUStore`) `Cache` is configured with
 
 - [CacheStatsDashboard](lib/src/monitorings/cache_stats_dashboard.dart): Wraps `CacheMetrics` to provide `snapshot(Duration window)` and `stream(Duration window, Duration interval)`
 - [CacheMetricsSnapshot](lib/src/monitorings/cache_metrics.dart): Typed point-in-time metrics snapshot returned by `CacheMetrics.snapshot(Duration window)`

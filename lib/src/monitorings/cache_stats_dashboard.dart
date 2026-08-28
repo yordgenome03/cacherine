@@ -1,4 +1,5 @@
 import 'cache_metrics.dart';
+import 'eviction_reason.dart';
 
 /// Immutable point-in-time snapshot of all cache metrics.
 class DashboardSnapshot {
@@ -9,6 +10,7 @@ class DashboardSnapshot {
   final Duration p95Latency;
   final Duration p99Latency;
   final int evictionsPerMinute;
+  final Map<EvictionReason, int> evictionsPerMinuteByReason;
   final int totalRequests;
   final DateTime capturedAt;
 
@@ -22,6 +24,7 @@ class DashboardSnapshot {
     required this.evictionsPerMinute,
     required this.totalRequests,
     required this.capturedAt,
+    this.evictionsPerMinuteByReason = const {},
   });
 }
 
@@ -49,6 +52,7 @@ class CacheStatsDashboard {
       p95Latency: stats.p95Latency,
       p99Latency: stats.p99Latency,
       evictionsPerMinute: stats.evictionsPerMinute,
+      evictionsPerMinuteByReason: stats.evictionsPerMinuteByReason,
       totalRequests: stats.totalRequests,
       capturedAt: stats.capturedAt,
     );

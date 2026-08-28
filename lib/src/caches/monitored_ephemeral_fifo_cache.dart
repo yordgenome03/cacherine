@@ -1,17 +1,11 @@
-import 'dart:async';
-import 'dart:collection';
-
-import 'package:synchronized/synchronized.dart';
-
 import '../monitorings/cache_alert_manager.dart';
-import '../monitorings/cache_monitoring.dart';
-import '../interfaces/disposable.dart';
-import '../interfaces/thread_safe_cache.dart';
+import '../stores/ephemeral_fifo_store.dart';
+import 'monitored_cache.dart';
 
 /// **Async-safe Ephemeral FIFO (First In, First Out) Cache with Monitoring**
 ///
-/// This class extends [ThreadSafeCache] and serializes concurrent async calls
-/// on the same cache instance within the same isolate using `Lock`.
+/// This class serializes concurrent async calls on the same cache instance
+/// within the same isolate using `Lock`.
 ///
 /// Additionally, by utilizing the [CacheMonitoring] mixin, it automatically **monitors cache performance**.
 /// It records the following metrics and triggers alerts via the [CacheAlertManager] if thresholds are exceeded:
@@ -28,18 +22,7 @@ import '../interfaces/thread_safe_cache.dart';
 /// ### **Note**:
 /// - **The retrieved data cannot be reused (it is removed from the cache upon retrieval)**
 /// - **If you need to preserve the key, use `MonitoredFIFOCache` instead.**
-class MonitoredEphemeralFIFOCache<K, V> extends ThreadSafeCache<K, V>
-    with CacheMonitoring<K, V>
-    implements Disposable {
-  final int maxSize;
-  final LinkedHashMap<K, V> _cache = LinkedHashMap();
-  final _lock = Lock();
-
-  /// Cache monitoring alert manager
-  ///
-  /// This manager triggers alerts when specified thresholds are exceeded.
-  late final CacheAlertManager _cacheAlertManager;
-
+class MonitoredEphemeralFIFOCache<K, V> extends MonitoredCache<K, V> {
   /// **Creates a [MonitoredEphemeralFIFOCache] with a specified maximum size and alert configuration.**
   ///
   /// - **[maxSize]**: The maximum size of the cache.
@@ -49,140 +32,11 @@ class MonitoredEphemeralFIFOCache<K, V> extends ThreadSafeCache<K, V>
   ///
   /// **Throws an [ArgumentError] if [maxSize] is less than or equal to 0.**
   MonitoredEphemeralFIFOCache({
-    required this.maxSize,
+    required int maxSize,
     CacheAlertConfig? alertConfig,
-  }) {
-    if (maxSize <= 0) {
-      throw ArgumentError('maxSize must be greater than 0.');
-    }
-    _cacheAlertManager = CacheAlertManager(
-      metrics,
-      alertConfig ?? CacheAlertConfig(),
-    );
-    _cacheAlertManager.monitor();
-  }
-
-  /// Returns all the keys currently stored in the cache.
-  ///
-  /// **This method is async-safe**.
-  @override
-  Future<Iterable<K>> getKeys() async {
-    return await _lock.synchronized(() {
-      return Map<K, V>.of(_cache).keys;
-    });
-  }
-
-  /// Retrieves the value for the specified key and **removes the key from the cache**.
-  ///
-  /// - **Records cache hit/miss and measures request latency** via [CacheMonitoring].
-  /// - **Returns `null` if the key does not exist in the cache.**
-  ///
-  /// **This method is async-safe**.
-  @override
-  Future<V?> get(K key) async {
-    var found = false;
-    return await monitoredGet(key, () async {
-      return await _lock.synchronized(() {
-        found = _cache.containsKey(key);
-        return _cache.remove(key); // Remove after retrieval
-      });
-    }, found: () => found);
-  }
-
-  /// Retrieves [key] without removing it or recording metrics.
-  ///
-  /// **This method is async-safe**.
-  @override
-  Future<V?> peek(K key) async {
-    return await _lock.synchronized(() => _cache[key]);
-  }
-
-  /// Checks whether [key] exists in the cache without removing it or recording metrics.
-  ///
-  /// **This method is async-safe**.
-  @override
-  Future<bool> containsKey(K key) async {
-    return await _lock.synchronized(() => _cache.containsKey(key));
-  }
-
-  /// Stores the specified key and value in the cache.
-  ///
-  /// - If the key already exists, `set()` will **update its value** without changing its position.
-  /// - If the cache size exceeds **[maxSize]**, the oldest element will be removed based on the FIFO policy.
-  ///
-  /// **This method is async-safe**.
-  @override
-  Future<void> set(K key, V value) async {
-    await _lock.synchronized(() {
-      if (!_cache.containsKey(key) && _cache.length >= maxSize) {
-        _cache.remove(
-          _cache.keys.first,
-        ); // Remove the oldest element based on FIFO policy
-        metrics.recordEviction();
-      }
-      _cache[key] = value; // Update value (position remains unchanged)
-    });
-  }
-
-  @override
-  Future<V> getOrCompute(K key, FutureOr<V> Function() valueFactory) async {
-    var found = false;
-    return await monitoredGet(key, () async {
-          return await _lock.synchronized(() async {
-            if (_cache.containsKey(key)) {
-              found = true;
-              return _cache.remove(key) as V;
-            }
-            final value = await valueFactory();
-            if (_cache.length >= maxSize) {
-              _cache.remove(_cache.keys.first);
-              metrics.recordEviction();
-            }
-            _cache[key] = value;
-            return value;
-          });
-        }, found: () => found)
-        as V;
-  }
-
-  /// Removes the entry with the given key from the cache.
-  ///
-  /// - If the key existed, records a manual eviction via [CacheMonitoring].
-  /// - If the key does not exist, this call is a no-op.
-  ///
-  /// **This method is async-safe**.
-  @override
-  Future<void> remove(K key) async {
-    await _lock.synchronized(() {
-      if (_cache.containsKey(key)) {
-        _cache.remove(key);
-        metrics.recordEviction();
-      }
-    });
-  }
-
-  /// Clears the cache and removes all data.
-  ///
-  /// - The monitoring function remains active even after the cache is cleared.
-  ///
-  /// **This method is async-safe**.
-  @override
-  Future<void> clear() async {
-    await _lock.synchronized(_cache.clear);
-  }
-
-  @override
-  void dispose() => _cacheAlertManager.dispose();
-
-  /// Returns a string representation of the current state of the cache.
-  ///
-  /// - Outputs the **key-value pairs** stored in the cache.
-  ///
-  /// **Note:** `toString()` is synchronous and does not acquire the internal
-  /// lock. Treat the result as diagnostic output for a point-in-time view.
-  @override
-  String toString() {
-    final snapshot = Map.of(_cache); // Take a snapshot of the cache
-    return snapshot.toString();
-  }
+  }) : super(
+         store: EphemeralFIFOStore<K, V>(),
+         maxSize: maxSize,
+         alertConfig: alertConfig,
+       );
 }

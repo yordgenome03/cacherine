@@ -1,5 +1,7 @@
 import 'dart:collection';
 
+import 'eviction_reason.dart';
+
 /// Typed point-in-time snapshot of cache metrics.
 class CacheMetricsSnapshot {
   final double hitRate;
@@ -9,6 +11,11 @@ class CacheMetricsSnapshot {
   final Duration p95Latency;
   final Duration p99Latency;
   final int evictionsPerMinute;
+
+  /// Eviction rate broken out by [EvictionReason], additive alongside the
+  /// aggregate [evictionsPerMinute]. Reasons with zero recent evictions are
+  /// omitted.
+  final Map<EvictionReason, int> evictionsPerMinuteByReason;
   final int totalRequests;
   final DateTime capturedAt;
 
@@ -22,7 +29,14 @@ class CacheMetricsSnapshot {
     required this.evictionsPerMinute,
     required this.totalRequests,
     required this.capturedAt,
+    this.evictionsPerMinuteByReason = const {},
   });
+}
+
+class _EvictionRecord {
+  final DateTime at;
+  final EvictionReason reason;
+  const _EvictionRecord(this.at, this.reason);
 }
 
 /// Cache performance metrics class
@@ -49,7 +63,7 @@ class CacheMetrics {
   int _misses = 0;
   int _totalRequests = 0;
   final Queue<Duration> _latencies = Queue();
-  final Queue<DateTime> _evictions = Queue();
+  final Queue<_EvictionRecord> _evictions = Queue();
 
   /// Creates a metrics collector.
   ///
@@ -105,10 +119,14 @@ class CacheMetrics {
     _latencies.add(latency);
   }
 
-  /// Records a cache eviction event
-  void recordEviction() {
+  /// Records a cache eviction event.
+  ///
+  /// [reason] defaults to [EvictionReason.unspecified] for call sites written
+  /// before per-cause tracking existed; pass the actual cause so it can be
+  /// broken out in [CacheMetricsSnapshot.evictionsPerMinuteByReason].
+  void recordEviction([EvictionReason reason = EvictionReason.unspecified]) {
     if (_evictions.length >= maxEvictionSamples) _evictions.removeFirst();
-    _evictions.add(_clock());
+    _evictions.add(_EvictionRecord(_clock(), reason));
   }
 
   /// Captures a typed point-in-time snapshot within a given time window.
@@ -123,8 +141,18 @@ class CacheMetrics {
     final now = _clock();
     final windowStart = now.subtract(window);
     final recentEvictions = _evictions
-        .where((t) => t.isAfter(windowStart))
-        .length;
+        .where((e) => e.at.isAfter(windowStart))
+        .toList();
+    final byReason = <EvictionReason, int>{};
+    for (final e in recentEvictions) {
+      byReason[e.reason] = (byReason[e.reason] ?? 0) + 1;
+    }
+    final perMinuteByReason = byReason.map(
+      (reason, count) => MapEntry(
+        reason,
+        (count * Duration.microsecondsPerMinute) ~/ window.inMicroseconds,
+      ),
+    );
     final sortedLatencies = List.of(_latencies)..sort();
     return CacheMetricsSnapshot(
       hitRate: hitRate,
@@ -134,8 +162,9 @@ class CacheMetrics {
       p95Latency: _latencyPercentile(sortedLatencies, 95),
       p99Latency: _latencyPercentile(sortedLatencies, 99),
       evictionsPerMinute:
-          (recentEvictions * Duration.microsecondsPerMinute) ~/
+          (recentEvictions.length * Duration.microsecondsPerMinute) ~/
           window.inMicroseconds,
+      evictionsPerMinuteByReason: perMinuteByReason,
       totalRequests: totalRequests,
       capturedAt: now,
     );

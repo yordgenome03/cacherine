@@ -1,16 +1,11 @@
 import 'dart:async';
-import 'dart:collection';
-
-import 'package:synchronized/synchronized.dart';
 
 import '../interfaces/disposable.dart';
+import '../interfaces/periodic_sweeper.dart';
 import '../interfaces/thread_safe_ttl_cache.dart';
-
-class _TTLEntry<V> {
-  final V value;
-  final DateTime expiry;
-  _TTLEntry(this.value, this.expiry);
-}
+import '../stores/ttl_fifo_store.dart';
+import 'async_cache.dart';
+import 'cache.dart';
 
 /// **Thread-safe TTL (Time-To-Live) Cache**
 ///
@@ -19,15 +14,14 @@ class _TTLEntry<V> {
 /// expired entries proactively to reclaim memory.
 ///
 /// Implements [Disposable] — call [dispose] to cancel the sweep timer.
+///
+/// Wraps an [AsyncCache] configured with a [TTLFifoStore] — internally a
+/// composed engine rather than a subclass, so this class can keep extending
+/// [ThreadSafeTTLCacheInterface] for backward compatibility.
 class TTLCache<K, V> extends ThreadSafeTTLCacheInterface<K, V>
+    with PeriodicSweeper
     implements Disposable {
-  final Duration _globalTTL;
-  final int? _maxSize;
-  final DateTime Function() _clock;
-
-  final LinkedHashMap<K, _TTLEntry<V>> _cache = LinkedHashMap();
-  final _lock = Lock();
-  Timer? _sweepTimer;
+  final AsyncCache<K, V> _engine;
 
   /// Creates a [TTLCache].
   ///
@@ -37,114 +31,41 @@ class TTLCache<K, V> extends ThreadSafeTTLCacheInterface<K, V>
   /// - [sweepInterval]: When provided, a background timer fires at this interval
   ///   and removes all expired entries.
   /// - [clock]: Injectable time source for testing; defaults to [DateTime.now].
-  ///
-  /// When [maxSize] is configured and the cache is at capacity, [set] scans all
-  /// entries to remove expired data before applying FIFO eviction.
   TTLCache({
     required Duration ttl,
     int? maxSize,
     Duration? sweepInterval,
     DateTime Function()? clock,
-  }) : _globalTTL = ttl,
-       _maxSize = maxSize,
-       _clock = clock ?? DateTime.now {
-    if (ttl <= Duration.zero) {
-      throw ArgumentError('ttl must be greater than zero.');
-    }
-    if (maxSize != null && maxSize <= 0) {
-      throw ArgumentError('maxSize must be greater than 0.');
-    }
-    if (sweepInterval != null && sweepInterval <= Duration.zero) {
-      throw ArgumentError('sweepInterval must be greater than zero.');
-    }
+  }) : _engine = AsyncCache(
+         Cache(
+           store: TTLFifoStore<K, V>(),
+           maxSize: maxSize,
+           ttl: ttl,
+           clock: clock,
+         ),
+       ) {
     if (sweepInterval != null) {
-      _sweepTimer = Timer.periodic(sweepInterval, (_) => _sweep());
-    }
-  }
-
-  void _sweep() {
-    // Called from timer callback — must be synchronous; Lock is reentrant-safe.
-    _lock.synchronized(() {
-      _removeExpired(_clock());
-    });
-  }
-
-  int _removeExpired(DateTime now) {
-    var removed = 0;
-    _cache.removeWhere((_, entry) {
-      final expired = !entry.expiry.isAfter(now);
-      if (expired) removed++;
-      return expired;
-    });
-    return removed;
-  }
-
-  void _evictIfNeeded() {
-    final maxSize = _maxSize;
-    // Skip the scan entirely when below capacity — the common case.
-    if (maxSize == null || _cache.length < maxSize) return;
-    // Full scan required: expired entries anywhere in the map must not count
-    // toward capacity, so we cannot safely stop at the first live entry.
-    _removeExpired(_clock());
-    while (_cache.length >= maxSize) {
-      _cache.remove(_cache.keys.first);
+      if (sweepInterval <= Duration.zero) {
+        throw ArgumentError('sweepInterval must be greater than zero.');
+      }
+      startSweep(sweepInterval, _engine.purgeExpired);
     }
   }
 
   @override
-  Future<Iterable<K>> getKeys() async {
-    return await _lock.synchronized(() {
-      final now = _clock();
-      return _cache.entries
-          .where((e) => e.value.expiry.isAfter(now))
-          .map((e) => e.key)
-          .toList();
-    });
-  }
+  Future<Iterable<K>> getKeys() => _engine.getKeys();
 
   @override
-  Future<int> purgeExpired() async {
-    return await _lock.synchronized(() => _removeExpired(_clock()));
-  }
+  Future<int> purgeExpired() => _engine.purgeExpired();
 
   @override
-  Future<V?> get(K key) async {
-    return await _lock.synchronized(() {
-      final entry = _cache[key];
-      if (entry == null) return null;
-      if (!entry.expiry.isAfter(_clock())) {
-        _cache.remove(key);
-        return null;
-      }
-      return entry.value;
-    });
-  }
+  Future<V?> get(K key) => _engine.get(key);
 
   @override
-  Future<V?> peek(K key) async {
-    return await _lock.synchronized(() {
-      final entry = _cache[key];
-      if (entry == null) return null;
-      if (!entry.expiry.isAfter(_clock())) {
-        _cache.remove(key);
-        return null;
-      }
-      return entry.value;
-    });
-  }
+  Future<V?> peek(K key) => _engine.peek(key);
 
   @override
-  Future<bool> containsKey(K key) async {
-    return await _lock.synchronized(() {
-      final entry = _cache[key];
-      if (entry == null) return false;
-      if (!entry.expiry.isAfter(_clock())) {
-        _cache.remove(key);
-        return false;
-      }
-      return true;
-    });
-  }
+  Future<bool> containsKey(K key) => _engine.containsKey(key);
 
   /// Stores [key]/[value] in the cache.
   ///
@@ -152,55 +73,24 @@ class TTLCache<K, V> extends ThreadSafeTTLCacheInterface<K, V>
   /// - If the key already exists, its value and expiry are updated and its
   ///   insertion order is refreshed (it becomes the newest entry for FIFO purposes).
   @override
-  Future<void> set(K key, V value, {Duration? ttl}) async {
-    if (ttl != null && ttl <= Duration.zero) {
-      throw ArgumentError('ttl must be greater than zero.');
-    }
-    await _lock.synchronized(() {
-      _cache.remove(key); // Refresh insertion order on update.
-      _evictIfNeeded();
-      _cache[key] = _TTLEntry(value, _clock().add(ttl ?? _globalTTL));
-    });
-  }
+  Future<void> set(K key, V value, {Duration? ttl}) =>
+      _engine.set(key, value, ttl: ttl);
 
   @override
   Future<V> getOrCompute(
     K key,
     FutureOr<V> Function() valueFactory, {
     Duration? ttl,
-  }) async {
-    if (ttl != null && ttl <= Duration.zero) {
-      throw ArgumentError('ttl must be greater than zero.');
-    }
-    return await _lock.synchronized(() async {
-      final entry = _cache[key];
-      final now = _clock();
-      if (entry != null) {
-        if (entry.expiry.isAfter(now)) return entry.value;
-        _cache.remove(key);
-      }
-      final value = await valueFactory();
-      _evictIfNeeded();
-      _cache[key] = _TTLEntry(value, _clock().add(ttl ?? _globalTTL));
-      return value;
-    });
-  }
+  }) => _engine.getOrCompute(key, valueFactory, ttl: ttl);
 
   @override
-  Future<void> remove(K key) async {
-    await _lock.synchronized(() {
-      _cache.remove(key);
-    });
-  }
+  Future<void> remove(K key) => _engine.remove(key);
 
   @override
-  Future<void> clear() async {
-    await _lock.synchronized(_cache.clear);
-  }
+  Future<void> clear() => _engine.clear();
 
+  /// **Note:** `toString()` is synchronous and does not acquire the internal
+  /// lock. Treat the result as diagnostic output for a point-in-time view.
   @override
-  void dispose() {
-    _sweepTimer?.cancel();
-    _sweepTimer = null;
-  }
+  String toString() => _engine.toString();
 }

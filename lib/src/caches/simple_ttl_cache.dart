@@ -1,13 +1,6 @@
-import 'dart:collection';
-
 import '../interfaces/simple_ttl_cache.dart';
-
-class _SimpleTTLEntry<V> {
-  final V value;
-  final DateTime expiry;
-
-  _SimpleTTLEntry(this.value, this.expiry);
-}
+import '../stores/ttl_fifo_store.dart';
+import 'cache.dart';
 
 /// **Non-thread-safe TTL (Time-To-Live) Cache**
 ///
@@ -18,12 +11,12 @@ class _SimpleTTLEntry<V> {
 /// or scenarios where **concurrent access is not required**.
 /// Since it is not thread-safe and does not perform synchronization,
 /// **use `TTLCache` if async-safe access is needed.**
+///
+/// Wraps a [Cache] configured with a [TTLFifoStore] — internally a composed
+/// engine rather than a subclass, so this class can keep extending
+/// [SimpleTTLCacheInterface] for backward compatibility.
 class SimpleTTLCache<K, V> extends SimpleTTLCacheInterface<K, V> {
-  final Duration _globalTTL;
-  final int? _maxSize;
-  final DateTime Function() _clock;
-
-  final LinkedHashMap<K, _SimpleTTLEntry<V>> _cache = LinkedHashMap();
+  final Cache<K, V> _engine;
 
   /// Creates a [SimpleTTLCache].
   ///
@@ -38,57 +31,24 @@ class SimpleTTLCache<K, V> extends SimpleTTLCacheInterface<K, V> {
     required Duration ttl,
     int? maxSize,
     DateTime Function()? clock,
-  }) : _globalTTL = ttl,
-       _maxSize = maxSize,
-       _clock = clock ?? DateTime.now {
-    if (ttl <= Duration.zero) {
-      throw ArgumentError('ttl must be greater than zero.');
-    }
-    if (maxSize != null && maxSize <= 0) {
-      throw ArgumentError('maxSize must be greater than 0.');
-    }
-  }
-
-  bool _isExpired(_SimpleTTLEntry<V> entry) => !entry.expiry.isAfter(_clock());
-
-  int _removeExpiredEntries() {
-    final now = _clock();
-    var removed = 0;
-    _cache.removeWhere((_, entry) {
-      final expired = !entry.expiry.isAfter(now);
-      if (expired) removed++;
-      return expired;
-    });
-    return removed;
-  }
-
-  void _evictIfNeeded() {
-    final maxSize = _maxSize;
-    if (maxSize == null || _cache.length < maxSize) return;
-
-    _removeExpiredEntries();
-    while (_cache.length >= maxSize) {
-      _cache.remove(_cache.keys.first);
-    }
-  }
+  }) : _engine = Cache(
+         store: TTLFifoStore<K, V>(),
+         maxSize: maxSize,
+         ttl: ttl,
+         clock: clock,
+       );
 
   /// Returns all non-expired keys currently stored in the cache.
   ///
   /// **This method is not thread-safe.**
   @override
-  Iterable<K> getKeys() {
-    final now = _clock();
-    return _cache.entries
-        .where((e) => e.value.expiry.isAfter(now))
-        .map((e) => e.key)
-        .toList();
-  }
+  Iterable<K> getKeys() => _engine.getKeys();
 
   /// Removes expired entries and returns how many entries were removed.
   ///
   /// **This method is not thread-safe.**
   @override
-  int purgeExpired() => _removeExpiredEntries();
+  int purgeExpired() => _engine.purgeExpired();
 
   /// Retrieves the value associated with the specified key.
   ///
@@ -97,15 +57,7 @@ class SimpleTTLCache<K, V> extends SimpleTTLCacheInterface<K, V> {
   ///
   /// **This method is not thread-safe.**
   @override
-  V? get(K key) {
-    final entry = _cache[key];
-    if (entry == null) return null;
-    if (_isExpired(entry)) {
-      _cache.remove(key);
-      return null;
-    }
-    return entry.value;
-  }
+  V? get(K key) => _engine.get(key);
 
   /// Retrieves [key] without changing insertion order.
   ///
@@ -113,32 +65,13 @@ class SimpleTTLCache<K, V> extends SimpleTTLCacheInterface<K, V> {
   ///
   /// **This method is not thread-safe.**
   @override
-  V? peek(K key) {
-    final entry = _cache[key];
-    if (entry == null) return null;
-    if (_isExpired(entry)) {
-      _cache.remove(key);
-      return null;
-    }
-    return entry.value;
-  }
+  V? peek(K key) => _engine.peek(key);
 
   /// Checks whether [key] exists and has not expired.
   ///
-  /// Use this method to distinguish a present key with a `null` value from an
-  /// absent or expired key.
-  ///
   /// **This method is not thread-safe.**
   @override
-  bool containsKey(K key) {
-    final entry = _cache[key];
-    if (entry == null) return false;
-    if (_isExpired(entry)) {
-      _cache.remove(key);
-      return false;
-    }
-    return true;
-  }
+  bool containsKey(K key) => _engine.containsKey(key);
 
   /// Stores [key]/[value] in the cache.
   ///
@@ -148,15 +81,8 @@ class SimpleTTLCache<K, V> extends SimpleTTLCacheInterface<K, V> {
   ///
   /// **This method is not thread-safe.**
   @override
-  void set(K key, V value, {Duration? ttl}) {
-    if (ttl != null && ttl <= Duration.zero) {
-      throw ArgumentError('ttl must be greater than zero.');
-    }
-
-    _cache.remove(key);
-    _evictIfNeeded();
-    _cache[key] = _SimpleTTLEntry(value, _clock().add(ttl ?? _globalTTL));
-  }
+  void set(K key, V value, {Duration? ttl}) =>
+      _engine.set(key, value, ttl: ttl);
 
   /// Removes the entry with the given key from the cache.
   ///
@@ -164,17 +90,13 @@ class SimpleTTLCache<K, V> extends SimpleTTLCacheInterface<K, V> {
   ///
   /// **This method is not thread-safe.**
   @override
-  void remove(K key) {
-    _cache.remove(key);
-  }
+  void remove(K key) => _engine.remove(key);
 
   /// Clears all data stored in the cache.
   ///
   /// **This method is not thread-safe.**
   @override
-  void clear() {
-    _cache.clear();
-  }
+  void clear() => _engine.clear();
 
   /// Returns a string representation of the current live cache state.
   ///
@@ -182,14 +104,5 @@ class SimpleTTLCache<K, V> extends SimpleTTLCacheInterface<K, V> {
   ///
   /// **This method is not thread-safe.**
   @override
-  String toString() {
-    final liveEntries = <K, V>{};
-    final now = _clock();
-    for (final entry in _cache.entries) {
-      if (entry.value.expiry.isAfter(now)) {
-        liveEntries[entry.key] = entry.value.value;
-      }
-    }
-    return liveEntries.toString();
-  }
+  String toString() => _engine.toString();
 }

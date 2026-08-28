@@ -1,3 +1,22 @@
+## Unreleased - Composable Cache Engine, Weight-Based Eviction
+
+### New Features
+
+- **Weight-based eviction (closes #67)**: Added `SimpleWeightedLRUCache`, `WeightedLRUCache`, and `MonitoredWeightedLRUCache` — LRU caches bounded by a caller-supplied per-entry weight (e.g. estimated byte size) via a `weigher` callback and `maxWeight`, optionally alongside an entry-count `maxSize`. An explicit `weight:` argument can also be passed per `set()` call.
+- **Composable cache engine**: Added public `Cache`/`AsyncCache`/`MonitoredCache` classes and a `CacheStore` interface (with `LRUStore`/`MRUStore`/`FIFOStore`/`EphemeralFIFOStore`/`LFUStore` implementations). Every named cache class in this package (`SimpleLRUCache`, `TTLCache`, `MonitoredWeightedLRUCache`, ...) is now a thin facade over this engine — power users can configure combinations that don't have a dedicated name (e.g. a weight-and-TTL-bounded LRU cache) by constructing `Cache`/`AsyncCache`/`MonitoredCache` directly.
+- **Per-cause eviction tracking**: Added `EvictionReason` (`capacity`, `weight`, `expired`, `manual`, `unspecified`) as an optional argument to `CacheMetrics.recordEviction()`, and an additive `evictionsPerMinuteByReason` field on `CacheMetricsSnapshot`/`DashboardSnapshot`. `CacheAlertConfig` gained an optional `evictionsPerReasonThreshold` so alerting can distinguish an expected `expired` rate from a `capacity`/`weight` rate that signals the cache is undersized.
+- Added a shared `PeriodicSweeper` mixin (implements `Disposable`) that centralizes the "owns a periodic timer" lifecycle previously hand-rolled per TTL/Monitored class.
+
+### Documentation
+
+- Documented that cached values should be treated as immutable once stored under a `weigher` — the recorded weight is never recomputed, so a value mutated in place after caching will silently drift from the ledger; re-`set()` (with an explicit `weight:` override if needed) to refresh it.
+- Documented that `getOrCompute`/`update` hold the whole cache instance's lock across the awaited callback (not just the affected key), so slow work (e.g. a network request) should not run directly inside it.
+- Documented `LFUStore`'s eviction-candidate fallthrough: when the min-frequency bucket's only occupant is the key currently being excluded from eviction, selection falls through to the next occupied frequency bucket rather than reporting nothing evictable.
+
+### Maintenance
+
+- All ~19 pre-existing concrete cache classes (FIFO/EphemeralFIFO/LRU/MRU/LFU/TTL × Simple/async/Monitored) were internally rewritten as thin facades over the new engine, with byte-for-byte-preserved public constructors and behavior — the full pre-existing test suite passes unchanged against them.
+
 ## 2.4.0 - Conditional Mutation Helpers and Bulk Operations
 
 ### New Features
