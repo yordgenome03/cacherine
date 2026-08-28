@@ -136,6 +136,39 @@ class MonitoredTTLCache<K, V> extends ThreadSafeTTLCacheInterface<K, V>
         as V;
   }
 
+  /// Updates the value for [key] and returns the new value.
+  ///
+  /// The inherited [ThreadSafeTTLCacheInterface] default checks presence and
+  /// reads [key] with separate `containsKey`/`get` calls, each independently
+  /// acquiring the lock and reading the clock; this override reads via a
+  /// single [AsyncCache.presentValue]-backed snapshot instead. Not tracked in
+  /// hit/miss metrics, consistent with every other `Monitored*Cache`'s
+  /// `update` (only `get`/`getOrCompute` are monitored).
+  @override
+  Future<V> update(
+    K key,
+    FutureOr<V> Function(V value) update, {
+    FutureOr<V> Function()? ifAbsent,
+    Duration? ttl,
+  }) => _engine.update(key, update, ifAbsent: ifAbsent, ttl: ttl);
+
+  /// Retrieves values for all currently present [keys].
+  ///
+  /// The inherited [ThreadSafeCache] default checks presence and reads each
+  /// key with separate `containsKey`/`get` calls, each independently
+  /// acquiring the lock; this override reads each key atomically instead.
+  @override
+  Future<Map<K, V>> getAll(Iterable<K> keys) => _engine.getAll(keys);
+
+  /// Removes all entries that match [test].
+  ///
+  /// The inherited [ThreadSafeCache] default checks presence and peeks each
+  /// key with separate `containsKey`/`peek` calls, each independently
+  /// acquiring the lock; this override reads each key atomically instead.
+  @override
+  Future<void> removeWhere(FutureOr<bool> Function(K key, V value) test) =>
+      _engine.removeWhere(test);
+
   @override
   Future<void> remove(K key) async {
     final removed = await _engine.lock.synchronized(

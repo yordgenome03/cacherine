@@ -63,6 +63,47 @@ class AsyncCache<K, V> extends ThreadSafeCache<K, V> {
   Future<void> setAll(Map<K, V> entries, {int? weight, Duration? ttl}) =>
       lock.synchronized(() => engine.setAll(entries, weight: weight, ttl: ttl));
 
+  /// The [ThreadSafeCache.getAll] default checks presence and reads each key
+  /// with separate [containsKey]/[get] calls, each independently acquiring
+  /// the lock; on a TTL-enabled instance each also reads the clock
+  /// independently, so an entry can expire (or another call can mutate the
+  /// cache) between the two. This override reads each key with a single
+  /// [Cache.presentValue] snapshot taken under one lock acquisition.
+  @override
+  Future<Map<K, V>> getAll(Iterable<K> keys) async {
+    final values = <K, V>{};
+    for (final key in keys) {
+      final (found, value) = await lock.synchronized(
+        () => engine.presentValue(key),
+      );
+      if (found && (value != null || null is V)) {
+        values[key] = value as V;
+      }
+    }
+    return values;
+  }
+
+  /// The [ThreadSafeCache.removeWhere] default checks presence and peeks each
+  /// key with separate [containsKey]/[peek] calls, each independently
+  /// acquiring the lock; on a TTL-enabled instance each also reads the clock
+  /// independently, so an entry can expire (or another call can mutate the
+  /// cache) between the two. This override reads each key with a single
+  /// [Cache.presentPeek] snapshot taken under one lock acquisition (peek-based,
+  /// so testing an entry for removal never perturbs its eviction-policy
+  /// state).
+  @override
+  Future<void> removeWhere(FutureOr<bool> Function(K key, V value) test) async {
+    for (final key in (await getKeys()).toList()) {
+      final (found, value) = await lock.synchronized(
+        () => engine.presentPeek(key),
+      );
+      if (!found) continue;
+      if (await test(key, value as V)) {
+        await remove(key);
+      }
+    }
+  }
+
   @override
   Future<V> getOrCompute(
     K key,

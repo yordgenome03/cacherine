@@ -1,6 +1,14 @@
 import 'package:cacherine/cacherine.dart';
 import 'package:test/test.dart';
 
+class _ClockCounter {
+  int calls = 0;
+  DateTime call() {
+    calls++;
+    return DateTime(2024).add(Duration(microseconds: calls));
+  }
+}
+
 void main() {
   DateTime fakeNow = DateTime(2024, 1, 1);
   DateTime fakeClock() => fakeNow;
@@ -346,6 +354,66 @@ void main() {
       );
       expect(cache, isA<CacheMonitoring<String, String>>());
       cache.dispose();
+    });
+  });
+
+  group('MonitoredTTLCache - check-then-fetch atomicity', () {
+    final config = CacheAlertConfig(notifyCallback: (_) {});
+
+    // Regression coverage: update()/getAll()/removeWhere() used to be
+    // inherited from ThreadSafeTTLCacheInterface/ThreadSafeCache defaults,
+    // which check presence via containsKey() and then separately fetch via
+    // get()/peek() — each call independently reacquires the composed
+    // AsyncCache's lock and reads the clock. These are now overridden to
+    // delegate to the composed (unmonitored) AsyncCache's own fixed
+    // update()/getAll()/removeWhere(), which read the clock (and lock) once
+    // per key.
+    test('update() reads the clock exactly twice on a hit', () async {
+      final counter = _ClockCounter();
+      final cache = MonitoredTTLCache<String, int>(
+        ttl: const Duration(seconds: 100),
+        clock: counter.call,
+        alertConfig: config,
+      );
+      addTearDown(cache.dispose);
+
+      await cache.set('a', 1);
+      final before = counter.calls;
+      expect(await cache.update('a', (v) async => v + 1), equals(2));
+      expect(counter.calls - before, equals(2));
+    });
+
+    test('getAll() reads the clock once per key on a hit', () async {
+      final counter = _ClockCounter();
+      final cache = MonitoredTTLCache<String, String>(
+        ttl: const Duration(seconds: 100),
+        clock: counter.call,
+        alertConfig: config,
+      );
+      addTearDown(cache.dispose);
+
+      await cache.set('a', '1');
+      await cache.set('b', '2');
+      final before = counter.calls;
+      expect(await cache.getAll(['a', 'b']), equals({'a': '1', 'b': '2'}));
+      expect(counter.calls - before, equals(2));
+    });
+
+    test('removeWhere() reads the clock once per key', () async {
+      final counter = _ClockCounter();
+      final cache = MonitoredTTLCache<String, String>(
+        ttl: const Duration(seconds: 100),
+        clock: counter.call,
+        alertConfig: config,
+      );
+      addTearDown(cache.dispose);
+
+      await cache.set('a', '1');
+      await cache.set('b', '2');
+      final before = counter.calls;
+      await cache.removeWhere((key, value) async => false);
+      // 1 read for getKeys() + 1 per key for presentPeek().
+      expect(counter.calls - before, equals(3));
     });
   });
 }

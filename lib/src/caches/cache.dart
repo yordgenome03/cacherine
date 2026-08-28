@@ -133,6 +133,20 @@ class Cache<K, V> extends SimpleCache<K, V> {
     return (true, _accessAndReconcile(key));
   }
 
+  /// Atomically checks presence and reads [key] via [CacheStore.peek] (no
+  /// eviction-policy side effect) using a single `now` snapshot, returning
+  /// `(found, value)`.
+  ///
+  /// Use this instead of [presentValue] when the check-then-read must not
+  /// perturb policy state — [removeWhere] must not bump LRU recency or LFU
+  /// frequency merely by testing an entry for removal, matching [peek]'s
+  /// no-side-effect contract.
+  (bool, V?) presentPeek(K key) {
+    if (_ttlEnabled) _dropIfExpired(key, clock());
+    if (!_store.containsKey(key)) return (false, null);
+    return (true, _store.peek(key));
+  }
+
   V? _accessAndReconcile(K key) {
     final value = _store.access(key);
     // Some stores remove the entry as a side effect of access() (e.g.
@@ -251,6 +265,39 @@ class Cache<K, V> extends SimpleCache<K, V> {
     validateSetArgs(weight: weight, ttl: ttl);
     for (final entry in entries.entries) {
       _write(entry.key, entry.value, weight, ttl);
+    }
+  }
+
+  /// The [SimpleCache.getAll] default checks presence and reads each key with
+  /// separate [containsKey]/[get] calls; on a TTL-enabled instance each reads
+  /// the clock independently, so an entry can expire between the two calls.
+  /// This override reads each key with a single [presentValue] snapshot.
+  @override
+  Map<K, V> getAll(Iterable<K> keys) {
+    final values = <K, V>{};
+    for (final key in keys) {
+      final (found, value) = presentValue(key);
+      if (found && (value != null || null is V)) {
+        values[key] = value as V;
+      }
+    }
+    return values;
+  }
+
+  /// The [SimpleCache.removeWhere] default checks presence and peeks each key
+  /// with separate [containsKey]/[peek] calls; on a TTL-enabled instance each
+  /// reads the clock independently, so an entry can expire between the two
+  /// calls. This override reads each key with a single [presentPeek]
+  /// snapshot (peek-based, so testing an entry for removal never perturbs its
+  /// eviction-policy state).
+  @override
+  void removeWhere(bool Function(K key, V value) test) {
+    for (final key in getKeys().toList()) {
+      final (found, value) = presentPeek(key);
+      if (!found) continue;
+      if (test(key, value as V)) {
+        remove(key);
+      }
     }
   }
 

@@ -84,6 +84,55 @@ class SimpleTTLCache<K, V> extends SimpleTTLCacheInterface<K, V> {
   void set(K key, V value, {Duration? ttl}) =>
       _engine.set(key, value, ttl: ttl);
 
+  /// Returns the existing value for [key], or stores and returns a new one.
+  ///
+  /// The inherited [SimpleTTLCacheInterface] default checks presence and
+  /// reads [key] with separate `containsKey`/`get` calls, which independently
+  /// read the clock and can race with expiry; this override reads via a
+  /// single [Cache.presentValue] snapshot instead.
+  ///
+  /// **This method is not thread-safe.**
+  @override
+  V getOrSet(K key, V Function() valueFactory, {Duration? ttl}) =>
+      _engine.getOrSet(key, valueFactory, ttl: ttl);
+
+  /// Updates the value for [key] and returns the new value.
+  ///
+  /// The inherited [SimpleTTLCacheInterface] default checks presence and
+  /// reads [key] with separate `containsKey`/`get` calls, which independently
+  /// read the clock and can race with expiry; this override reads via a
+  /// single [Cache.presentValue] snapshot instead.
+  ///
+  /// **This method is not thread-safe.**
+  @override
+  V update(
+    K key,
+    V Function(V value) update, {
+    V Function()? ifAbsent,
+    Duration? ttl,
+  }) => _engine.update(key, update, ifAbsent: ifAbsent, ttl: ttl);
+
+  /// Retrieves values for all currently present [keys].
+  ///
+  /// The inherited [SimpleCache] default checks presence and reads each key
+  /// with separate `containsKey`/`get` calls; this override reads each key
+  /// via a single [Cache.presentValue] snapshot instead.
+  ///
+  /// **This method is not thread-safe.**
+  @override
+  Map<K, V> getAll(Iterable<K> keys) => _engine.getAll(keys);
+
+  /// Removes all entries that match [test].
+  ///
+  /// The inherited [SimpleCache] default checks presence and peeks each key
+  /// with separate `containsKey`/`peek` calls; this override reads each key
+  /// via a single [Cache.presentPeek] snapshot instead.
+  ///
+  /// **This method is not thread-safe.**
+  @override
+  void removeWhere(bool Function(K key, V value) test) =>
+      _engine.removeWhere(test);
+
   /// Removes the entry with the given key from the cache.
   ///
   /// - If the key does not exist, this call is a no-op.

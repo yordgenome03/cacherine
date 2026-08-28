@@ -350,6 +350,89 @@ void main() {
       );
       expect(factoryCalls, equals(0)); // factory must not run before validation
     });
+
+    // getAll()/removeWhere() had the same bug: SimpleCache/ThreadSafeCache's
+    // default implementations check presence and then separately fetch/peek,
+    // each reading the clock (and, for AsyncCache, re-acquiring the lock)
+    // independently. Cache/AsyncCache now override both to read each key via
+    // a single presentValue()/presentPeek() snapshot.
+    test('Cache.getAll() reads the clock once per key on a hit', () {
+      final counter = _ClockCounter();
+      final cache = Cache<String, String>(
+        store: LRUStore<String, String>(),
+        ttl: const Duration(seconds: 100),
+        clock: counter.call,
+      );
+      cache.set('a', '1');
+      cache.set('b', '2');
+      final before = counter.calls;
+      expect(cache.getAll(['a', 'b']), equals({'a': '1', 'b': '2'}));
+      expect(counter.calls - before, equals(2));
+    });
+
+    test('Cache.removeWhere() reads the clock once per key and does not bump '
+        'LRU recency merely by testing an entry (it must use peek, not '
+        'access, or the predicate visiting an entry would perturb eviction '
+        'order as a side effect)', () {
+      final counter = _ClockCounter();
+      final cache = Cache<String, String>(
+        store: LRUStore<String, String>(),
+        maxSize: 2,
+        ttl: const Duration(seconds: 100),
+        clock: counter.call,
+      );
+      cache.set('a', '1');
+      cache.set('b', '2');
+      final before = counter.calls;
+      cache.removeWhere((key, value) => false); // never matches
+      // 1 read for getKeys() (to enumerate live keys) + 1 per key for
+      // presentPeek() — never 2 reads per key (containsKey()+peek()).
+      expect(counter.calls - before, equals(3));
+
+      // If removeWhere had bumped 'a' via access(), 'a' would now be MRU
+      // and 'b' would be evicted first; peek-based visiting must leave
+      // insertion/recency order exactly as set() left it.
+      cache.set('c', '3');
+      expect(cache.getKeys(), equals(['b', 'c']));
+    });
+
+    test('AsyncCache.getAll() reads the clock once per key on a hit', () async {
+      final counter = _ClockCounter();
+      final cache = AsyncCache<String, String>(
+        Cache(
+          store: LRUStore<String, String>(),
+          ttl: const Duration(seconds: 100),
+          clock: counter.call,
+        ),
+      );
+      await cache.set('a', '1');
+      await cache.set('b', '2');
+      final before = counter.calls;
+      expect(await cache.getAll(['a', 'b']), equals({'a': '1', 'b': '2'}));
+      expect(counter.calls - before, equals(2));
+    });
+
+    test('AsyncCache.removeWhere() reads the clock once per key and does not '
+        'bump LRU recency merely by testing an entry', () async {
+      final counter = _ClockCounter();
+      final cache = AsyncCache<String, String>(
+        Cache(
+          store: LRUStore<String, String>(),
+          maxSize: 2,
+          ttl: const Duration(seconds: 100),
+          clock: counter.call,
+        ),
+      );
+      await cache.set('a', '1');
+      await cache.set('b', '2');
+      final before = counter.calls;
+      await cache.removeWhere((key, value) async => false);
+      // 1 read for getKeys() + 1 per key for presentPeek().
+      expect(counter.calls - before, equals(3));
+
+      await cache.set('c', '3');
+      expect(await cache.getKeys(), equals(['b', 'c']));
+    });
   });
 
   group('MonitoredCache — construction validation', () {

@@ -16,6 +16,7 @@
 ### Maintenance
 
 - All ~19 pre-existing concrete cache classes (FIFO/EphemeralFIFO/LRU/MRU/LFU/TTL × Simple/async/Monitored) were internally rewritten as thin facades over the new engine, with byte-for-byte-preserved public constructors and behavior — the full pre-existing test suite passes unchanged against them.
+- Fixed a remaining set of TTL check-then-fetch races (the same class of bug as `presentValue()` above fixed for `getOrSet`/`getOrCompute`/`update`), where a separate presence check and read/peek could each read the clock independently and observe an entry expire in between: `Cache.getAll()`/`removeWhere()`, `AsyncCache.getAll()`/`removeWhere()` (previously falling back to the base interfaces' racy defaults), and `SimpleTTLCache.getOrSet()`/`update()`/`getAll()`/`removeWhere()`, `TTLCache.update()`/`getAll()`/`removeWhere()`, `MonitoredTTLCache.update()`/`getAll()`/`removeWhere()` (previously falling back to their parent interfaces' racy defaults instead of the composed engine's atomic helpers). Added `Cache.presentPeek()` — a peek-based (non-mutating) counterpart to `presentValue()` — so `removeWhere()` can test entries for removal without perturbing LRU/LFU eviction-policy state as a side effect.
 
 ## 2.4.0 - Conditional Mutation Helpers and Bulk Operations
 
