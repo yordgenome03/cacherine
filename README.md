@@ -12,7 +12,7 @@
   <img src="https://github.com/user-attachments/assets/2a42a018-61cb-4ef7-a3d8-a0cafe923328" alt="cacherine logo" width="300"/>
 </p>
 
-`cacherine` is a simple and flexible memory cache library for Dart. It provides caching algorithms such as FIFO, LRU, MRU, LFU, and TTL-based expiry. Both synchronous and async-safe versions are available to handle different usage scenarios.
+`cacherine` is a simple and flexible memory cache library for Dart. It provides caching algorithms such as FIFO, LRU, MRU, LFU, and TTL-based expiry, plus weight-based eviction — and, when a named class doesn't cover your case, a composable `Cache`/`AsyncCache`/`MonitoredCache` engine that freely combines an eviction policy, a weight limit, and TTL expiry in one cache. Both synchronous and async-safe versions are available to handle different usage scenarios.
 
 If you want to choose the best cache algorithm for your app, you can use **MonitoredCache** in your development environment. It helps you monitor performance metrics (such as hit/miss rates, latency, and eviction alerts) so you can make data-driven decisions and optimize the algorithm you use.
 
@@ -22,6 +22,8 @@ Dart/Flutter does not have a built-in caching solution similar to `NSCache` in S
 `cacherine` was created to provide a lightweight and flexible in-memory cache with common caching strategies like FIFO, LRU, MRU, and LFU.
 
 Whether you need a simple synchronous cache or an async-compatible solution that serializes concurrent async calls within the same isolate, `cacherine` offers an easy-to-use API.
+
+Every named cache class (`SimpleLRUCache`, `TTLCache`, `MonitoredWeightedLRUCache`, ...) is a thin, ready-to-use facade over one small composable engine — `Cache` / `AsyncCache` / `MonitoredCache`, configured with a `CacheStore` (the eviction policy) plus optional weight and TTL bounds. Reach for a named class for the common single-concern case; reach for the engine directly when you need a combination — e.g. an LRU cache that's *also* weight-bounded *and* TTL-expiring — without waiting for a dedicated class to exist for it. See [Composable Cache Engine Usage](#composable-cache-engine-usage) below.
 
 ## Features
 
@@ -195,6 +197,35 @@ void main() {
   print(cache.currentWeight); // sum of the weights of stored entries
 }
 ```
+
+### Composable Cache Engine Usage
+
+Every named cache class above is a thin facade over one small engine — `Cache` (sync), `AsyncCache` (async-safe), and `MonitoredCache` (async-safe + monitoring) — configured with a `CacheStore` (the eviction policy: `LRUStore`, `MRUStore`, `FIFOStore`, `EphemeralFIFOStore`, or `LFUStore`) plus optional weight and TTL bounds. Use it directly when you need a combination that doesn't have a dedicated named class — for example, an LFU-ordered cache that's *also* weight-bounded, TTL-expiring, and monitored, all at once:
+
+```Dart
+import 'package:cacherine/cacherine.dart';
+
+void main() async {
+  final cache = MonitoredCache<String, String>(
+    store: LFUStore<String, String>(), // eviction policy: LFU
+    weigher: (key, value) => value.length, // weight bound
+    maxWeight: 100,
+    ttl: const Duration(minutes: 5), // TTL expiry
+    alertConfig: CacheAlertConfig(notifyCallback: print),
+  );
+
+  await cache.set('a', 'hello');
+  await cache.set('b', 'world', ttl: const Duration(seconds: 30)); // per-entry TTL override
+  await cache.get('a'); // bumps 'a's LFU frequency
+
+  print(await cache.currentWeight); // 10
+  print(cache.metrics.hits); // 1
+
+  cache.dispose(); // cancel the alert-monitoring timer when done
+}
+```
+
+No such combination exists as a named class today — this is the whole point of the engine: it composes eviction policy, weight, and TTL independently, instead of requiring a new class per combination. Swap in `Cache` for a synchronous version, or `AsyncCache` to drop monitoring while keeping async-safety. See [Weighted LRU Cache](doc/weighted_lru_cache.md#6-composing-weight-with-other-policies) for another worked example.
 
 ### Monitoring Usage
 
