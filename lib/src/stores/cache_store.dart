@@ -33,10 +33,27 @@ abstract interface class CacheStore<K, V> {
 
   /// Chooses (without removing) the key this store would evict next, or
   /// `null` if the store is empty or every remaining key is [excluding].
+  ///
+  /// **Known limitation for nullable `K`:** `null` is used both as this
+  /// method's "no victim" result and as a valid value of `K` itself when `K`
+  /// is a nullable type. A store that has actually stored an entry under the
+  /// literal key `null` cannot be correctly selected as a victim by this
+  /// signature — eviction would perpetually report nothing evictable for it,
+  /// even though every implementation in this package handles `null` as an
+  /// ordinary map key otherwise. An unambiguous fix (e.g. a record-wrapped
+  /// result/exclusion type) was considered but not applied: it would need to
+  /// thread through every store plus [Cache]'s eviction loop, and — because
+  /// `SimpleTTLCacheInterface`/`ThreadSafeTTLCacheInterface` are pre-existing,
+  /// unbounded (`K` may be nullable) public interfaces this package cannot
+  /// change, [TTLFifoStore] can't adopt a `K extends Object`-bounded
+  /// alternative without splitting the store hierarchy in two. In practice,
+  /// using a nullable key type in a cache is unusual; this is documented
+  /// rather than fixed under that tradeoff.
   K? selectVictim({K? excluding});
 
   /// Removes and returns the selected victim as a `(key, value)` pair, or
-  /// `null` under the same conditions as [selectVictim].
+  /// `null` under the same conditions as [selectVictim] (including its
+  /// nullable-`K` limitation).
   (K, V)? evictOne({K? excluding});
 
   /// Removes [key] unconditionally. Returns `true` if it was present.
