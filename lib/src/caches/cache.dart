@@ -93,7 +93,18 @@ class Cache<K, V> extends SimpleCache<K, V> {
   @override
   V? get(K key) {
     if (_ttlEnabled) _dropIfExpired(key, clock());
-    return store.access(key);
+    final value = store.access(key);
+    // Some stores remove the entry as a side effect of access() (e.g.
+    // EphemeralFIFOStore). When that happens, the weight/expiry ledgers
+    // must be reconciled here too, or currentWeight drifts and a stale
+    // _expiry entry lingers — neither is cleaned up by any other path,
+    // since remove()/eviction/purge are the only other ledger-clearing
+    // sites and none of them run for a plain get().
+    if ((_weightEnabled || _ttlEnabled) && !store.containsKey(key)) {
+      _forgetWeight(key);
+      _expiry.remove(key);
+    }
+    return value;
   }
 
   @override

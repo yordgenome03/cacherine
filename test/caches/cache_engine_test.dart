@@ -316,6 +316,37 @@ void main() {
     });
   });
 
+  group(
+    'Cache engine — access() that removes the entry (EphemeralFIFOStore)',
+    () {
+      test(
+        'get() reconciles the weight ledger when the store removes the entry '
+        'as a side effect of access()',
+        () {
+          final cache = Cache<String, String>(
+            store: EphemeralFIFOStore<String, String>(),
+            weigher: _lengthWeigher,
+            maxWeight: 100,
+          );
+
+          cache.set('a', 'aaaaa'); // weight 5
+          expect(cache.currentWeight, equals(5));
+
+          expect(cache.get('a'), equals('aaaaa')); // removed by access()
+          expect(
+            cache.currentWeight,
+            equals(0),
+          ); // ledger reconciled, not stale
+
+          // Re-inserting under the same key must not be short-changed by a
+          // leftover ledger entry.
+          cache.set('a', 'bb'); // weight 2
+          expect(cache.currentWeight, equals(2));
+        },
+      );
+    },
+  );
+
   group('Cache engine — plain LFU via the composable engine', () {
     test('matches LFUCache eviction behavior', () async {
       final cache = AsyncCache<String, int>(
