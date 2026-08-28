@@ -27,10 +27,6 @@ class MonitoredLFUCache<K, V> extends MonitoredCache<K, V> {
   ///
   /// ### **Exceptions:**
   /// - **[ArgumentError]**: Thrown when [maxSize] is `0 or less`.
-  MonitoredLFUCache({required int maxSize, CacheAlertConfig? alertConfig})
-    : super(
-        store: LFUStore<K, V>(),
-        maxSize: maxSize,
-        alertConfig: alertConfig,
-      );
+  MonitoredLFUCache({required super.maxSize, super.alertConfig})
+    : super(store: LFUStore<K, V>());
 }

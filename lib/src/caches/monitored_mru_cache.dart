@@ -27,10 +27,6 @@ class MonitoredMRUCache<K, V> extends MonitoredCache<K, V> {
   ///
   /// ### **Exceptions:**
   /// - **[ArgumentError]**: Thrown when [maxSize] is `0 or less`.
-  MonitoredMRUCache({required int maxSize, CacheAlertConfig? alertConfig})
-    : super(
-        store: MRUStore<K, V>(),
-        maxSize: maxSize,
-        alertConfig: alertConfig,
-      );
+  MonitoredMRUCache({required super.maxSize, super.alertConfig})
+    : super(store: MRUStore<K, V>());
 }

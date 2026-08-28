@@ -31,12 +31,6 @@ class MonitoredEphemeralFIFOCache<K, V> extends MonitoredCache<K, V> {
   ///   Alerts will be triggered when the defined thresholds are exceeded.
   ///
   /// **Throws an [ArgumentError] if [maxSize] is less than or equal to 0.**
-  MonitoredEphemeralFIFOCache({
-    required int maxSize,
-    CacheAlertConfig? alertConfig,
-  }) : super(
-         store: EphemeralFIFOStore<K, V>(),
-         maxSize: maxSize,
-         alertConfig: alertConfig,
-       );
+  MonitoredEphemeralFIFOCache({required super.maxSize, super.alertConfig})
+    : super(store: EphemeralFIFOStore<K, V>());
 }

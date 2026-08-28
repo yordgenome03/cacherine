@@ -1,5 +1,4 @@
 import '../interfaces/weigher.dart';
-import '../monitorings/cache_alert_manager.dart';
 import '../stores/lru_store.dart';
 import 'monitored_cache.dart';
 
@@ -16,13 +15,7 @@ class MonitoredWeightedLRUCache<K, V> extends MonitoredCache<K, V> {
   MonitoredWeightedLRUCache({
     required Weigher<K, V> weigher,
     required int maxWeight,
-    int? maxSize,
-    CacheAlertConfig? alertConfig,
-  }) : super(
-         store: LRUStore<K, V>(),
-         weigher: weigher,
-         maxWeight: maxWeight,
-         maxSize: maxSize,
-         alertConfig: alertConfig,
-       );
+    super.maxSize,
+    super.alertConfig,
+  }) : super(store: LRUStore<K, V>(), weigher: weigher, maxWeight: maxWeight);
 }

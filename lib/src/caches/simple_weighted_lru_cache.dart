@@ -29,11 +29,6 @@ class SimpleWeightedLRUCache<K, V> extends Cache<K, V> {
   SimpleWeightedLRUCache({
     required Weigher<K, V> weigher,
     required int maxWeight,
-    int? maxSize,
-  }) : super(
-         store: LRUStore<K, V>(),
-         weigher: weigher,
-         maxWeight: maxWeight,
-         maxSize: maxSize,
-       );
+    super.maxSize,
+  }) : super(store: LRUStore<K, V>(), weigher: weigher, maxWeight: maxWeight);
 }
