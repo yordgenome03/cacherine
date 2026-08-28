@@ -195,6 +195,68 @@ void main() {
         isTrue,
       );
     });
+
+    test('Triggers a per-reason alert when evictionsPerReasonThreshold is '
+        'exceeded for that reason', () async {
+      alertManager.dispose();
+      final config = CacheAlertConfig(
+        notifyCallback: (alert) => receivedAlerts.add(alert),
+        evictionsPerMinuteThreshold: 100000, // keep the aggregate alert off
+        evictionsPerReasonThreshold: {EvictionReason.weight: 5},
+        alertCheckInterval: const Duration(seconds: 1),
+      );
+      alertManager = CacheAlertManager(metrics, config);
+
+      alertManager.monitor();
+      await Future.delayed(const Duration(milliseconds: 100));
+
+      for (int i = 0; i < 10; i++) {
+        metrics.recordEviction(EvictionReason.weight);
+      }
+      // A reason with no configured threshold must never alert, even with
+      // more evictions than the reason that does have one.
+      for (int i = 0; i < 50; i++) {
+        metrics.recordEviction(EvictionReason.expired);
+      }
+
+      await Future.delayed(const Duration(milliseconds: 1200));
+
+      expect(
+        receivedAlerts.any(
+          (alert) => alert.contains('Warning: High weight eviction rate'),
+        ),
+        isTrue,
+      );
+      expect(
+        receivedAlerts.any((alert) => alert.contains('expired eviction')),
+        isFalse,
+      );
+    });
+
+    test(
+      'evictionsPerReasonThreshold defaults to null and never alerts',
+      () async {
+        alertManager.dispose();
+        final config = CacheAlertConfig(
+          notifyCallback: (alert) => receivedAlerts.add(alert),
+          hitRateThreshold: 0,
+          missRateThreshold: 1,
+          evictionsPerMinuteThreshold: 100000,
+          alertCheckInterval: const Duration(seconds: 1),
+        );
+        expect(config.evictionsPerReasonThreshold, isNull);
+        alertManager = CacheAlertManager(metrics, config);
+
+        alertManager.monitor();
+        await Future.delayed(const Duration(milliseconds: 100));
+        for (int i = 0; i < 10; i++) {
+          metrics.recordEviction(EvictionReason.capacity);
+        }
+        await Future.delayed(const Duration(milliseconds: 1200));
+
+        expect(receivedAlerts, isEmpty);
+      },
+    );
   });
 
   group('CacheAlertManager - Monitor Timing', () {

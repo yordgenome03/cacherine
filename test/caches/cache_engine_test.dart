@@ -82,6 +82,160 @@ void main() {
         );
       },
     );
+
+    test('weigher and maxWeight must be provided together', () {
+      expect(
+        () => Cache<String, String>(
+          store: LRUStore<String, String>(),
+          weigher: _lengthWeigher,
+        ),
+        throwsArgumentError,
+      );
+      expect(
+        () => Cache<String, String>(
+          store: LRUStore<String, String>(),
+          maxWeight: 10,
+        ),
+        throwsArgumentError,
+      );
+    });
+  });
+
+  group('Cache — cache-aside and update helpers', () {
+    test('putIfAbsent() computes and stores only when the key is absent', () {
+      final cache = Cache<String, int>(
+        store: LRUStore<String, int>(),
+        maxSize: 10,
+      );
+      var calls = 0;
+      int compute() {
+        calls++;
+        return 1;
+      }
+
+      expect(cache.putIfAbsent('a', compute), equals(1));
+      expect(cache.putIfAbsent('a', compute), equals(1));
+      expect(calls, equals(1)); // second call found 'a' already present
+    });
+
+    test('update() applies the function to an existing value', () {
+      final cache = Cache<String, int>(
+        store: LRUStore<String, int>(),
+        maxSize: 10,
+      );
+      cache.set('a', 1);
+      final result = cache.update('a', (value) => value + 1);
+      expect(result, equals(2));
+      expect(cache.get('a'), equals(2));
+    });
+
+    test('update() uses ifAbsent to seed a missing key', () {
+      final cache = Cache<String, int>(
+        store: LRUStore<String, int>(),
+        maxSize: 10,
+      );
+      final result = cache.update('a', (value) => value + 1, ifAbsent: () => 0);
+      expect(result, equals(0));
+      expect(cache.get('a'), equals(0));
+    });
+
+    test('update() throws StateError for a missing key with no ifAbsent', () {
+      final cache = Cache<String, int>(
+        store: LRUStore<String, int>(),
+        maxSize: 10,
+      );
+      expect(() => cache.update('a', (value) => value + 1), throwsStateError);
+    });
+
+    test('setAll() stores every entry', () {
+      final cache = Cache<String, int>(
+        store: LRUStore<String, int>(),
+        maxSize: 10,
+      );
+      cache.setAll({'a': 1, 'b': 2, 'c': 3});
+      expect(cache.get('a'), equals(1));
+      expect(cache.get('b'), equals(2));
+      expect(cache.get('c'), equals(3));
+    });
+  });
+
+  group('AsyncCache — cache-aside and update helpers', () {
+    test(
+      'putIfAbsent() computes and stores only when the key is absent',
+      () async {
+        final cache = AsyncCache<String, int>(
+          Cache(store: LRUStore<String, int>(), maxSize: 10),
+        );
+        var calls = 0;
+        Future<int> compute() async {
+          calls++;
+          return 1;
+        }
+
+        expect(await cache.putIfAbsent('a', compute), equals(1));
+        expect(await cache.putIfAbsent('a', compute), equals(1));
+        expect(calls, equals(1));
+      },
+    );
+
+    test('update() applies the function to an existing value', () async {
+      final cache = AsyncCache<String, int>(
+        Cache(store: LRUStore<String, int>(), maxSize: 10),
+      );
+      await cache.set('a', 1);
+      final result = await cache.update('a', (value) async => value + 1);
+      expect(result, equals(2));
+      expect(await cache.get('a'), equals(2));
+    });
+
+    test('update() uses ifAbsent to seed a missing key', () async {
+      final cache = AsyncCache<String, int>(
+        Cache(store: LRUStore<String, int>(), maxSize: 10),
+      );
+      final result = await cache.update(
+        'a',
+        (value) async => value + 1,
+        ifAbsent: () async => 0,
+      );
+      expect(result, equals(0));
+      expect(await cache.get('a'), equals(0));
+    });
+
+    test(
+      'update() throws StateError for a missing key with no ifAbsent',
+      () async {
+        final cache = AsyncCache<String, int>(
+          Cache(store: LRUStore<String, int>(), maxSize: 10),
+        );
+        expect(
+          () => cache.update('a', (value) async => value + 1),
+          throwsStateError,
+        );
+      },
+    );
+
+    test('setAll() stores every entry', () async {
+      final cache = AsyncCache<String, int>(
+        Cache(store: LRUStore<String, int>(), maxSize: 10),
+      );
+      await cache.setAll({'a': 1, 'b': 2, 'c': 3});
+      expect(await cache.get('a'), equals(1));
+      expect(await cache.get('b'), equals(2));
+      expect(await cache.get('c'), equals(3));
+    });
+  });
+
+  group('MonitoredCache — construction validation', () {
+    test('sweepInterval without a configured ttl throws ArgumentError', () {
+      expect(
+        () => MonitoredCache<String, String>(
+          store: LRUStore<String, String>(),
+          maxSize: 10,
+          sweepInterval: const Duration(seconds: 1),
+        ),
+        throwsArgumentError,
+      );
+    });
   });
 
   group('MonitoredCache — EvictionReason attribution', () {

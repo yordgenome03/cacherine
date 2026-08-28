@@ -376,4 +376,15 @@ void main() {
       expect(await cache.get('key'), isNull);
     });
   });
+
+  group('TTLCache - toString()', () {
+    test('renders the live entries as a map', () async {
+      final cache = TTLCache<String, String>(
+        ttl: const Duration(hours: 1),
+        clock: fakeClock,
+      );
+      await cache.set('key', 'value');
+      expect(cache.toString(), equals({'key': 'value'}.toString()));
+    });
+  });
 }
