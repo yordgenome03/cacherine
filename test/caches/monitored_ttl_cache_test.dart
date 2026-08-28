@@ -335,5 +335,20 @@ void main() {
         cache.dispose();
       }, returnsNormally);
     });
+
+    test(
+      'is a CacheMonitoring<K, V>, same as every other Monitored*Cache '
+      '(regression: an earlier version delegated to CacheMonitoring instead '
+      'of mixing it in directly, losing this type relationship)',
+      () {
+        final cache = MonitoredTTLCache<String, String>(
+          ttl: const Duration(seconds: 10),
+          clock: fakeClock,
+          alertConfig: config,
+        );
+        expect(cache, isA<CacheMonitoring<String, String>>());
+        cache.dispose();
+      },
+    );
   });
 }

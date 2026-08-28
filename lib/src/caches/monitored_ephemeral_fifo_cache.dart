@@ -33,4 +33,8 @@ class MonitoredEphemeralFIFOCache<K, V> extends MonitoredCache<K, V> {
   /// **Throws an [ArgumentError] if [maxSize] is less than or equal to 0.**
   MonitoredEphemeralFIFOCache({required super.maxSize, super.alertConfig})
     : super(store: EphemeralFIFOStore<K, V>());
+
+  /// The maximum number of entries in the cache.
+  @override
+  int get maxSize => super.maxSize!;
 }

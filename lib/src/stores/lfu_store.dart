@@ -16,7 +16,23 @@ final class _LFUNode<K, V> extends LinkedListEntry<_LFUNode<K, V>> {
 ///
 /// Ports the frequency-bucket structure (`_keyMap` + `_freqMap` + `_minFreq`)
 /// from the pre-v3 `SimpleLFUCache`/`LFUCache` unchanged, so eviction and
-/// promotion stay O(1) amortized.
+/// promotion stay O(1) amortized *for calls with no `excluding` key* (i.e.
+/// every plain LFU cache — none of them ever call with `excluding`).
+///
+/// **Known complexity caveat when `excluding` is used** (only possible via
+/// the composable `Cache` engine's weight/TTL-driven eviction loop, when a
+/// weight-bounded or TTL-bounded LFU-ordered cache updates an existing key):
+/// if the excluded key is the *sole* occupant of the current minimum-
+/// frequency bucket, finding the next occupied bucket scans `_freqMap`'s
+/// keys directly (`O(distinct frequencies)`), and this repeats per victim
+/// if a single write needs to evict many entries — worst case
+/// `O(n × distinct frequencies)` if every entry has a unique frequency.
+/// A guaranteed O(1) fix would need an auxiliary ordered index over
+/// occupied frequencies (e.g. a hand-rolled order-statistic structure —
+/// `dart:collection`'s `SplayTreeMap`/`SplayTreeSet` don't expose an O(log n)
+/// "next key greater than X" query via their public API); this has been
+/// left as a known limitation rather than risking a larger, harder-to-verify
+/// rewrite for what requires a fairly adversarial access pattern.
 class LFUStore<K, V> implements CacheStore<K, V> {
   final HashMap<K, _LFUNode<K, V>> _keyMap = HashMap();
   final HashMap<int, LinkedList<_LFUNode<K, V>>> _freqMap = HashMap();

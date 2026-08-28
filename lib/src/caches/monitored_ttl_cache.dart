@@ -1,11 +1,14 @@
 import 'dart:async';
 
 import '../interfaces/disposable.dart';
+import '../interfaces/periodic_sweeper.dart';
 import '../interfaces/thread_safe_ttl_cache.dart';
 import '../monitorings/cache_alert_manager.dart';
-import '../monitorings/cache_metrics.dart';
+import '../monitorings/cache_monitoring.dart';
+import '../monitorings/eviction_reason.dart';
 import '../stores/ttl_fifo_store.dart';
-import 'monitored_cache.dart';
+import 'async_cache.dart';
+import 'cache.dart';
 
 /// **Async-safe TTL (Time-To-Live) Cache with Monitoring**
 ///
@@ -13,19 +16,24 @@ import 'monitored_cache.dart';
 /// are removed lazily on [get], proactively by an optional background sweep,
 /// and during capacity checks when [maxSize] is configured.
 ///
-/// This cache records hit/miss latency through [metrics] and records
-/// eviction events — tagged by cause (expiry, capacity, or manual removal) —
-/// when entries are removed.
+/// Additionally, by utilizing the [CacheMonitoring] mixin, it automatically
+/// **monitors cache performance** — hit/miss rates, request latency, and
+/// eviction events tagged by cause ([EvictionReason.expired],
+/// [EvictionReason.capacity], [EvictionReason.manual]) — triggering alerts
+/// via [CacheAlertManager] if thresholds are exceeded, exactly like every
+/// other `Monitored*Cache` in this package.
 ///
-/// Wraps a [MonitoredCache] configured with a [TTLFifoStore] — internally a
-/// composed engine rather than a subclass, so this class can keep extending
-/// [ThreadSafeTTLCacheInterface] for backward compatibility. [metrics] and
-/// [dispose] delegate to that engine directly, so there is exactly one
-/// [CacheMetrics] instance and one set of timers per cache, not one per
-/// wrapper layer.
+/// This class cannot itself extend the composable [MonitoredCache] engine
+/// (Dart only allows one `extends` clause, and this class must extend
+/// [ThreadSafeTTLCacheInterface] to keep its `ttl:`-aware `set()`/
+/// `getOrCompute()` overloads), so it wires the same
+/// engine+mixin+alert-manager+sweep pattern directly, over a plain
+/// (non-monitored) [AsyncCache], rather than composing over [MonitoredCache].
 class MonitoredTTLCache<K, V> extends ThreadSafeTTLCacheInterface<K, V>
+    with CacheMonitoring<K, V>, PeriodicSweeper
     implements Disposable {
-  final MonitoredCache<K, V> _engine;
+  final AsyncCache<K, V> _engine;
+  late final CacheAlertManager _cacheAlertManager;
 
   /// Creates a [MonitoredTTLCache].
   ///
@@ -42,17 +50,30 @@ class MonitoredTTLCache<K, V> extends ThreadSafeTTLCacheInterface<K, V>
     Duration? sweepInterval,
     DateTime Function()? clock,
     CacheAlertConfig? alertConfig,
-  }) : _engine = MonitoredCache(
-         store: TTLFifoStore<K, V>(),
-         maxSize: maxSize,
-         ttl: ttl,
-         sweepInterval: sweepInterval,
-         clock: clock,
-         alertConfig: alertConfig,
-       );
+  }) : _engine = AsyncCache(
+         Cache(
+           store: TTLFifoStore<K, V>(),
+           maxSize: maxSize,
+           ttl: ttl,
+           clock: clock,
+         ),
+       ) {
+    _engine.engine.onEvict = metrics.recordEviction;
+    _cacheAlertManager = CacheAlertManager(
+      metrics,
+      alertConfig ?? CacheAlertConfig(),
+    );
+    _cacheAlertManager.monitor();
 
-  /// Cache performance metrics: hit/miss rates, latency, and evictions.
-  CacheMetrics get metrics => _engine.metrics;
+    if (sweepInterval != null) {
+      if (sweepInterval <= Duration.zero) {
+        throw ArgumentError('sweepInterval must be greater than zero.');
+      }
+      startSweep(sweepInterval, () async {
+        await _engine.purgeExpired();
+      });
+    }
+  }
 
   @override
   Future<Iterable<K>> getKeys() => _engine.getKeys();
@@ -61,7 +82,15 @@ class MonitoredTTLCache<K, V> extends ThreadSafeTTLCacheInterface<K, V>
   Future<int> purgeExpired() => _engine.purgeExpired();
 
   @override
-  Future<V?> get(K key) => _engine.get(key);
+  Future<V?> get(K key) async {
+    var found = false;
+    return await monitoredGet(key, () async {
+      return await _engine.lock.synchronized(() {
+        found = _engine.engine.containsKey(key);
+        return _engine.engine.get(key);
+      });
+    }, found: () => found);
+  }
 
   @override
   Future<V?> peek(K key) => _engine.peek(key);
@@ -83,16 +112,38 @@ class MonitoredTTLCache<K, V> extends ThreadSafeTTLCacheInterface<K, V>
     K key,
     FutureOr<V> Function() valueFactory, {
     Duration? ttl,
-  }) => _engine.getOrCompute(key, valueFactory, ttl: ttl);
+  }) async {
+    var found = false;
+    return await monitoredGet(key, () async {
+          return await _engine.lock.synchronized(() async {
+            if (_engine.engine.containsKey(key)) {
+              found = true;
+              return _engine.engine.get(key);
+            }
+            final value = await valueFactory();
+            _engine.engine.set(key, value, ttl: ttl);
+            return value;
+          });
+        }, found: () => found)
+        as V;
+  }
 
   @override
-  Future<void> remove(K key) => _engine.remove(key);
+  Future<void> remove(K key) async {
+    final removed = await _engine.lock.synchronized(
+      () => _engine.engine.removeIfPresent(key),
+    );
+    if (removed) metrics.recordEviction(EvictionReason.manual);
+  }
 
   @override
   Future<void> clear() => _engine.clear();
 
   @override
-  void dispose() => _engine.dispose();
+  void dispose() {
+    super.dispose(); // PeriodicSweeper: cancels the sweep timer, if any.
+    _cacheAlertManager.dispose();
+  }
 
   @override
   String toString() => _engine.toString();

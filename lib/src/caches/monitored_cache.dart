@@ -49,13 +49,10 @@ class MonitoredCache<K, V> extends AsyncCache<K, V>
            clock: clock,
          ),
        ) {
-    engine.onEvict = metrics.recordEviction;
-    _cacheAlertManager = CacheAlertManager(
-      metrics,
-      alertConfig ?? CacheAlertConfig(),
-    );
-    _cacheAlertManager.monitor();
-
+    // Validate before starting anything: if construction is going to throw,
+    // it must do so before the alert-monitoring timer (or the sweep timer)
+    // starts, or the half-constructed instance — never returned to the
+    // caller — would leak a running Timer with no way to dispose() it.
     if (sweepInterval != null) {
       if (ttl == null) {
         throw ArgumentError(
@@ -66,6 +63,16 @@ class MonitoredCache<K, V> extends AsyncCache<K, V>
       if (sweepInterval <= Duration.zero) {
         throw ArgumentError('sweepInterval must be greater than zero.');
       }
+    }
+
+    engine.onEvict = metrics.recordEviction;
+    _cacheAlertManager = CacheAlertManager(
+      metrics,
+      alertConfig ?? CacheAlertConfig(),
+    );
+    _cacheAlertManager.monitor();
+
+    if (sweepInterval != null) {
       startSweep(sweepInterval, () async {
         await lock.synchronized(engine.purgeExpired);
       });

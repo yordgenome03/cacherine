@@ -26,4 +26,8 @@ class EphemeralFIFOCache<K, V> extends AsyncCache<K, V> {
   /// **Throws [ArgumentError] if [maxSize] is 0 or less.**
   EphemeralFIFOCache(int maxSize)
     : super(Cache(store: EphemeralFIFOStore<K, V>(), maxSize: maxSize));
+
+  /// The maximum number of entries in the cache.
+  @override
+  int get maxSize => super.maxSize!;
 }

@@ -29,4 +29,8 @@ class MonitoredFIFOCache<K, V> extends MonitoredCache<K, V> {
   /// - **[ArgumentError]**: Thrown when [maxSize] is `0 or less`.
   MonitoredFIFOCache({required super.maxSize, super.alertConfig})
     : super(store: FIFOStore<K, V>());
+
+  /// The maximum number of entries in the cache.
+  @override
+  int get maxSize => super.maxSize!;
 }

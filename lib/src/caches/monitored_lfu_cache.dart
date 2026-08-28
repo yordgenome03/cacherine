@@ -29,4 +29,8 @@ class MonitoredLFUCache<K, V> extends MonitoredCache<K, V> {
   /// - **[ArgumentError]**: Thrown when [maxSize] is `0 or less`.
   MonitoredLFUCache({required super.maxSize, super.alertConfig})
     : super(store: LFUStore<K, V>());
+
+  /// The maximum number of entries in the cache.
+  @override
+  int get maxSize => super.maxSize!;
 }

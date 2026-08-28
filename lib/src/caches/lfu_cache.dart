@@ -22,4 +22,8 @@ class LFUCache<K, V> extends AsyncCache<K, V> {
   /// **Throws [ArgumentError] if [maxSize] is 0 or less.**
   LFUCache(int maxSize)
     : super(Cache(store: LFUStore<K, V>(), maxSize: maxSize));
+
+  /// The maximum number of entries in the cache.
+  @override
+  int get maxSize => super.maxSize!;
 }

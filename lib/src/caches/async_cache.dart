@@ -30,6 +30,10 @@ class AsyncCache<K, V> extends ThreadSafeCache<K, V> {
   /// other operation on this instance.
   final lock = Lock();
 
+  /// The entry-count cap this instance was configured with, if any. See
+  /// [Cache.maxSize].
+  int? get maxSize => engine.maxSize;
+
   /// The sum of the weights of all entries currently stored, if weighing is
   /// enabled (always `0` otherwise).
   Future<int> get currentWeight =>

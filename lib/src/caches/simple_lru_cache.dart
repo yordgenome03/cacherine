@@ -19,4 +19,8 @@ class SimpleLRUCache<K, V> extends Cache<K, V> {
   /// **Throws [ArgumentError] if [maxSize] is 0 or less.**
   SimpleLRUCache(int maxSize)
     : super(store: LRUStore<K, V>(), maxSize: maxSize);
+
+  /// The maximum number of entries in the cache.
+  @override
+  int get maxSize => super.maxSize!;
 }
