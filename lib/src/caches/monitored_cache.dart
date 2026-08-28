@@ -66,7 +66,9 @@ class MonitoredCache<K, V> extends AsyncCache<K, V>
       if (sweepInterval <= Duration.zero) {
         throw ArgumentError('sweepInterval must be greater than zero.');
       }
-      startSweep(sweepInterval, () => lock.synchronized(engine.purgeExpired));
+      startSweep(sweepInterval, () async {
+        await lock.synchronized(engine.purgeExpired);
+      });
     }
   }
 

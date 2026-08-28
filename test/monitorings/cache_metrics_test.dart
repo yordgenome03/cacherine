@@ -1,4 +1,5 @@
 import 'package:cacherine/src/monitorings/cache_metrics.dart';
+import 'package:cacherine/src/monitorings/eviction_reason.dart';
 import 'package:test/test.dart';
 
 void main() {
@@ -321,6 +322,19 @@ void main() {
           const Duration(minutes: 1),
         )['evictions_per_minute'],
         equals(0),
+      );
+    });
+  });
+
+  group('CacheMetricsSnapshot - Immutability', () {
+    test('evictionsPerMinuteByReason cannot be mutated by callers', () {
+      final metrics = CacheMetrics();
+      metrics.recordEviction(EvictionReason.capacity);
+      final snapshot = metrics.snapshot(const Duration(minutes: 1));
+
+      expect(
+        () => snapshot.evictionsPerMinuteByReason[EvictionReason.weight] = 1,
+        throwsUnsupportedError,
       );
     });
   });

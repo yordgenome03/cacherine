@@ -24,8 +24,10 @@ class DashboardSnapshot {
     required this.evictionsPerMinute,
     required this.totalRequests,
     required this.capturedAt,
-    this.evictionsPerMinuteByReason = const {},
-  });
+    Map<EvictionReason, int> evictionsPerMinuteByReason = const {},
+  }) : evictionsPerMinuteByReason = Map.unmodifiable(
+         evictionsPerMinuteByReason,
+       );
 }
 
 /// Wraps a [CacheMetrics] instance to provide typed snapshots and periodic streaming.

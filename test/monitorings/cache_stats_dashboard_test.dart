@@ -1,5 +1,6 @@
 import 'package:cacherine/src/monitorings/cache_metrics.dart';
 import 'package:cacherine/src/monitorings/cache_stats_dashboard.dart';
+import 'package:cacherine/src/monitorings/eviction_reason.dart';
 import 'package:test/test.dart';
 
 DashboardSnapshot _makeSnap({
@@ -297,6 +298,16 @@ void main() {
       expect(output, contains('1.2s'));
       expect(output, contains('3.5s'));
       expect(output, contains('5.0s'));
+    });
+  });
+
+  group('DashboardSnapshot - Immutability', () {
+    test('evictionsPerMinuteByReason cannot be mutated by callers', () {
+      final snap = _makeSnap();
+      expect(
+        () => snap.evictionsPerMinuteByReason[EvictionReason.weight] = 1,
+        throwsUnsupportedError,
+      );
     });
   });
 }

@@ -48,7 +48,9 @@ class TTLCache<K, V> extends ThreadSafeTTLCacheInterface<K, V>
       if (sweepInterval <= Duration.zero) {
         throw ArgumentError('sweepInterval must be greater than zero.');
       }
-      startSweep(sweepInterval, _engine.purgeExpired);
+      startSweep(sweepInterval, () async {
+        await _engine.purgeExpired();
+      });
     }
   }
 

@@ -29,8 +29,10 @@ class CacheMetricsSnapshot {
     required this.evictionsPerMinute,
     required this.totalRequests,
     required this.capturedAt,
-    this.evictionsPerMinuteByReason = const {},
-  });
+    Map<EvictionReason, int> evictionsPerMinuteByReason = const {},
+  }) : evictionsPerMinuteByReason = Map.unmodifiable(
+         evictionsPerMinuteByReason,
+       );
 }
 
 class _EvictionRecord {
