@@ -58,6 +58,14 @@ class MonitoredTTLCache<K, V> extends ThreadSafeTTLCacheInterface<K, V>
            clock: clock,
          ),
        ) {
+    // Validate before starting anything: if construction is going to throw,
+    // it must do so before the alert-monitoring timer (or the sweep timer)
+    // starts, or the half-constructed instance — never returned to the
+    // caller — would leak a running Timer with no way to dispose() it.
+    if (sweepInterval != null && sweepInterval <= Duration.zero) {
+      throw ArgumentError('sweepInterval must be greater than zero.');
+    }
+
     _engine.engine.onEvict = metrics.recordEviction;
     _cacheAlertManager = CacheAlertManager(
       metrics,
@@ -66,9 +74,6 @@ class MonitoredTTLCache<K, V> extends ThreadSafeTTLCacheInterface<K, V>
     _cacheAlertManager.monitor();
 
     if (sweepInterval != null) {
-      if (sweepInterval <= Duration.zero) {
-        throw ArgumentError('sweepInterval must be greater than zero.');
-      }
       startSweep(sweepInterval, () async {
         await _engine.purgeExpired();
       });
@@ -86,8 +91,9 @@ class MonitoredTTLCache<K, V> extends ThreadSafeTTLCacheInterface<K, V>
     var found = false;
     return await monitoredGet(key, () async {
       return await _engine.lock.synchronized(() {
-        found = _engine.engine.containsKey(key);
-        return _engine.engine.get(key);
+        final (f, value) = _engine.engine.presentValue(key);
+        found = f;
+        return value;
       });
     }, found: () => found);
   }
@@ -113,12 +119,14 @@ class MonitoredTTLCache<K, V> extends ThreadSafeTTLCacheInterface<K, V>
     FutureOr<V> Function() valueFactory, {
     Duration? ttl,
   }) async {
+    _engine.engine.validateSetArgs(ttl: ttl);
     var found = false;
     return await monitoredGet(key, () async {
           return await _engine.lock.synchronized(() async {
-            if (_engine.engine.containsKey(key)) {
+            final (f, existing) = _engine.engine.presentValue(key);
+            if (f) {
               found = true;
-              return _engine.engine.get(key);
+              return existing;
             }
             final value = await valueFactory();
             _engine.engine.set(key, value, ttl: ttl);

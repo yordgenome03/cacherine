@@ -69,9 +69,11 @@ class AsyncCache<K, V> extends ThreadSafeCache<K, V> {
     FutureOr<V> Function() valueFactory, {
     int? weight,
     Duration? ttl,
-  }) {
-    return lock.synchronized(() async {
-      if (engine.containsKey(key)) return engine.get(key) as V;
+  }) async {
+    engine.validateSetArgs(weight: weight, ttl: ttl);
+    return await lock.synchronized(() async {
+      final (found, existing) = engine.presentValue(key);
+      if (found) return existing as V;
       final value = await valueFactory();
       engine.set(key, value, weight: weight, ttl: ttl);
       return value;
@@ -93,10 +95,12 @@ class AsyncCache<K, V> extends ThreadSafeCache<K, V> {
     FutureOr<V> Function()? ifAbsent,
     int? weight,
     Duration? ttl,
-  }) {
-    return lock.synchronized(() async {
-      if (engine.containsKey(key)) {
-        final value = await update(engine.get(key) as V);
+  }) async {
+    engine.validateSetArgs(weight: weight, ttl: ttl);
+    return await lock.synchronized(() async {
+      final (found, existing) = engine.presentValue(key);
+      if (found) {
+        final value = await update(existing as V);
         engine.set(key, value, weight: weight, ttl: ttl);
         return value;
       }

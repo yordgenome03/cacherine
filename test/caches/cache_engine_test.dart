@@ -3,6 +3,14 @@ import 'package:test/test.dart';
 
 int _lengthWeigher(String key, String value) => value.length;
 
+class _ClockCounter {
+  int calls = 0;
+  DateTime call() {
+    calls++;
+    return DateTime(2024).add(Duration(microseconds: calls));
+  }
+}
+
 void main() {
   group('Cache engine — composed weight + TTL + LRU', () {
     test('an already-expired entry is purged and its slot reclaimed before a '
@@ -96,6 +104,14 @@ void main() {
           store: LRUStore<String, String>(),
           maxWeight: 10,
         ),
+        throwsArgumentError,
+      );
+    });
+
+    test('a non-empty store is rejected', () {
+      final prePopulated = LRUStore<String, String>()..put('a', '1');
+      expect(
+        () => Cache<String, String>(store: prePopulated, maxSize: 10),
         throwsArgumentError,
       );
     });
@@ -222,6 +238,117 @@ void main() {
       expect(await cache.get('a'), equals(1));
       expect(await cache.get('b'), equals(2));
       expect(await cache.get('c'), equals(3));
+    });
+  });
+
+  group('TTL check-then-fetch atomicity', () {
+    // Regression coverage: getOrSet()/update()/getOrCompute() used to check
+    // presence via containsKey() and then separately fetch via get() — each
+    // call reads the clock independently. On a TTL-enabled cache, an expiry
+    // landing between those two reads could make containsKey() report "live"
+    // and get() immediately after report "expired" (purging it and returning
+    // null), corrupting the found/existing-value pair these helpers build on.
+    // presentValue() now performs both checks against a single clock reading.
+    // A clock that advances by 1 microsecond on every call turns "two reads
+    // instead of one" into an observable difference without needing to hit
+    // an exact race window in real time.
+    test('Cache.getOrSet() reads the clock once per call on a hit', () {
+      final counter = _ClockCounter();
+      final cache = Cache<String, String>(
+        store: LRUStore<String, String>(),
+        ttl: const Duration(seconds: 100),
+        clock: counter.call,
+      );
+      cache.set('a', 'value');
+      final before = counter.calls;
+      expect(cache.getOrSet('a', () => 'unused'), equals('value'));
+      expect(counter.calls - before, equals(1));
+    });
+
+    test('Cache.update() reads the clock exactly twice on a hit — once for the '
+        'atomic presence check, once for the write that persists the new '
+        'value — never the three reads a naive containsKey()+get()+set() '
+        'chain would take', () {
+      final counter = _ClockCounter();
+      final cache = Cache<String, int>(
+        store: LRUStore<String, int>(),
+        ttl: const Duration(seconds: 100),
+        clock: counter.call,
+      );
+      cache.set('a', 1);
+      final before = counter.calls;
+      expect(cache.update('a', (v) => v + 1), equals(2));
+      expect(counter.calls - before, equals(2));
+    });
+
+    test(
+      'AsyncCache.getOrCompute() reads the clock once per call on a hit',
+      () async {
+        final counter = _ClockCounter();
+        final cache = AsyncCache<String, String>(
+          Cache(
+            store: LRUStore<String, String>(),
+            ttl: const Duration(seconds: 100),
+            clock: counter.call,
+          ),
+        );
+        await cache.set('a', 'value');
+        final before = counter.calls;
+        expect(
+          await cache.getOrCompute('a', () async => 'unused'),
+          equals('value'),
+        );
+        expect(counter.calls - before, equals(1));
+      },
+    );
+
+    test('AsyncCache.update() reads the clock exactly twice on a hit — once '
+        'for the atomic presence check, once for the write', () async {
+      final counter = _ClockCounter();
+      final cache = AsyncCache<String, int>(
+        Cache(
+          store: LRUStore<String, int>(),
+          ttl: const Duration(seconds: 100),
+          clock: counter.call,
+        ),
+      );
+      await cache.set('a', 1);
+      final before = counter.calls;
+      expect(await cache.update('a', (v) async => v + 1), equals(2));
+      expect(counter.calls - before, equals(2));
+    });
+
+    test('getOrCompute()/update() validate ttl before checking presence or '
+        'running valueFactory', () async {
+      final cache = AsyncCache<String, String>(
+        Cache(
+          store: LRUStore<String, String>(),
+          ttl: const Duration(seconds: 100),
+        ),
+      );
+      await cache.set(
+        'a',
+        'value',
+      ); // present, so a naive fix might skip validation on a hit
+      var factoryCalls = 0;
+
+      await expectLater(
+        cache.getOrCompute('a', () async {
+          factoryCalls++;
+          return 'unused';
+        }, ttl: Duration.zero),
+        throwsArgumentError,
+      );
+      expect(factoryCalls, equals(0));
+
+      await expectLater(
+        cache.getOrCompute('missing', () async {
+          factoryCalls++;
+          return 'unused';
+        }, ttl: Duration.zero),
+        throwsArgumentError,
+      );
+      expect(factoryCalls, equals(0)); // factory must not run before validation
     });
   });
 

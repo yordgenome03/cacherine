@@ -84,8 +84,9 @@ class MonitoredCache<K, V> extends AsyncCache<K, V>
     var found = false;
     return await monitoredGet(key, () async {
       return await lock.synchronized(() {
-        found = engine.containsKey(key);
-        return engine.get(key);
+        final (f, value) = engine.presentValue(key);
+        found = f;
+        return value;
       });
     }, found: () => found);
   }
@@ -97,12 +98,14 @@ class MonitoredCache<K, V> extends AsyncCache<K, V>
     int? weight,
     Duration? ttl,
   }) async {
+    engine.validateSetArgs(weight: weight, ttl: ttl);
     var found = false;
     return await monitoredGet(key, () async {
           return await lock.synchronized(() async {
-            if (engine.containsKey(key)) {
+            final (f, existing) = engine.presentValue(key);
+            if (f) {
               found = true;
-              return engine.get(key);
+              return existing;
             }
             final value = await valueFactory();
             engine.set(key, value, weight: weight, ttl: ttl);
