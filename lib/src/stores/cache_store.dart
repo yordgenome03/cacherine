@@ -25,6 +25,12 @@ abstract interface class CacheStore<K, V> {
   /// Returns `null` if absent.
   V? access(K key);
 
+  /// Whether [access] can remove the entry as a side effect (`true` only for
+  /// [EphemeralFIFOStore]). Lets callers like [Cache] skip a post-access
+  /// presence recheck for every other policy, where it would always be a
+  /// wasted lookup.
+  bool get removesOnAccess;
+
   /// Inserts a new key, or updates an existing key's value. Implementations
   /// must preserve any per-key policy state (e.g. LFU frequency) on update,
   /// only refreshing recency — never resetting it — matching each policy's

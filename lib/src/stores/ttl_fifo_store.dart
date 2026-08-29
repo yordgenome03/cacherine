@@ -33,6 +33,9 @@ class TTLFifoStore<K, V> implements CacheStore<K, V> {
   V? access(K key) => _cache[key]; // no reorder on read
 
   @override
+  bool get removesOnAccess => false;
+
+  @override
   void put(K key, V value) {
     _cache.remove(key); // refresh position on update, same as on insert
     _cache[key] = value;

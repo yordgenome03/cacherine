@@ -44,6 +44,15 @@ class Cache<K, V> extends SimpleCache<K, V> {
   int _currentWeight = 0;
   final Map<K, DateTime> _expiry = {};
 
+  /// A lower bound on the earliest expiry deadline among current entries (or
+  /// `null` if none is known). Exact right after a full [_purgeExpired] scan,
+  /// but never updated on a single-key removal — so it can go stale-low
+  /// after eviction/removal, which is safe: it only ever causes an
+  /// unnecessary purge scan, never a missed one. Lets [_write] skip the
+  /// O(n) purge scan on the common capacity-eviction path where nothing has
+  /// actually expired yet.
+  DateTime? _minExpiry;
+
   /// Notified whenever an entry is evicted (capacity, weight, or expiry) —
   /// not called for explicit [remove]. Settable rather than
   /// constructor-injected so [MonitoredCache] can wire it to
@@ -155,7 +164,9 @@ class Cache<K, V> extends SimpleCache<K, V> {
     // _expiry entry lingers — neither is cleaned up by any other path,
     // since remove()/eviction/purge are the only other ledger-clearing
     // sites and none of them run for a plain get().
-    if ((_weightEnabled || _ttlEnabled) && !_store.containsKey(key)) {
+    if ((_weightEnabled || _ttlEnabled) &&
+        _store.removesOnAccess &&
+        !_store.containsKey(key)) {
       _forgetWeight(key);
       _expiry.remove(key);
     }
@@ -163,17 +174,25 @@ class Cache<K, V> extends SimpleCache<K, V> {
   }
 
   /// Throws [ArgumentError] under the same conditions as [set] — supplying
-  /// [weight] without a configured [weigher], [ttl] without a configured
-  /// default [ttl], or a non-positive [ttl]. Exposed so [AsyncCache]/
-  /// [MonitoredCache] can fail fast on invalid arguments *before* checking
-  /// cache presence or invoking a `valueFactory` in `getOrCompute`/`update`,
-  /// matching [set]'s validate-first contract even on a hit.
+  /// [weight] without a configured [weigher], a negative explicit [weight],
+  /// [ttl] without a configured default [ttl], or a non-positive [ttl].
+  /// Exposed so [AsyncCache]/[MonitoredCache] can fail fast on invalid
+  /// arguments *before* checking cache presence or invoking a
+  /// `valueFactory`/`update` callback in `getOrSet`/`getOrCompute`/`update`,
+  /// matching [set]'s validate-first contract on a hit as well as a miss —
+  /// an explicit negative [weight] must be rejected the same way regardless
+  /// of whether the key already exists (a weigher-*computed* negative
+  /// weight can still only be caught in `_write`, once a value exists to
+  /// weigh).
   void validateSetArgs({int? weight, Duration? ttl}) {
     if (weight != null && !_weightEnabled) {
       throw ArgumentError(
         'weight was supplied but this cache was not configured with a '
         'weigher/maxWeight.',
       );
+    }
+    if (weight != null && weight < 0) {
+      throw ArgumentError('weight must not be negative.');
     }
     if (ttl != null && !_ttlEnabled) {
       throw ArgumentError(
@@ -292,7 +311,8 @@ class Cache<K, V> extends SimpleCache<K, V> {
   /// eviction-policy state).
   @override
   void removeWhere(bool Function(K key, V value) test) {
-    for (final key in getKeys().toList()) {
+    final snapshot = getKeys();
+    for (final key in (snapshot is List<K> ? snapshot : snapshot.toList())) {
       final (found, value) = presentPeek(key);
       if (!found) continue;
       if (test(key, value as V)) {
@@ -323,6 +343,7 @@ class Cache<K, V> extends SimpleCache<K, V> {
     _weights.clear();
     _currentWeight = 0;
     _expiry.clear();
+    _minExpiry = null;
   }
 
   /// Removes all currently-expired entries and returns how many were
@@ -354,6 +375,7 @@ class Cache<K, V> extends SimpleCache<K, V> {
 
   int _purgeExpired(DateTime now) {
     var removed = 0;
+    DateTime? newMin;
     for (final k in _store.keys.toList()) {
       final exp = _expiry[k];
       if (exp != null && !exp.isAfter(now)) {
@@ -362,8 +384,13 @@ class Cache<K, V> extends SimpleCache<K, V> {
         _expiry.remove(k);
         onEvict?.call(EvictionReason.expired);
         removed++;
+      } else if (exp != null && (newMin == null || exp.isBefore(newMin))) {
+        newMin = exp;
       }
     }
+    // Exact again for every surviving entry, restoring the fast-skip bound
+    // in _write() until the next entry actually expires.
+    _minExpiry = newMin;
     return removed;
   }
 
@@ -399,7 +426,13 @@ class Cache<K, V> extends SimpleCache<K, V> {
         _weightEnabled && (_currentWeight + extraWeight) > maxWeight!;
 
     if (exceedsCount() || exceedsWeight()) {
-      if (now != null) _purgeExpired(now);
+      // Only pay for the O(n) purge scan when something might actually be
+      // expired (_minExpiry is a lower bound on the true minimum deadline);
+      // otherwise every capacity-triggered write on a TTL+maxSize cache
+      // would rescan the whole store for nothing.
+      if (now != null && _minExpiry != null && !_minExpiry!.isAfter(now)) {
+        _purgeExpired(now);
+      }
       while (exceedsCount() || exceedsWeight()) {
         final wasOverWeight = exceedsWeight();
         final evicted = _store.evictOne(excluding: key);
@@ -422,7 +455,11 @@ class Cache<K, V> extends SimpleCache<K, V> {
       _currentWeight += entryWeight;
     }
     if (_ttlEnabled) {
-      _expiry[key] = now!.add(entryTtl ?? ttl!);
+      final deadline = now!.add(entryTtl ?? ttl!);
+      _expiry[key] = deadline;
+      if (_minExpiry == null || deadline.isBefore(_minExpiry!)) {
+        _minExpiry = deadline;
+      }
     }
   }
 }

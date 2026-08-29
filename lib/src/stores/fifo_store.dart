@@ -24,6 +24,9 @@ class FIFOStore<K, V> implements CacheStore<K, V> {
   V? access(K key) => _cache[key]; // no reorder on read
 
   @override
+  bool get removesOnAccess => false;
+
+  @override
   void put(K key, V value) {
     _cache[key] = value; // overwrite preserves position; insert appends
   }

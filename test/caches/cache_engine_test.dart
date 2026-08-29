@@ -11,6 +11,41 @@ class _ClockCounter {
   }
 }
 
+/// Wraps a [CacheStore], counting accesses to [keys] — used to detect
+/// whether [Cache] scanned the whole store for expired entries.
+class _KeysAccessCountingStore<K, V> implements CacheStore<K, V> {
+  _KeysAccessCountingStore(this._inner);
+  final CacheStore<K, V> _inner;
+  int keysAccessCount = 0;
+
+  @override
+  Iterable<K> get keys {
+    keysAccessCount++;
+    return _inner.keys;
+  }
+
+  @override
+  int get length => _inner.length;
+  @override
+  bool get removesOnAccess => _inner.removesOnAccess;
+  @override
+  bool containsKey(K key) => _inner.containsKey(key);
+  @override
+  V? peek(K key) => _inner.peek(key);
+  @override
+  V? access(K key) => _inner.access(key);
+  @override
+  void put(K key, V value) => _inner.put(key, value);
+  @override
+  K? selectVictim({K? excluding}) => _inner.selectVictim(excluding: excluding);
+  @override
+  (K, V)? evictOne({K? excluding}) => _inner.evictOne(excluding: excluding);
+  @override
+  bool remove(K key) => _inner.remove(key);
+  @override
+  void clear() => _inner.clear();
+}
+
 void main() {
   group('Cache engine — composed weight + TTL + LRU', () {
     test('an already-expired entry is purged and its slot reclaimed before a '
@@ -115,6 +150,55 @@ void main() {
         throwsArgumentError,
       );
     });
+
+    test('a capacity-triggered write does not scan the whole store for '
+        'expired entries when nothing has actually expired yet', () {
+      var now = DateTime(2024);
+      final countingStore = _KeysAccessCountingStore(
+        TTLFifoStore<String, String>(),
+      );
+      final cache = Cache<String, String>(
+        store: countingStore,
+        maxSize: 2,
+        ttl: const Duration(seconds: 100),
+        clock: () => now,
+      );
+
+      cache.set('a', '1');
+      cache.set('b', '2');
+      final scansBefore = countingStore.keysAccessCount;
+      cache.set('c', '3'); // evicts 'a' on capacity; nothing has expired
+      expect(countingStore.keysAccessCount, equals(scansBefore));
+
+      expect(cache.get('a'), isNull);
+      expect(cache.get('b'), equals('2'));
+      expect(cache.get('c'), equals('3'));
+    });
+
+    test('a capacity-triggered write does scan for expired entries once the '
+        'earliest deadline has passed', () {
+      var now = DateTime(2024);
+      final countingStore = _KeysAccessCountingStore(
+        TTLFifoStore<String, String>(),
+      );
+      final cache = Cache<String, String>(
+        store: countingStore,
+        maxSize: 2,
+        ttl: const Duration(seconds: 5),
+        clock: () => now,
+      );
+
+      cache.set('a', '1');
+      cache.set('b', '2');
+      now = now.add(const Duration(seconds: 10)); // both now expired
+      final scansBefore = countingStore.keysAccessCount;
+      cache.set('c', '3');
+      expect(countingStore.keysAccessCount, greaterThan(scansBefore));
+
+      expect(cache.get('a'), isNull);
+      expect(cache.get('b'), isNull);
+      expect(cache.get('c'), equals('3'));
+    });
   });
 
   group('Cache — cache-aside and update helpers', () {
@@ -172,6 +256,45 @@ void main() {
       expect(cache.get('a'), equals(1));
       expect(cache.get('b'), equals(2));
       expect(cache.get('c'), equals(3));
+    });
+
+    // Regression coverage for https://github.com/yordgenome03/cacherine/pull/69
+    // review feedback: validateSetArgs() used to only reject a negative
+    // explicit weight inside _write(), which getOrSet()/update() skip (or,
+    // for update(), only reach after already invoking the caller's callback)
+    // on a hit — so the same invalid argument was silently accepted on a hit
+    // and only rejected on a miss.
+    test('getOrSet() rejects a negative explicit weight even when the key is '
+        'already present', () {
+      final cache = Cache<String, int>(
+        store: LRUStore<String, int>(),
+        weigher: (key, value) => value,
+        maxWeight: 100,
+      );
+      cache.set('a', 1);
+      expect(
+        () => cache.getOrSet('a', () => 2, weight: -1),
+        throwsArgumentError,
+      );
+    });
+
+    test('update() rejects a negative explicit weight before invoking the '
+        'update callback', () {
+      final cache = Cache<String, int>(
+        store: LRUStore<String, int>(),
+        weigher: (key, value) => value,
+        maxWeight: 100,
+      );
+      cache.set('a', 1);
+      var called = false;
+      expect(
+        () => cache.update('a', (value) {
+          called = true;
+          return value + 1;
+        }, weight: -1),
+        throwsArgumentError,
+      );
+      expect(called, isFalse);
     });
   });
 
@@ -523,6 +646,59 @@ void main() {
         snapshot.evictionsPerMinuteByReason[EvictionReason.unspecified],
         equals(1),
       );
+    });
+  });
+
+  group('MonitoredCache — getAll() traffic metrics', () {
+    // Regression coverage for https://github.com/yordgenome03/cacherine/pull/69
+    // review feedback: the inherited AsyncCache.getAll() reads each key
+    // atomically but is unmonitored, so MonitoredCache used to silently drop
+    // the hit/latency metrics doc/monitored_cache.md:125-127 promises.
+    test(
+      'records a hit per present key, matching repeated get() calls',
+      () async {
+        final cache = MonitoredCache<String, String>(
+          store: LRUStore<String, String>(),
+          maxSize: 10,
+        );
+        await cache.set('a', '1');
+        await cache.set('b', '2');
+
+        expect(
+          await cache.getAll(['a', 'b', 'missing']),
+          equals({'a': '1', 'b': '2'}),
+        );
+        expect(cache.metrics.hits, equals(2));
+        expect(cache.metrics.misses, equals(0)); // omitted, not a recorded miss
+      },
+    );
+  });
+
+  group('MonitoredCache — update() traffic metrics', () {
+    // Regression coverage for https://github.com/yordgenome03/cacherine/pull/69
+    // review feedback: the pre-existing default update() called get()
+    // internally, recording hit/miss metrics via virtual dispatch; the
+    // atomic presentValue()-based rewrite that fixed update()'s TTL
+    // check-then-fetch race delegated straight to the (unmonitored) engine
+    // instead, silently dropping those metrics — contradicting
+    // doc/monitored_cache.md's "update() follow[s] getOrCompute() hit/miss
+    // semantics" contract.
+    test('records a hit on an existing key and a miss via ifAbsent', () async {
+      final cache = MonitoredCache<String, int>(
+        store: LRUStore<String, int>(),
+        maxSize: 10,
+      );
+      await cache.set('a', 1);
+      expect(await cache.update('a', (v) async => v + 1), equals(2));
+      expect(cache.metrics.hits, equals(1));
+      expect(cache.metrics.misses, equals(0));
+
+      expect(
+        await cache.update('b', (v) async => v, ifAbsent: () async => 9),
+        equals(9),
+      );
+      expect(cache.metrics.hits, equals(1));
+      expect(cache.metrics.misses, equals(1));
     });
   });
 

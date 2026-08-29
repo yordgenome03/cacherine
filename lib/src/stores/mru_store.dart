@@ -43,6 +43,9 @@ class MRUStore<K, V> implements CacheStore<K, V> {
   }
 
   @override
+  bool get removesOnAccess => false;
+
+  @override
   void put(K key, V value) {
     final existing = _index[key];
     if (existing != null) {

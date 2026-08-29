@@ -93,7 +93,7 @@ class AsyncCache<K, V> extends ThreadSafeCache<K, V> {
   /// state).
   @override
   Future<void> removeWhere(FutureOr<bool> Function(K key, V value) test) async {
-    for (final key in (await getKeys()).toList()) {
+    for (final key in await getKeys()) {
       final (found, value) = await lock.synchronized(
         () => engine.presentPeek(key),
       );

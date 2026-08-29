@@ -115,6 +115,69 @@ class MonitoredCache<K, V> extends AsyncCache<K, V>
         as V;
   }
 
+  /// Updates the value for [key] and returns the new value.
+  ///
+  /// The inherited [AsyncCache.update] reads/writes atomically via
+  /// `presentValue` but — being unmonitored — does not record traffic
+  /// metrics. This override additionally records the same hit/miss/latency
+  /// metrics as an equivalent [getOrCompute] call, per `doc/monitored_cache.md`
+  /// ("`update()` follow[s] `getOrCompute()` hit/miss semantics").
+  @override
+  Future<V> update(
+    K key,
+    FutureOr<V> Function(V value) update, {
+    FutureOr<V> Function()? ifAbsent,
+    int? weight,
+    Duration? ttl,
+  }) async {
+    engine.validateSetArgs(weight: weight, ttl: ttl);
+    var found = false;
+    return await monitoredGet(key, () async {
+          return await lock.synchronized(() async {
+            final (f, existing) = engine.presentValue(key);
+            if (f) {
+              found = true;
+              final value = await update(existing as V);
+              engine.set(key, value, weight: weight, ttl: ttl);
+              return value;
+            }
+            if (ifAbsent == null) {
+              throw StateError('Cannot update missing cache key: $key');
+            }
+            final value = await ifAbsent();
+            engine.set(key, value, weight: weight, ttl: ttl);
+            return value;
+          });
+        }, found: () => found)
+        as V;
+  }
+
+  /// Retrieves values for all currently present [keys].
+  ///
+  /// The inherited [AsyncCache.getAll] reads each key atomically via
+  /// `presentValue` but — being unmonitored — does not record traffic
+  /// metrics. This override additionally records the same hit/latency
+  /// metrics as an equivalent series of [get] calls (missing keys are
+  /// omitted without recording a miss, per `doc/monitored_cache.md`).
+  @override
+  Future<Map<K, V>> getAll(Iterable<K> keys) async {
+    final values = <K, V>{};
+    for (final key in keys) {
+      final stopwatch = Stopwatch()..start();
+      final (found, value) = await lock.synchronized(
+        () => engine.presentValue(key),
+      );
+      stopwatch.stop();
+      if (found) {
+        metrics.recordHit(stopwatch.elapsed);
+        if (value != null || null is V) {
+          values[key] = value as V;
+        }
+      }
+    }
+    return values;
+  }
+
   @override
   Future<void> remove(K key) async {
     final removed = await lock.synchronized(() => engine.removeIfPresent(key));

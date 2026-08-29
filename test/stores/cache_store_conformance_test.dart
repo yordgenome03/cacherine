@@ -29,6 +29,11 @@ void main() {
           expect(store.evictOne(), isNull);
         });
 
+        test('removesOnAccess is true only for EphemeralFIFOStore', () {
+          final store = make();
+          expect(store.removesOnAccess, name == 'EphemeralFIFOStore');
+        });
+
         test('put() then peek()/containsKey() see the value', () {
           final store = make();
           store.put('a', '1');
@@ -194,6 +199,42 @@ void main() {
       expect(evicted!.$1, equals('b'));
       expect(store.containsKey('a'), isTrue);
       expect(store.containsKey('b'), isFalse);
+    });
+
+    test('evictOne(excluding:) correctly walks multiple frequency buckets in a '
+        'row, across several single-victim evictions, when each successive '
+        'minimum-frequency bucket has already been emptied', () {
+      // Regression coverage for https://github.com/yordgenome03/cacherine/
+      // pull/69 review feedback: a stale/unmaintained "current minimum
+      // frequency" used to force an O(distinct frequencies) rescan on
+      // every single victim selection in a multi-eviction write (O(n²)
+      // worst case for a weighted/TTL-bounded LFU cache). This drives five
+      // consecutive single-key evictions across five distinct, initially
+      // non-adjacent frequency buckets to confirm each one still finds the
+      // correct next victim.
+      final store = LFUStore<String, String>();
+      for (final key in ['a', 'b', 'c', 'd', 'e']) {
+        store.put(key, key);
+      }
+      // Give each key a distinct frequency: a=1, b=2, c=3, d=4, e=5.
+      store.access('b');
+      store.access('c');
+      store.access('c');
+      store.access('d');
+      store.access('d');
+      store.access('d');
+      store.access('e');
+      store.access('e');
+      store.access('e');
+      store.access('e');
+
+      for (final expectedVictim in ['a', 'b', 'c', 'd', 'e']) {
+        final evicted = store.evictOne();
+        expect(evicted, isNotNull);
+        expect(evicted!.$1, equals(expectedVictim));
+      }
+      expect(store.length, equals(0));
+      expect(store.evictOne(), isNull);
     });
 
     test('within the same frequency bucket, the least-recently-touched key is '

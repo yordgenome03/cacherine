@@ -141,33 +141,87 @@ class MonitoredTTLCache<K, V> extends ThreadSafeTTLCacheInterface<K, V>
   /// The inherited [ThreadSafeTTLCacheInterface] default checks presence and
   /// reads [key] with separate `containsKey`/`get` calls, each independently
   /// acquiring the lock and reading the clock; this override reads via a
-  /// single [AsyncCache.presentValue]-backed snapshot instead. Not tracked in
-  /// hit/miss metrics, consistent with every other `Monitored*Cache`'s
-  /// `update` (only `get`/`getOrCompute` are monitored).
+  /// single [AsyncCache.presentValue]-backed snapshot instead, and — per
+  /// `doc/monitored_cache.md` ("`update()` follow[s] `getOrCompute()`
+  /// hit/miss semantics") — records the same hit/miss/latency metrics as an
+  /// equivalent [getOrCompute] call.
   @override
   Future<V> update(
     K key,
     FutureOr<V> Function(V value) update, {
     FutureOr<V> Function()? ifAbsent,
     Duration? ttl,
-  }) => _engine.update(key, update, ifAbsent: ifAbsent, ttl: ttl);
+  }) async {
+    _engine.engine.validateSetArgs(ttl: ttl);
+    var found = false;
+    return await monitoredGet(key, () async {
+          return await _engine.lock.synchronized(() async {
+            final (f, existing) = _engine.engine.presentValue(key);
+            if (f) {
+              found = true;
+              final value = await update(existing as V);
+              _engine.engine.set(key, value, ttl: ttl);
+              return value;
+            }
+            if (ifAbsent == null) {
+              throw StateError('Cannot update missing cache key: $key');
+            }
+            final value = await ifAbsent();
+            _engine.engine.set(key, value, ttl: ttl);
+            return value;
+          });
+        }, found: () => found)
+        as V;
+  }
 
   /// Retrieves values for all currently present [keys].
   ///
   /// The inherited [ThreadSafeCache] default checks presence and reads each
   /// key with separate `containsKey`/`get` calls, each independently
-  /// acquiring the lock; this override reads each key atomically instead.
+  /// acquiring the lock; this override reads each key atomically instead via
+  /// [AsyncCache]'s `presentValue`, and — matching every other
+  /// `Monitored*Cache` — records the same hit/latency metrics as an
+  /// equivalent series of [get] calls (missing keys are omitted without
+  /// recording a miss, per `doc/monitored_cache.md`).
   @override
-  Future<Map<K, V>> getAll(Iterable<K> keys) => _engine.getAll(keys);
+  Future<Map<K, V>> getAll(Iterable<K> keys) async {
+    final values = <K, V>{};
+    for (final key in keys) {
+      final stopwatch = Stopwatch()..start();
+      final (found, value) = await _engine.lock.synchronized(
+        () => _engine.engine.presentValue(key),
+      );
+      stopwatch.stop();
+      if (found) {
+        metrics.recordHit(stopwatch.elapsed);
+        if (value != null || null is V) {
+          values[key] = value as V;
+        }
+      }
+    }
+    return values;
+  }
 
   /// Removes all entries that match [test].
   ///
   /// The inherited [ThreadSafeCache] default checks presence and peeks each
   /// key with separate `containsKey`/`peek` calls, each independently
-  /// acquiring the lock; this override reads each key atomically instead.
+  /// acquiring the lock; this override reads each key atomically instead via
+  /// [AsyncCache]'s `presentPeek`, and removes a match through [remove] (not
+  /// the unmonitored engine directly) so it still records the manual-eviction
+  /// metric [remove] documents.
   @override
-  Future<void> removeWhere(FutureOr<bool> Function(K key, V value) test) =>
-      _engine.removeWhere(test);
+  Future<void> removeWhere(FutureOr<bool> Function(K key, V value) test) async {
+    for (final key in await getKeys()) {
+      final (found, value) = await _engine.lock.synchronized(
+        () => _engine.engine.presentPeek(key),
+      );
+      if (!found) continue;
+      if (await test(key, value as V)) {
+        await remove(key);
+      }
+    }
+  }
 
   @override
   Future<void> remove(K key) async {

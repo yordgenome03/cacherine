@@ -29,6 +29,9 @@ class LRUStore<K, V> implements CacheStore<K, V> {
   }
 
   @override
+  bool get removesOnAccess => false;
+
+  @override
   void put(K key, V value) {
     _cache.remove(key); // no-op if absent; drops old position if present
     _cache[key] = value; // (re)insert at the most-recently-used position

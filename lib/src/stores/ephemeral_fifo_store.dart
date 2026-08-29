@@ -24,6 +24,9 @@ class EphemeralFIFOStore<K, V> implements CacheStore<K, V> {
   V? access(K key) => _cache.remove(key); // removed on read
 
   @override
+  bool get removesOnAccess => true;
+
+  @override
   void put(K key, V value) {
     _cache[key] = value;
   }
