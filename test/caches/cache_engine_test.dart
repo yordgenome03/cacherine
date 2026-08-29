@@ -700,6 +700,17 @@ void main() {
       expect(cache.metrics.hits, equals(1));
       expect(cache.metrics.misses, equals(1));
     });
+
+    test('throws StateError for a missing key with no ifAbsent', () async {
+      final cache = MonitoredCache<String, int>(
+        store: LRUStore<String, int>(),
+        maxSize: 10,
+      );
+      await expectLater(
+        cache.update('missing', (v) async => v),
+        throwsStateError,
+      );
+    });
   });
 
   group(

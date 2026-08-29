@@ -484,5 +484,21 @@ void main() {
       expect(cache.metrics.hits, equals(1));
       expect(cache.metrics.misses, equals(1));
     });
+
+    test(
+      'update() throws StateError for a missing key with no ifAbsent',
+      () async {
+        final cache = MonitoredTTLCache<String, int>(
+          ttl: const Duration(seconds: 100),
+          alertConfig: config,
+        );
+        addTearDown(cache.dispose);
+
+        await expectLater(
+          cache.update('missing', (v) async => v),
+          throwsStateError,
+        );
+      },
+    );
   });
 }
