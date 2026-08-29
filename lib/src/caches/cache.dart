@@ -238,14 +238,27 @@ class Cache<K, V> extends SimpleCache<K, V> {
     _write(key, value, weight, ttl);
   }
 
+  /// Like [set], but returns whether [value] was actually stored instead of
+  /// silently accepting a weight-exceeds-[maxWeight] rejection. Exposed so
+  /// [AsyncCache]/[MonitoredCache] can detect that rejection from their own
+  /// `getOrCompute`/`update` overloads (which — unlike [set] — must report
+  /// what was actually cached) without duplicating [validateSetArgs] logic.
+  bool trySet(K key, V value, {int? weight, Duration? ttl}) {
+    validateSetArgs(weight: weight, ttl: ttl);
+    return _write(key, value, weight, ttl);
+  }
+
+  /// **Throws [StateError]** instead of returning on a miss if the computed
+  /// value's weight exceeds [maxWeight] — unlike [set], this method has a
+  /// non-`void` return contract, so it cannot silently report a value that
+  /// was never actually cached.
   @override
   V getOrSet(K key, V Function() valueFactory, {int? weight, Duration? ttl}) {
     validateSetArgs(weight: weight, ttl: ttl);
     final (found, existing) = presentValue(key);
     if (found) return existing as V;
     final value = valueFactory();
-    _write(key, value, weight, ttl);
-    return value;
+    return _writeOrThrow(key, value, weight, ttl);
   }
 
   @override
@@ -256,6 +269,10 @@ class Cache<K, V> extends SimpleCache<K, V> {
     Duration? ttl,
   }) => getOrSet(key, valueFactory, weight: weight, ttl: ttl);
 
+  /// **Throws [StateError]** if [key] is missing and [ifAbsent] is not
+  /// supplied, or if the resulting value's weight exceeds [maxWeight] —
+  /// unlike [set], this method has a non-`void` return contract, so it
+  /// cannot silently report a value that was never actually cached.
   @override
   V update(
     K key,
@@ -268,15 +285,13 @@ class Cache<K, V> extends SimpleCache<K, V> {
     final (found, existing) = presentValue(key);
     if (found) {
       final value = update(existing as V);
-      _write(key, value, weight, ttl);
-      return value;
+      return _writeOrThrow(key, value, weight, ttl);
     }
     if (ifAbsent == null) {
       throw StateError('Cannot update missing cache key: $key');
     }
     final value = ifAbsent();
-    _write(key, value, weight, ttl);
-    return value;
+    return _writeOrThrow(key, value, weight, ttl);
   }
 
   @override
@@ -399,7 +414,12 @@ class Cache<K, V> extends SimpleCache<K, V> {
     if (w != null) _currentWeight -= w;
   }
 
-  void _write(K key, V value, int? explicitWeight, Duration? entryTtl) {
+  /// Returns `true` if [value] was actually stored, `false` if its weight
+  /// (explicit or weigher-computed) exceeds [maxWeight] and it was rejected
+  /// as a no-op — the same "can never fit" case [set] silently accepts.
+  /// Callers with a non-`void` return contract (`getOrSet`/`update`) must
+  /// check this, or they'd report a value they never actually cached.
+  bool _write(K key, V value, int? explicitWeight, Duration? entryTtl) {
     final now = _ttlEnabled ? clock() : null;
     if (now != null) _dropIfExpired(key, now);
 
@@ -412,7 +432,7 @@ class Cache<K, V> extends SimpleCache<K, V> {
         throw ArgumentError('weight must not be negative.');
       }
       if (entryWeight > maxWeight!) {
-        return; // Can never fit; leave the cache without this entry.
+        return false; // Can never fit; leave the cache without this entry.
       }
     }
 
@@ -461,5 +481,21 @@ class Cache<K, V> extends SimpleCache<K, V> {
         _minExpiry = deadline;
       }
     }
+    return true;
+  }
+
+  /// Writes [key]/[value] via [_write] and returns [value], or throws
+  /// [StateError] if the write was rejected because its weight exceeds
+  /// [maxWeight] — used by [getOrSet]/[update], which (unlike [set]) must
+  /// report what was actually stored rather than silently returning a value
+  /// that was never cached.
+  V _writeOrThrow(K key, V value, int? weight, Duration? ttl) {
+    if (!_write(key, value, weight, ttl)) {
+      throw StateError(
+        'Cannot store value for cache key: $key — its weight exceeds '
+        'maxWeight and can never fit.',
+      );
+    }
+    return value;
   }
 }

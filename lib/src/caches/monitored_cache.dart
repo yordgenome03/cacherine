@@ -108,8 +108,7 @@ class MonitoredCache<K, V> extends AsyncCache<K, V>
               return existing;
             }
             final value = await valueFactory();
-            engine.set(key, value, weight: weight, ttl: ttl);
-            return value;
+            return storeOrThrow(key, value, weight: weight, ttl: ttl);
           });
         }, found: () => found)
         as V;
@@ -138,15 +137,13 @@ class MonitoredCache<K, V> extends AsyncCache<K, V>
             if (f) {
               found = true;
               final value = await update(existing as V);
-              engine.set(key, value, weight: weight, ttl: ttl);
-              return value;
+              return storeOrThrow(key, value, weight: weight, ttl: ttl);
             }
             if (ifAbsent == null) {
               throw StateError('Cannot update missing cache key: $key');
             }
             final value = await ifAbsent();
-            engine.set(key, value, weight: weight, ttl: ttl);
-            return value;
+            return storeOrThrow(key, value, weight: weight, ttl: ttl);
           });
         }, found: () => found)
         as V;

@@ -201,6 +201,82 @@ void main() {
     });
   });
 
+  group('Weight-rejected writes are reported, not silently lied about', () {
+    // Regression coverage for https://github.com/yordgenome03/cacherine/pull/69
+    // review feedback: _write() silently no-ops when a value's weight
+    // exceeds maxWeight (documented, intentional behavior for set()), but
+    // getOrSet()/getOrCompute()/update() have a non-void return contract —
+    // they used to return the oversized value anyway, claiming it was
+    // cached when it never was (and, on a hit, the old value silently
+    // remained). They now throw StateError instead, and leave any existing
+    // entry untouched.
+    test('Cache.getOrSet() throws instead of reporting an uncached value', () {
+      final cache = Cache<String, String>(
+        store: LRUStore<String, String>(),
+        weigher: _lengthWeigher,
+        maxWeight: 5,
+      );
+      expect(() => cache.getOrSet('a', () => 'toolong'), throwsStateError);
+      expect(cache.get('a'), isNull); // never actually cached
+    });
+
+    test('Cache.update() throws instead of reporting an uncached value, '
+        'leaving the old value in place', () {
+      final cache = Cache<String, String>(
+        store: LRUStore<String, String>(),
+        weigher: _lengthWeigher,
+        maxWeight: 5,
+      );
+      cache.set('a', 'ok'); // weight 2, fits
+      expect(() => cache.update('a', (v) => 'toolong'), throwsStateError);
+      expect(cache.get('a'), equals('ok')); // untouched by the rejected update
+    });
+
+    test('AsyncCache.getOrCompute()/update() throw instead of reporting an '
+        'uncached value', () async {
+      final cache = AsyncCache<String, String>(
+        Cache(
+          store: LRUStore<String, String>(),
+          weigher: _lengthWeigher,
+          maxWeight: 5,
+        ),
+      );
+      await expectLater(
+        cache.getOrCompute('a', () async => 'toolong'),
+        throwsStateError,
+      );
+      expect(await cache.get('a'), isNull);
+
+      await cache.set('b', 'ok');
+      await expectLater(
+        cache.update('b', (v) async => 'toolong'),
+        throwsStateError,
+      );
+      expect(await cache.get('b'), equals('ok'));
+    });
+
+    test('MonitoredCache.getOrCompute()/update() throw instead of reporting an '
+        'uncached value', () async {
+      final cache = MonitoredCache<String, String>(
+        store: LRUStore<String, String>(),
+        weigher: _lengthWeigher,
+        maxWeight: 5,
+      );
+      await expectLater(
+        cache.getOrCompute('a', () async => 'toolong'),
+        throwsStateError,
+      );
+      expect(await cache.get('a'), isNull);
+
+      await cache.set('b', 'ok');
+      await expectLater(
+        cache.update('b', (v) async => 'toolong'),
+        throwsStateError,
+      );
+      expect(await cache.get('b'), equals('ok'));
+    });
+  });
+
   group('Cache — cache-aside and update helpers', () {
     test('putIfAbsent() computes and stores only when the key is absent', () {
       final cache = Cache<String, int>(

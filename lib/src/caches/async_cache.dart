@@ -104,6 +104,22 @@ class AsyncCache<K, V> extends ThreadSafeCache<K, V> {
     }
   }
 
+  /// Writes [key]/[value] via [Cache.trySet] and returns [value], or throws
+  /// [StateError] if the write was rejected because its weight exceeds
+  /// [Cache.maxWeight] — [getOrCompute]/[update] must report what was
+  /// actually cached rather than silently returning a value that never was.
+  /// Exposed (not private) so [MonitoredCache]'s overrides of the same
+  /// methods can reuse it.
+  V storeOrThrow(K key, V value, {int? weight, Duration? ttl}) {
+    if (!engine.trySet(key, value, weight: weight, ttl: ttl)) {
+      throw StateError(
+        'Cannot store value for cache key: $key — its weight exceeds '
+        'maxWeight and can never fit.',
+      );
+    }
+    return value;
+  }
+
   @override
   Future<V> getOrCompute(
     K key,
@@ -116,8 +132,7 @@ class AsyncCache<K, V> extends ThreadSafeCache<K, V> {
       final (found, existing) = engine.presentValue(key);
       if (found) return existing as V;
       final value = await valueFactory();
-      engine.set(key, value, weight: weight, ttl: ttl);
-      return value;
+      return storeOrThrow(key, value, weight: weight, ttl: ttl);
     });
   }
 
@@ -142,15 +157,13 @@ class AsyncCache<K, V> extends ThreadSafeCache<K, V> {
       final (found, existing) = engine.presentValue(key);
       if (found) {
         final value = await update(existing as V);
-        engine.set(key, value, weight: weight, ttl: ttl);
-        return value;
+        return storeOrThrow(key, value, weight: weight, ttl: ttl);
       }
       if (ifAbsent == null) {
         throw StateError('Cannot update missing cache key: $key');
       }
       final value = await ifAbsent();
-      engine.set(key, value, weight: weight, ttl: ttl);
-      return value;
+      return storeOrThrow(key, value, weight: weight, ttl: ttl);
     });
   }
 
