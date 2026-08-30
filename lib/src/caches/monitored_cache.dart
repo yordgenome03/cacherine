@@ -65,7 +65,7 @@ class MonitoredCache<K, V> extends AsyncCache<K, V>
       }
     }
 
-    engine.onEvict = metrics.recordEviction;
+    engine.onEvict = metrics.recordEvictionReason;
     _cacheAlertManager = CacheAlertManager(
       metrics,
       alertConfig ?? CacheAlertConfig(),
@@ -178,7 +178,7 @@ class MonitoredCache<K, V> extends AsyncCache<K, V>
   @override
   Future<void> remove(K key) async {
     final removed = await lock.synchronized(() => engine.removeIfPresent(key));
-    if (removed) metrics.recordEviction(EvictionReason.manual);
+    if (removed) metrics.recordEvictionReason(EvictionReason.manual);
   }
 
   @override

@@ -41,17 +41,22 @@ Updating an existing key never evicts anything purely because of the update's en
 ## 4. Example Usage
 
 ```dart
+import 'dart:typed_data';
+
 import 'package:cacherine/cacherine.dart';
 
 void main() {
-  // Bound the cache to 1 MB of estimated byte size.
-  final cache = SimpleWeightedLRUCache<String, List<int>>(
+  // Bound the cache to 1 MB of actual byte size. Uint8List.lengthInBytes is
+  // exactly the byte count; a plain List<int> would not be — each int
+  // element carries substantial per-element/reference overhead beyond one
+  // byte, so `.length` alone cannot stand in for a byte-size weight.
+  final cache = SimpleWeightedLRUCache<String, Uint8List>(
     maxWeight: 1024 * 1024,
-    weigher: (key, value) => value.length,
+    weigher: (key, value) => value.lengthInBytes,
   );
 
-  cache.set('small', List.filled(100, 0));
-  cache.set('large', List.filled(900 * 1024, 0));
+  cache.set('small', Uint8List(100));
+  cache.set('large', Uint8List(900 * 1024));
 
   print(cache.currentWeight); // Sum of the weights of the stored entries
 }
@@ -76,10 +81,10 @@ cache.set('built-from-string', geometry, weight: estimatedBytesForThisBuild);
 Weight-based bounding is not LRU-specific — it is a general capability of the underlying [`Cache`/`AsyncCache`/`MonitoredCache` engine](../README.md#api-reference), which every named cache class in this package is a thin facade over. A cache combining weight with TTL expiry, or with a different eviction policy (FIFO, MRU, LFU), can be built directly without a dedicated named class:
 
 ```dart
-final weightedTtlCache = AsyncCache<String, List<int>>(
+final weightedTtlCache = AsyncCache<String, Uint8List>(
   Cache(
-    store: LRUStore<String, List<int>>(),
-    weigher: (key, value) => value.length,
+    store: LRUStore<String, Uint8List>(),
+    weigher: (key, value) => value.lengthInBytes,
     maxWeight: 1024 * 1024,
     ttl: const Duration(minutes: 10),
   ),

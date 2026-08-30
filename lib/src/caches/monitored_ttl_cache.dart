@@ -66,7 +66,7 @@ class MonitoredTTLCache<K, V> extends ThreadSafeTTLCacheInterface<K, V>
       throw ArgumentError('sweepInterval must be greater than zero.');
     }
 
-    _engine.engine.onEvict = metrics.recordEviction;
+    _engine.engine.onEvict = metrics.recordEvictionReason;
     _cacheAlertManager = CacheAlertManager(
       metrics,
       alertConfig ?? CacheAlertConfig(),
@@ -228,7 +228,7 @@ class MonitoredTTLCache<K, V> extends ThreadSafeTTLCacheInterface<K, V>
     final removed = await _engine.lock.synchronized(
       () => _engine.engine.removeIfPresent(key),
     );
-    if (removed) metrics.recordEviction(EvictionReason.manual);
+    if (removed) metrics.recordEvictionReason(EvictionReason.manual);
   }
 
   @override

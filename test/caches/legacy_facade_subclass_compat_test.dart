@@ -78,5 +78,40 @@ void main() {
       expect(cache.setCalls, equals(['a']));
       expect(await cache.get('a'), equals('1'));
     });
+
+    // Regression coverage for https://github.com/yordgenome03/cacherine/pull/69
+    // review feedback: bulk/compound helpers (setAll/update/getOrCompute)
+    // used to delegate straight to the internal engine, bypassing a
+    // subclass's override of set()/get() entirely — so overriding set() for
+    // logging/validation would silently miss every write that went through
+    // setAll() or update(). These now go through this class's own
+    // (overridable) set()/get(), so a subclass override sees every call.
+    test('SimpleLRUCache subclass\'s set() override sees every write made '
+        'through setAll()/update()', () {
+      final cache = _LoggingSimpleLRUCache<String, int>(10);
+      cache.setAll({'a': 1, 'b': 2});
+      expect(cache.setCalls, equals(['a', 'b']));
+      cache.update('a', (v) => v + 1);
+      expect(cache.setCalls, equals(['a', 'b', 'a']));
+    });
+
+    test('LRUCache subclass\'s set() override sees every write made '
+        'through setAll()/update()', () async {
+      final cache = _LoggingLRUCache<String, int>(10);
+      await cache.setAll({'a': 1, 'b': 2});
+      expect(cache.setCalls, equals(['a', 'b']));
+      await cache.update('a', (v) async => v + 1);
+      expect(cache.setCalls, equals(['a', 'b', 'a']));
+    });
+
+    test('MonitoredLRUCache subclass\'s set() override sees every write '
+        'made through setAll()/update()', () async {
+      final cache = _LoggingMonitoredLRUCache<String, int>(maxSize: 10);
+      addTearDown(cache.dispose);
+      await cache.setAll({'a': 1, 'b': 2});
+      expect(cache.setCalls, equals(['a', 'b']));
+      await cache.update('a', (v) async => v + 1);
+      expect(cache.setCalls, equals(['a', 'b', 'a']));
+    });
   });
 }

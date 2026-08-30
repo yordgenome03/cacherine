@@ -28,7 +28,13 @@ class AsyncCache<K, V> extends ThreadSafeCache<K, V> {
   /// Shared with [MonitoredCache] (not private) so its compound operations
   /// (e.g. `remove` + metrics recording) serialize on the same lock as every
   /// other operation on this instance.
-  final lock = Lock();
+  ///
+  /// Reentrant so a caller already holding this lock (e.g. a `Monitored*`
+  /// legacy facade's `getOrCompute`/`update`, mid-callback) can still call
+  /// back into this instance's own overridable [set] to write the result —
+  /// letting a downstream subclass's [set] override observe every write —
+  /// without deadlocking on itself.
+  final lock = Lock(reentrant: true);
 
   /// The entry-count cap this instance was configured with, if any. See
   /// [Cache.maxSize].

@@ -644,6 +644,19 @@ void main() {
       await cache.set('c', '3');
       expect(await cache.getKeys(), equals(['b', 'c']));
     });
+
+    test(
+      'AsyncCache.removeWhere() removes entries the predicate matches',
+      () async {
+        final cache = AsyncCache<String, String>(
+          Cache(store: LRUStore<String, String>(), maxSize: 10),
+        );
+        await cache.set('a', '1');
+        await cache.set('b', '2');
+        await cache.removeWhere((key, value) async => key == 'a');
+        expect(await cache.getKeys(), equals(['b']));
+      },
+    );
   });
 
   group('MonitoredCache — construction validation', () {

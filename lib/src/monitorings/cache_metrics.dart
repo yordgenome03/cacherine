@@ -121,12 +121,20 @@ class CacheMetrics {
     _latencies.add(latency);
   }
 
-  /// Records a cache eviction event.
+  /// Records a cache eviction event without a specific cause, bucketed as
+  /// [EvictionReason.unspecified].
   ///
-  /// [reason] defaults to [EvictionReason.unspecified] for call sites written
-  /// before per-cause tracking existed; pass the actual cause so it can be
-  /// broken out in [CacheMetricsSnapshot.evictionsPerMinuteByReason].
-  void recordEviction([EvictionReason reason = EvictionReason.unspecified]) {
+  /// Kept as a genuine zero-argument method — rather than giving
+  /// [recordEvictionReason] an optional parameter — because `CacheMetrics` is
+  /// public and non-final: an optional parameter would be source-breaking
+  /// for a downstream subclass overriding this method with the original
+  /// zero-argument signature (Dart rejects an override with fewer
+  /// parameters than the method it overrides).
+  void recordEviction() => recordEvictionReason(EvictionReason.unspecified);
+
+  /// Records a cache eviction event caused by [reason], so it can be broken
+  /// out in [CacheMetricsSnapshot.evictionsPerMinuteByReason].
+  void recordEvictionReason(EvictionReason reason) {
     if (_evictions.length >= maxEvictionSamples) _evictions.removeFirst();
     _evictions.add(_EvictionRecord(_clock(), reason));
   }

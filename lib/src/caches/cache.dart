@@ -56,7 +56,7 @@ class Cache<K, V> extends SimpleCache<K, V> {
   /// Notified whenever an entry is evicted (capacity, weight, or expiry) —
   /// not called for explicit [remove]. Settable rather than
   /// constructor-injected so [MonitoredCache] can wire it to
-  /// `metrics.recordEviction` from its own constructor body.
+  /// `metrics.recordEvictionReason` from its own constructor body.
   void Function(EvictionReason reason)? onEvict;
 
   bool get _weightEnabled => weigher != null;

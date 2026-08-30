@@ -32,6 +32,14 @@ import 'cache.dart';
 /// [PeriodicSweeper] directly (matching [MonitoredTTLCache]) so
 /// `is CacheMonitoring<K, V>` and `is Disposable` keep holding for callers
 /// relying on them.
+///
+/// [getAll]/[setAll]/[removeWhere] are left to [ThreadSafeCache]'s default
+/// implementations, which call this class's own (overridable) [get]/[set]/
+/// [containsKey]/[peek]/[remove] — so a subclass overriding one of those
+/// still has its override invoked (and, since [get]/[remove] are already
+/// monitored, the defaults automatically record the traffic/eviction
+/// metrics `doc/monitored_cache.md` documents for those bulk operations
+/// too, with no separate bookkeeping needed here).
 class MonitoredMRUCache<K, V> extends ThreadSafeCache<K, V>
     with CacheMonitoring<K, V>, PeriodicSweeper
     implements Disposable {
@@ -50,7 +58,7 @@ class MonitoredMRUCache<K, V> extends ThreadSafeCache<K, V>
   /// - **[ArgumentError]**: Thrown when [maxSize] is `0 or less`.
   MonitoredMRUCache({required int maxSize, CacheAlertConfig? alertConfig})
     : _engine = AsyncCache(Cache(store: MRUStore<K, V>(), maxSize: maxSize)) {
-    _engine.engine.onEvict = metrics.recordEviction;
+    _engine.engine.onEvict = metrics.recordEvictionReason;
     _cacheAlertManager = CacheAlertManager(
       metrics,
       alertConfig ?? CacheAlertConfig(),
@@ -85,9 +93,14 @@ class MonitoredMRUCache<K, V> extends ThreadSafeCache<K, V>
   @override
   Future<void> set(K key, V value) => _engine.set(key, value);
 
-  @override
-  Future<void> setAll(Map<K, V> entries) => _engine.setAll(entries);
-
+  /// Returns the existing value for [key], or computes, stores, and returns
+  /// a new one — recording the same hit/miss/latency metrics as [get].
+  ///
+  /// Holds [AsyncCache.lock] across the whole check-compute-store sequence
+  /// (buying atomicity: no duplicate computation for a racing missing key,
+  /// same as [AsyncCache.getOrCompute]), but writes through this class's own
+  /// [set] instead of the engine directly — safe from deadlock because the
+  /// lock is reentrant — so a subclass override of [set] still runs.
   @override
   Future<V> getOrCompute(K key, FutureOr<V> Function() valueFactory) async {
     var found = false;
@@ -99,7 +112,7 @@ class MonitoredMRUCache<K, V> extends ThreadSafeCache<K, V>
               return existing;
             }
             final value = await valueFactory();
-            _engine.engine.set(key, value);
+            await set(key, value);
             return value;
           });
         }, found: () => found)
@@ -110,7 +123,8 @@ class MonitoredMRUCache<K, V> extends ThreadSafeCache<K, V>
   ///
   /// Per `doc/monitored_cache.md` ("`update()` follow[s] `getOrCompute()`
   /// hit/miss semantics"), this records the same hit/miss/latency metrics as
-  /// an equivalent [getOrCompute] call.
+  /// an equivalent [getOrCompute] call, and — see [getOrCompute] — writes
+  /// through this class's own [set] under the same reentrant lock.
   @override
   Future<V> update(
     K key,
@@ -124,55 +138,18 @@ class MonitoredMRUCache<K, V> extends ThreadSafeCache<K, V>
             if (f) {
               found = true;
               final value = await update(existing as V);
-              _engine.engine.set(key, value);
+              await set(key, value);
               return value;
             }
             if (ifAbsent == null) {
               throw StateError('Cannot update missing cache key: $key');
             }
             final value = await ifAbsent();
-            _engine.engine.set(key, value);
+            await set(key, value);
             return value;
           });
         }, found: () => found)
         as V;
-  }
-
-  /// Retrieves values for all currently present [keys], recording the same
-  /// hit/latency metrics as an equivalent series of [get] calls (missing
-  /// keys are omitted without recording a miss, per `doc/monitored_cache.md`).
-  @override
-  Future<Map<K, V>> getAll(Iterable<K> keys) async {
-    final values = <K, V>{};
-    for (final key in keys) {
-      final stopwatch = Stopwatch()..start();
-      final (found, value) = await _engine.lock.synchronized(
-        () => _engine.engine.presentValue(key),
-      );
-      stopwatch.stop();
-      if (found) {
-        metrics.recordHit(stopwatch.elapsed);
-        if (value != null || null is V) {
-          values[key] = value as V;
-        }
-      }
-    }
-    return values;
-  }
-
-  /// Removes all entries that match [test], removing a match through
-  /// [remove] so it still records a manual-eviction metric.
-  @override
-  Future<void> removeWhere(FutureOr<bool> Function(K key, V value) test) async {
-    for (final key in await getKeys()) {
-      final (found, value) = await _engine.lock.synchronized(
-        () => _engine.engine.presentPeek(key),
-      );
-      if (!found) continue;
-      if (await test(key, value as V)) {
-        await remove(key);
-      }
-    }
   }
 
   @override
@@ -180,7 +157,7 @@ class MonitoredMRUCache<K, V> extends ThreadSafeCache<K, V>
     final removed = await _engine.lock.synchronized(
       () => _engine.engine.removeIfPresent(key),
     );
-    if (removed) metrics.recordEviction(EvictionReason.manual);
+    if (removed) metrics.recordEvictionReason(EvictionReason.manual);
   }
 
   @override

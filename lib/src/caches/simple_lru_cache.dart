@@ -15,7 +15,13 @@ import 'cache.dart';
 /// Wraps a [Cache] configured with an [LRUStore] — internally a composed
 /// engine rather than a subclass, so this class keeps its original
 /// `set`/`getOrSet`/`update`/`setAll` signatures (no `weight`/`ttl`
-/// parameters) rather than inheriting [Cache]'s wider ones.
+/// parameters) rather than inheriting [Cache]'s wider ones. Only the
+/// primitive operations ([getKeys], [get], [peek], [containsKey], [set],
+/// [remove], [clear]) forward to the engine directly; bulk/compound helpers
+/// ([getAll], [setAll], [getOrSet], [update], [removeWhere]) are left to
+/// [SimpleCache]'s default implementations, which call this class's own
+/// (overridable) methods — so a subclass overriding, say, [set] still has
+/// that override invoked by [setAll]/[update]/etc.
 class SimpleLRUCache<K, V> extends SimpleCache<K, V> {
   final Cache<K, V> _engine;
 
@@ -38,9 +44,6 @@ class SimpleLRUCache<K, V> extends SimpleCache<K, V> {
   V? get(K key) => _engine.get(key);
 
   @override
-  Map<K, V> getAll(Iterable<K> keys) => _engine.getAll(keys);
-
-  @override
   V? peek(K key) => _engine.peek(key);
 
   @override
@@ -50,22 +53,7 @@ class SimpleLRUCache<K, V> extends SimpleCache<K, V> {
   void set(K key, V value) => _engine.set(key, value);
 
   @override
-  void setAll(Map<K, V> entries) => _engine.setAll(entries);
-
-  @override
-  V getOrSet(K key, V Function() valueFactory) =>
-      _engine.getOrSet(key, valueFactory);
-
-  @override
-  V update(K key, V Function(V value) update, {V Function()? ifAbsent}) =>
-      _engine.update(key, update, ifAbsent: ifAbsent);
-
-  @override
   void remove(K key) => _engine.remove(key);
-
-  @override
-  void removeWhere(bool Function(K key, V value) test) =>
-      _engine.removeWhere(test);
 
   @override
   void clear() => _engine.clear();

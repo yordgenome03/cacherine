@@ -211,12 +211,12 @@ void main() {
       await Future.delayed(const Duration(milliseconds: 100));
 
       for (int i = 0; i < 10; i++) {
-        metrics.recordEviction(EvictionReason.weight);
+        metrics.recordEvictionReason(EvictionReason.weight);
       }
       // A reason with no configured threshold must never alert, even with
       // more evictions than the reason that does have one.
       for (int i = 0; i < 50; i++) {
-        metrics.recordEviction(EvictionReason.expired);
+        metrics.recordEvictionReason(EvictionReason.expired);
       }
 
       await Future.delayed(const Duration(milliseconds: 1200));
@@ -250,7 +250,7 @@ void main() {
         alertManager.monitor();
         await Future.delayed(const Duration(milliseconds: 100));
         for (int i = 0; i < 10; i++) {
-          metrics.recordEviction(EvictionReason.capacity);
+          metrics.recordEvictionReason(EvictionReason.capacity);
         }
         await Future.delayed(const Duration(milliseconds: 1200));
 

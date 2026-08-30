@@ -183,16 +183,21 @@ Bound a cache by a per-entry weight (e.g. estimated byte size) instead of just e
 [Learn more about weight-based eviction.](doc/weighted_lru_cache.md)
 
 ```Dart
+import 'dart:typed_data';
+
 import 'package:cacherine/cacherine.dart';
 
 void main() {
-  final cache = SimpleWeightedLRUCache<String, List<int>>(
+  // Uint8List.lengthInBytes is exactly the byte count; a plain List<int>
+  // would not be — each int element carries substantial per-element/
+  // reference overhead beyond one byte.
+  final cache = SimpleWeightedLRUCache<String, Uint8List>(
     maxWeight: 1024 * 1024, // 1 MB
-    weigher: (key, value) => value.length,
+    weigher: (key, value) => value.lengthInBytes,
   );
 
-  cache.set('small', List.filled(100, 0));
-  cache.set('large', List.filled(900 * 1024, 0));
+  cache.set('small', Uint8List(100));
+  cache.set('large', Uint8List(900 * 1024));
 
   print(cache.currentWeight); // sum of the weights of stored entries
 }

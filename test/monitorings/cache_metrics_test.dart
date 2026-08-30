@@ -329,7 +329,7 @@ void main() {
   group('CacheMetricsSnapshot - Immutability', () {
     test('evictionsPerMinuteByReason cannot be mutated by callers', () {
       final metrics = CacheMetrics();
-      metrics.recordEviction(EvictionReason.capacity);
+      metrics.recordEvictionReason(EvictionReason.capacity);
       final snapshot = metrics.snapshot(const Duration(minutes: 1));
 
       expect(
