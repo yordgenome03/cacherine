@@ -78,27 +78,61 @@ class TTLCache<K, V> extends ThreadSafeTTLCacheInterface<K, V>
   Future<void> set(K key, V value, {Duration? ttl}) =>
       _engine.set(key, value, ttl: ttl);
 
+  /// Returns the existing value for [key], or computes, stores, and returns
+  /// a new one.
+  ///
+  /// Holds [AsyncCache.lock] across the whole check-compute-store sequence
+  /// (atomicity: no duplicate computation for a racing missing key, and a
+  /// single clock snapshot so an entry can't expire between the check and
+  /// the store), but writes through this class's own [set] instead of the
+  /// engine directly — safe from deadlock because that lock is reentrant —
+  /// so a subclass override of [set] still runs.
   @override
   Future<V> getOrCompute(
     K key,
     FutureOr<V> Function() valueFactory, {
     Duration? ttl,
-  }) => _engine.getOrCompute(key, valueFactory, ttl: ttl);
+  }) {
+    _engine.engine.validateSetArgs(ttl: ttl);
+    return _engine.lock.synchronized(() async {
+      final (found, existing) = _engine.engine.presentValue(key);
+      if (found) return existing as V;
+      final value = await valueFactory();
+      await set(key, value, ttl: ttl);
+      return value;
+    });
+  }
 
   /// Updates the value for [key] and returns the new value.
   ///
   /// The inherited [ThreadSafeTTLCacheInterface] default checks presence and
   /// reads [key] with separate `containsKey`/`get` calls, each independently
   /// acquiring the lock and reading the clock; this override reads via a
-  /// single [AsyncCache.presentValue]-backed snapshot instead (see
-  /// [AsyncCache.update]).
+  /// single snapshot instead, and — see [getOrCompute] — writes through this
+  /// class's own [set] under the same reentrant lock.
   @override
   Future<V> update(
     K key,
     FutureOr<V> Function(V value) update, {
     FutureOr<V> Function()? ifAbsent,
     Duration? ttl,
-  }) => _engine.update(key, update, ifAbsent: ifAbsent, ttl: ttl);
+  }) {
+    _engine.engine.validateSetArgs(ttl: ttl);
+    return _engine.lock.synchronized(() async {
+      final (found, existing) = _engine.engine.presentValue(key);
+      if (found) {
+        final value = await update(existing as V);
+        await set(key, value, ttl: ttl);
+        return value;
+      }
+      if (ifAbsent == null) {
+        throw StateError('Cannot update missing cache key: $key');
+      }
+      final value = await ifAbsent();
+      await set(key, value, ttl: ttl);
+      return value;
+    });
+  }
 
   /// Retrieves values for all currently present [keys].
   ///

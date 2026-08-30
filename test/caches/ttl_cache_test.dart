@@ -416,6 +416,26 @@ void main() {
       expect(counter.calls - before, equals(2));
     });
 
+    test('update() uses ifAbsent to seed a missing key', () async {
+      final cache = TTLCache<String, int>(ttl: const Duration(seconds: 100));
+      expect(
+        await cache.update('a', (v) async => v + 1, ifAbsent: () async => 5),
+        equals(5),
+      );
+      expect(await cache.get('a'), equals(5));
+    });
+
+    test(
+      'update() throws StateError for a missing key with no ifAbsent',
+      () async {
+        final cache = TTLCache<String, int>(ttl: const Duration(seconds: 100));
+        await expectLater(
+          cache.update('missing', (v) async => v),
+          throwsStateError,
+        );
+      },
+    );
+
     test('getAll() reads the clock once per key on a hit', () async {
       final counter = _ClockCounter();
       final cache = TTLCache<String, String>(

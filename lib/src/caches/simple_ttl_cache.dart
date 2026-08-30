@@ -89,19 +89,28 @@ class SimpleTTLCache<K, V> extends SimpleTTLCacheInterface<K, V> {
   /// The inherited [SimpleTTLCacheInterface] default checks presence and
   /// reads [key] with separate `containsKey`/`get` calls, which independently
   /// read the clock and can race with expiry; this override reads via a
-  /// single [Cache.presentValue] snapshot instead.
+  /// single [Cache.presentValue] snapshot instead, and writes through this
+  /// class's own [set] (rather than the engine directly) so a subclass
+  /// override of [set] still runs.
   ///
   /// **This method is not thread-safe.**
   @override
-  V getOrSet(K key, V Function() valueFactory, {Duration? ttl}) =>
-      _engine.getOrSet(key, valueFactory, ttl: ttl);
+  V getOrSet(K key, V Function() valueFactory, {Duration? ttl}) {
+    _engine.validateSetArgs(ttl: ttl);
+    final (found, existing) = _engine.presentValue(key);
+    if (found) return existing as V;
+    final value = valueFactory();
+    set(key, value, ttl: ttl);
+    return value;
+  }
 
   /// Updates the value for [key] and returns the new value.
   ///
   /// The inherited [SimpleTTLCacheInterface] default checks presence and
   /// reads [key] with separate `containsKey`/`get` calls, which independently
   /// read the clock and can race with expiry; this override reads via a
-  /// single [Cache.presentValue] snapshot instead.
+  /// single [Cache.presentValue] snapshot instead, and — see [getOrSet] —
+  /// writes through this class's own [set].
   ///
   /// **This method is not thread-safe.**
   @override
@@ -110,7 +119,21 @@ class SimpleTTLCache<K, V> extends SimpleTTLCacheInterface<K, V> {
     V Function(V value) update, {
     V Function()? ifAbsent,
     Duration? ttl,
-  }) => _engine.update(key, update, ifAbsent: ifAbsent, ttl: ttl);
+  }) {
+    _engine.validateSetArgs(ttl: ttl);
+    final (found, existing) = _engine.presentValue(key);
+    if (found) {
+      final value = update(existing as V);
+      set(key, value, ttl: ttl);
+      return value;
+    }
+    if (ifAbsent == null) {
+      throw StateError('Cannot update missing cache key: $key');
+    }
+    final value = ifAbsent();
+    set(key, value, ttl: ttl);
+    return value;
+  }
 
   /// Retrieves values for all currently present [keys].
   ///

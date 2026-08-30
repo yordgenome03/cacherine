@@ -325,6 +325,21 @@ void main() {
       expect(counter.calls - before, equals(2));
     });
 
+    test('update() uses ifAbsent to seed a missing key', () {
+      final cache = SimpleTTLCache<String, int>(
+        ttl: const Duration(seconds: 100),
+      );
+      expect(cache.update('a', (v) => v + 1, ifAbsent: () => 5), equals(5));
+      expect(cache.get('a'), equals(5));
+    });
+
+    test('update() throws StateError for a missing key with no ifAbsent', () {
+      final cache = SimpleTTLCache<String, int>(
+        ttl: const Duration(seconds: 100),
+      );
+      expect(() => cache.update('missing', (v) => v), throwsStateError);
+    });
+
     test('getAll() reads the clock once per key on a hit', () {
       final counter = _ClockCounter();
       final cache = SimpleTTLCache<String, String>(

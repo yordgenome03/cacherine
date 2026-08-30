@@ -52,6 +52,48 @@ class _LoggingMonitoredLRUCache<K, V> extends MonitoredLRUCache<K, V> {
   }
 }
 
+// TTLCache/MonitoredTTLCache/SimpleTTLCache have composed an internal engine
+// since before this PR, so they never had the compile-breaking issue above —
+// but getOrCompute()/getOrSet()/update() writing through the engine directly
+// (instead of this class's own set()) has the same subclass-dispatch bypass
+// as the non-TTL facades, just discovered separately.
+
+class _LoggingSimpleTTLCache<K, V> extends SimpleTTLCache<K, V> {
+  final setCalls = <K>[];
+
+  _LoggingSimpleTTLCache({required super.ttl});
+
+  @override
+  void set(K key, V value, {Duration? ttl}) {
+    setCalls.add(key);
+    super.set(key, value, ttl: ttl);
+  }
+}
+
+class _LoggingTTLCache<K, V> extends TTLCache<K, V> {
+  final setCalls = <K>[];
+
+  _LoggingTTLCache({required super.ttl});
+
+  @override
+  Future<void> set(K key, V value, {Duration? ttl}) async {
+    setCalls.add(key);
+    await super.set(key, value, ttl: ttl);
+  }
+}
+
+class _LoggingMonitoredTTLCache<K, V> extends MonitoredTTLCache<K, V> {
+  final setCalls = <K>[];
+
+  _LoggingMonitoredTTLCache({required super.ttl, super.alertConfig});
+
+  @override
+  Future<void> set(K key, V value, {Duration? ttl}) async {
+    setCalls.add(key);
+    await super.set(key, value, ttl: ttl);
+  }
+}
+
 void main() {
   group('Legacy facade subclass compatibility', () {
     test('SimpleLRUCache subclass can override set(key, value) with the '
@@ -112,6 +154,41 @@ void main() {
       expect(cache.setCalls, equals(['a', 'b']));
       await cache.update('a', (v) async => v + 1);
       expect(cache.setCalls, equals(['a', 'b', 'a']));
+    });
+
+    test('SimpleTTLCache subclass\'s set() override sees every write made '
+        'through getOrSet()/update()', () {
+      final cache = _LoggingSimpleTTLCache<String, int>(
+        ttl: const Duration(seconds: 100),
+      );
+      expect(cache.getOrSet('a', () => 1), equals(1));
+      expect(cache.setCalls, equals(['a']));
+      cache.update('a', (v) => v + 1);
+      expect(cache.setCalls, equals(['a', 'a']));
+    });
+
+    test('TTLCache subclass\'s set() override sees every write made '
+        'through getOrCompute()/update()', () async {
+      final cache = _LoggingTTLCache<String, int>(
+        ttl: const Duration(seconds: 100),
+      );
+      addTearDown(cache.dispose);
+      expect(await cache.getOrCompute('a', () async => 1), equals(1));
+      expect(cache.setCalls, equals(['a']));
+      await cache.update('a', (v) async => v + 1);
+      expect(cache.setCalls, equals(['a', 'a']));
+    });
+
+    test('MonitoredTTLCache subclass\'s set() override sees every write '
+        'made through getOrCompute()/update()', () async {
+      final cache = _LoggingMonitoredTTLCache<String, int>(
+        ttl: const Duration(seconds: 100),
+      );
+      addTearDown(cache.dispose);
+      expect(await cache.getOrCompute('a', () async => 1), equals(1));
+      expect(cache.setCalls, equals(['a']));
+      await cache.update('a', (v) async => v + 1);
+      expect(cache.setCalls, equals(['a', 'a']));
     });
   });
 }

@@ -113,6 +113,15 @@ class MonitoredTTLCache<K, V> extends ThreadSafeTTLCacheInterface<K, V>
   Future<void> set(K key, V value, {Duration? ttl}) =>
       _engine.set(key, value, ttl: ttl);
 
+  /// Returns the existing value for [key], or computes, stores, and returns
+  /// a new one — recording the same hit/miss/latency metrics as [get].
+  ///
+  /// Holds [AsyncCache.lock] across the whole check-compute-store sequence
+  /// (atomicity: no duplicate computation for a racing missing key, and a
+  /// single clock snapshot so an entry can't expire between the check and
+  /// the store), but writes through this class's own [set] instead of the
+  /// engine directly — safe from deadlock because that lock is reentrant —
+  /// so a subclass override of [set] still runs.
   @override
   Future<V> getOrCompute(
     K key,
@@ -129,7 +138,7 @@ class MonitoredTTLCache<K, V> extends ThreadSafeTTLCacheInterface<K, V>
               return existing;
             }
             final value = await valueFactory();
-            _engine.engine.set(key, value, ttl: ttl);
+            await set(key, value, ttl: ttl);
             return value;
           });
         }, found: () => found)
@@ -141,10 +150,10 @@ class MonitoredTTLCache<K, V> extends ThreadSafeTTLCacheInterface<K, V>
   /// The inherited [ThreadSafeTTLCacheInterface] default checks presence and
   /// reads [key] with separate `containsKey`/`get` calls, each independently
   /// acquiring the lock and reading the clock; this override reads via a
-  /// single [AsyncCache.presentValue]-backed snapshot instead, and — per
-  /// `doc/monitored_cache.md` ("`update()` follow[s] `getOrCompute()`
-  /// hit/miss semantics") — records the same hit/miss/latency metrics as an
-  /// equivalent [getOrCompute] call.
+  /// single snapshot instead, and — per `doc/monitored_cache.md` ("`update()`
+  /// follow[s] `getOrCompute()` hit/miss semantics") — records the same
+  /// hit/miss/latency metrics as an equivalent [getOrCompute] call, writing
+  /// through this class's own [set] under the same reentrant lock.
   @override
   Future<V> update(
     K key,
@@ -160,14 +169,14 @@ class MonitoredTTLCache<K, V> extends ThreadSafeTTLCacheInterface<K, V>
             if (f) {
               found = true;
               final value = await update(existing as V);
-              _engine.engine.set(key, value, ttl: ttl);
+              await set(key, value, ttl: ttl);
               return value;
             }
             if (ifAbsent == null) {
               throw StateError('Cannot update missing cache key: $key');
             }
             final value = await ifAbsent();
-            _engine.engine.set(key, value, ttl: ttl);
+            await set(key, value, ttl: ttl);
             return value;
           });
         }, found: () => found)
