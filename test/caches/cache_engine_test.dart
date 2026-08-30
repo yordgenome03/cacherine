@@ -372,6 +372,18 @@ void main() {
       );
       expect(called, isFalse);
     });
+
+    test('set() rejects a weigher-computed negative weight (not just an '
+        'explicit one)', () {
+      final cache = Cache<String, int>(
+        store: LRUStore<String, int>(),
+        weigher: (key, value) => value, // caller-controlled, can go negative
+        maxWeight: 100,
+      );
+      // No explicit weight: is passed, so validateSetArgs can't catch this
+      // eagerly — only _write(), once it has a value to weigh, can.
+      expect(() => cache.set('a', -1), throwsArgumentError);
+    });
   });
 
   group('AsyncCache — cache-aside and update helpers', () {
@@ -643,6 +655,41 @@ void main() {
           sweepInterval: const Duration(seconds: 1),
         ),
         throwsArgumentError,
+      );
+    });
+
+    test('non-positive sweepInterval throws ArgumentError even with a '
+        'configured ttl', () {
+      expect(
+        () => MonitoredCache<String, String>(
+          store: LRUStore<String, String>(),
+          ttl: const Duration(seconds: 10),
+          sweepInterval: Duration.zero,
+        ),
+        throwsArgumentError,
+      );
+    });
+
+    test('a valid sweepInterval starts a background sweep that removes expired '
+        'entries and records evictions', () async {
+      var now = DateTime(2024);
+      final cache = MonitoredCache<String, String>(
+        store: LRUStore<String, String>(),
+        ttl: const Duration(seconds: 10),
+        sweepInterval: const Duration(milliseconds: 5),
+        clock: () => now,
+      );
+      addTearDown(cache.dispose);
+
+      await cache.set('key', 'value');
+      now = now.add(const Duration(seconds: 11));
+
+      await Future<void>.delayed(const Duration(milliseconds: 30));
+
+      expect(await cache.getKeys(), isEmpty);
+      expect(
+        cache.metrics.snapshot(const Duration(minutes: 1)).evictionsPerMinute,
+        equals(1),
       );
     });
   });
