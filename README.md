@@ -311,6 +311,8 @@ all inserted entries.
 
 `size`, `isEmpty`, and `isNotEmpty` report the current cache occupancy. TTL caches count only live, non-expired entries. These APIs do not update cache eviction state and monitored caches do not record hit/miss/latency metrics for them.
 
+A nullable key type (`K?`) is not supported for eviction purposes: an entry actually stored under the literal key `null` can never be selected for eviction, since `null` also means "no candidate" internally. Use a non-nullable key type.
+
 ### TTL Expiry
 
 TTL caches expose `purgeExpired()` to remove all expired entries immediately and
