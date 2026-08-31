@@ -65,9 +65,21 @@ class AsyncCache<K, V> extends ThreadSafeCache<K, V> {
   Future<void> set(K key, V value, {int? weight, Duration? ttl}) =>
       lock.synchronized(() => engine.set(key, value, weight: weight, ttl: ttl));
 
+  /// Stores every entry in [entries]. Writes through this cache's own
+  /// (possibly overridden) [set] for each entry — rather than delegating the
+  /// whole batch to [Cache.setAll] on [engine] — so a subclass's [set]
+  /// override sees every write this makes, under a single lock acquisition
+  /// for the whole batch (the lock is reentrant, so each nested [set] call
+  /// re-entering it is safe).
   @override
-  Future<void> setAll(Map<K, V> entries, {int? weight, Duration? ttl}) =>
-      lock.synchronized(() => engine.setAll(entries, weight: weight, ttl: ttl));
+  Future<void> setAll(Map<K, V> entries, {int? weight, Duration? ttl}) {
+    engine.validateSetArgs(weight: weight, ttl: ttl);
+    return lock.synchronized(() async {
+      for (final entry in entries.entries) {
+        await set(entry.key, entry.value, weight: weight, ttl: ttl);
+      }
+    });
+  }
 
   /// The [ThreadSafeCache.getAll] default checks presence and reads each key
   /// with separate [containsKey]/[get] calls, each independently acquiring
@@ -110,19 +122,23 @@ class AsyncCache<K, V> extends ThreadSafeCache<K, V> {
     }
   }
 
-  /// Writes [key]/[value] via [Cache.trySet] and returns [value], or throws
-  /// [StateError] if the write was rejected because its weight exceeds
-  /// [Cache.maxWeight] — [getOrCompute]/[update] must report what was
-  /// actually cached rather than silently returning a value that never was.
-  /// Exposed (not private) so [MonitoredCache]'s overrides of the same
+  /// Checks [Cache.wouldRejectWrite] and then writes [key]/[value] through
+  /// this cache's own (possibly overridden) [set], returning [value] — or
+  /// throws [StateError] if the write would be rejected because its weight
+  /// exceeds [Cache.maxWeight]. Delegating to [set] (rather than writing
+  /// through [engine] directly) means a subclass's [set] override still runs
+  /// for [getOrCompute]/[update], which — unlike [set] — must report what
+  /// was actually cached rather than silently returning a value that never
+  /// was. Exposed (not private) so [MonitoredCache]'s overrides of the same
   /// methods can reuse it.
-  V storeOrThrow(K key, V value, {int? weight, Duration? ttl}) {
-    if (!engine.trySet(key, value, weight: weight, ttl: ttl)) {
+  Future<V> storeOrThrow(K key, V value, {int? weight, Duration? ttl}) async {
+    if (engine.wouldRejectWrite(key, value, weight: weight)) {
       throw StateError(
         'Cannot store value for cache key: $key — its weight exceeds '
         'maxWeight and can never fit.',
       );
     }
+    await set(key, value, weight: weight, ttl: ttl);
     return value;
   }
 
