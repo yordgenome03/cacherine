@@ -127,22 +127,14 @@ class MonitoredTTLCache<K, V> extends ThreadSafeTTLCacheInterface<K, V>
     K key,
     FutureOr<V> Function() valueFactory, {
     Duration? ttl,
-  }) async {
+  }) {
     _engine.engine.validateSetArgs(ttl: ttl);
-    var found = false;
-    return await monitoredGet(key, () async {
-          return await _engine.lock.synchronized(() async {
-            final (f, existing) = _engine.engine.presentValue(key);
-            if (f) {
-              found = true;
-              return existing;
-            }
-            final value = await valueFactory();
-            await set(key, value, ttl: ttl);
-            return value;
-          });
-        }, found: () => found)
-        as V;
+    return monitoredGetOrCompute(
+      key,
+      _engine,
+      valueFactory,
+      (k, v) => set(k, v, ttl: ttl),
+    );
   }
 
   /// Updates the value for [key] and returns the new value.
@@ -160,27 +152,15 @@ class MonitoredTTLCache<K, V> extends ThreadSafeTTLCacheInterface<K, V>
     FutureOr<V> Function(V value) update, {
     FutureOr<V> Function()? ifAbsent,
     Duration? ttl,
-  }) async {
+  }) {
     _engine.engine.validateSetArgs(ttl: ttl);
-    var found = false;
-    return await monitoredGet(key, () async {
-          return await _engine.lock.synchronized(() async {
-            final (f, existing) = _engine.engine.presentValue(key);
-            if (f) {
-              found = true;
-              final value = await update(existing as V);
-              await set(key, value, ttl: ttl);
-              return value;
-            }
-            if (ifAbsent == null) {
-              throw StateError('Cannot update missing cache key: $key');
-            }
-            final value = await ifAbsent();
-            await set(key, value, ttl: ttl);
-            return value;
-          });
-        }, found: () => found)
-        as V;
+    return monitoredUpdate(
+      key,
+      _engine,
+      update,
+      writeThrough: (k, v) => set(k, v, ttl: ttl),
+      ifAbsent: ifAbsent,
+    );
   }
 
   /// Retrieves values for all currently present [keys].
@@ -193,22 +173,22 @@ class MonitoredTTLCache<K, V> extends ThreadSafeTTLCacheInterface<K, V>
   /// equivalent series of [get] calls (missing keys are omitted without
   /// recording a miss, per `doc/monitored_cache.md`).
   @override
-  Future<Map<K, V>> getAll(Iterable<K> keys) async {
-    final values = <K, V>{};
-    for (final key in keys) {
-      final stopwatch = Stopwatch()..start();
-      final (found, value) = await _engine.lock.synchronized(
-        () => _engine.engine.presentValue(key),
-      );
-      stopwatch.stop();
-      if (found) {
-        metrics.recordHit(stopwatch.elapsed);
-        if (value != null || null is V) {
-          values[key] = value as V;
+  Future<Map<K, V>> getAll(Iterable<K> keys) {
+    return _engine.lock.synchronized(() {
+      final values = <K, V>{};
+      for (final key in keys) {
+        final stopwatch = Stopwatch()..start();
+        final (found, value) = _engine.engine.presentValue(key);
+        stopwatch.stop();
+        if (found) {
+          metrics.recordHit(stopwatch.elapsed);
+          if (value != null || null is V) {
+            values[key] = value as V;
+          }
         }
       }
-    }
-    return values;
+      return values;
+    });
   }
 
   /// Removes all entries that match [test].
@@ -220,16 +200,16 @@ class MonitoredTTLCache<K, V> extends ThreadSafeTTLCacheInterface<K, V>
   /// the unmonitored engine directly) so it still records the manual-eviction
   /// metric [remove] documents.
   @override
-  Future<void> removeWhere(FutureOr<bool> Function(K key, V value) test) async {
-    for (final key in await getKeys()) {
-      final (found, value) = await _engine.lock.synchronized(
-        () => _engine.engine.presentPeek(key),
-      );
-      if (!found) continue;
-      if (await test(key, value as V)) {
-        await remove(key);
+  Future<void> removeWhere(FutureOr<bool> Function(K key, V value) test) {
+    return _engine.lock.synchronized(() async {
+      for (final key in _engine.engine.getKeys().toList()) {
+        final (found, value) = _engine.engine.presentPeek(key);
+        if (!found) continue;
+        if (await test(key, value as V)) {
+          await remove(key);
+        }
       }
-    }
+    });
   }
 
   @override

@@ -340,7 +340,8 @@ void main() {
       expect(() => cache.update('missing', (v) => v), throwsStateError);
     });
 
-    test('getAll() reads the clock once per key on a hit', () {
+    test('getAll() reads the clock once for the whole batch, not once per '
+        'key', () {
       final counter = _ClockCounter();
       final cache = SimpleTTLCache<String, String>(
         ttl: const Duration(seconds: 100),
@@ -350,10 +351,11 @@ void main() {
       cache.set('b', '2');
       final before = counter.calls;
       expect(cache.getAll(['a', 'b']), equals({'a': '1', 'b': '2'}));
-      expect(counter.calls - before, equals(2));
+      expect(counter.calls - before, equals(1));
     });
 
-    test('removeWhere() reads the clock once per key', () {
+    test('removeWhere() reads the clock once for the whole batch (plus once '
+        'for getKeys())', () {
       final counter = _ClockCounter();
       final cache = SimpleTTLCache<String, String>(
         ttl: const Duration(seconds: 100),
@@ -363,8 +365,9 @@ void main() {
       cache.set('b', '2');
       final before = counter.calls;
       cache.removeWhere((key, value) => false);
-      // 1 read for getKeys() + 1 per key for presentPeek().
-      expect(counter.calls - before, equals(3));
+      // 1 read for getKeys() + 1 shared read for the whole presentPeek()
+      // batch — not 1 per key.
+      expect(counter.calls - before, equals(2));
     });
   });
 }

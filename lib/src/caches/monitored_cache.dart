@@ -157,22 +157,22 @@ class MonitoredCache<K, V> extends AsyncCache<K, V>
   /// metrics as an equivalent series of [get] calls (missing keys are
   /// omitted without recording a miss, per `doc/monitored_cache.md`).
   @override
-  Future<Map<K, V>> getAll(Iterable<K> keys) async {
-    final values = <K, V>{};
-    for (final key in keys) {
-      final stopwatch = Stopwatch()..start();
-      final (found, value) = await lock.synchronized(
-        () => engine.presentValue(key),
-      );
-      stopwatch.stop();
-      if (found) {
-        metrics.recordHit(stopwatch.elapsed);
-        if (value != null || null is V) {
-          values[key] = value as V;
+  Future<Map<K, V>> getAll(Iterable<K> keys) {
+    return lock.synchronized(() {
+      final values = <K, V>{};
+      for (final key in keys) {
+        final stopwatch = Stopwatch()..start();
+        final (found, value) = engine.presentValue(key);
+        stopwatch.stop();
+        if (found) {
+          metrics.recordHit(stopwatch.elapsed);
+          if (value != null || null is V) {
+            values[key] = value as V;
+          }
         }
       }
-    }
-    return values;
+      return values;
+    });
   }
 
   @override

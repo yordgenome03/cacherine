@@ -2,6 +2,7 @@ import 'dart:async';
 
 import '../interfaces/thread_safe_cache.dart';
 import '../stores/ephemeral_fifo_store.dart';
+import '_composed_engine_ops.dart';
 import 'async_cache.dart';
 import 'cache.dart';
 
@@ -90,37 +91,21 @@ class EphemeralFIFOCache<K, V> extends ThreadSafeCache<K, V> {
       _engine.removeWhere(test);
 
   @override
-  Future<V> getOrCompute(K key, FutureOr<V> Function() valueFactory) {
-    return _engine.lock.synchronized(() async {
-      final (found, existing) = _engine.engine.presentValue(key);
-      if (found) return existing as V;
-      final value = await valueFactory();
-      await set(key, value);
-      return value;
-    });
-  }
+  Future<V> getOrCompute(K key, FutureOr<V> Function() valueFactory) =>
+      composedGetOrCompute(_engine, key, valueFactory, set);
 
   @override
   Future<V> update(
     K key,
     FutureOr<V> Function(V value) update, {
     FutureOr<V> Function()? ifAbsent,
-  }) {
-    return _engine.lock.synchronized(() async {
-      final (found, existing) = _engine.engine.presentValue(key);
-      if (found) {
-        final value = await update(existing as V);
-        await set(key, value);
-        return value;
-      }
-      if (ifAbsent == null) {
-        throw StateError('Cannot update missing cache key: $key');
-      }
-      final value = await ifAbsent();
-      await set(key, value);
-      return value;
-    });
-  }
+  }) => composedUpdate(
+    _engine,
+    key,
+    update,
+    ifAbsent: ifAbsent,
+    writeThrough: set,
+  );
 
   @override
   Future<void> remove(K key) => _engine.remove(key);

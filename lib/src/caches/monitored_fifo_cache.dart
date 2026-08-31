@@ -102,22 +102,8 @@ class MonitoredFIFOCache<K, V> extends ThreadSafeCache<K, V>
   /// [set] instead of the engine directly — safe from deadlock because the
   /// lock is reentrant — so a subclass override of [set] still runs.
   @override
-  Future<V> getOrCompute(K key, FutureOr<V> Function() valueFactory) async {
-    var found = false;
-    return await monitoredGet(key, () async {
-          return await _engine.lock.synchronized(() async {
-            final (f, existing) = _engine.engine.presentValue(key);
-            if (f) {
-              found = true;
-              return existing;
-            }
-            final value = await valueFactory();
-            await set(key, value);
-            return value;
-          });
-        }, found: () => found)
-        as V;
-  }
+  Future<V> getOrCompute(K key, FutureOr<V> Function() valueFactory) =>
+      monitoredGetOrCompute(key, _engine, valueFactory, set);
 
   /// Updates the value for [key] and returns the new value.
   ///
@@ -130,27 +116,13 @@ class MonitoredFIFOCache<K, V> extends ThreadSafeCache<K, V>
     K key,
     FutureOr<V> Function(V value) update, {
     FutureOr<V> Function()? ifAbsent,
-  }) async {
-    var found = false;
-    return await monitoredGet(key, () async {
-          return await _engine.lock.synchronized(() async {
-            final (f, existing) = _engine.engine.presentValue(key);
-            if (f) {
-              found = true;
-              final value = await update(existing as V);
-              await set(key, value);
-              return value;
-            }
-            if (ifAbsent == null) {
-              throw StateError('Cannot update missing cache key: $key');
-            }
-            final value = await ifAbsent();
-            await set(key, value);
-            return value;
-          });
-        }, found: () => found)
-        as V;
-  }
+  }) => monitoredUpdate(
+    key,
+    _engine,
+    update,
+    writeThrough: set,
+    ifAbsent: ifAbsent,
+  );
 
   @override
   Future<void> remove(K key) async {

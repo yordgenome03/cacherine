@@ -923,7 +923,8 @@ void main() {
     // each reading the clock (and, for AsyncCache, re-acquiring the lock)
     // independently. Cache/AsyncCache now override both to read each key via
     // a single presentValue()/presentPeek() snapshot.
-    test('Cache.getAll() reads the clock once per key on a hit', () {
+    test('Cache.getAll() reads the clock once for the whole batch, not once '
+        'per key', () {
       final counter = _ClockCounter();
       final cache = Cache<String, String>(
         store: LRUStore<String, String>(),
@@ -934,13 +935,13 @@ void main() {
       cache.set('b', '2');
       final before = counter.calls;
       expect(cache.getAll(['a', 'b']), equals({'a': '1', 'b': '2'}));
-      expect(counter.calls - before, equals(2));
+      expect(counter.calls - before, equals(1));
     });
 
-    test('Cache.removeWhere() reads the clock once per key and does not bump '
-        'LRU recency merely by testing an entry (it must use peek, not '
-        'access, or the predicate visiting an entry would perturb eviction '
-        'order as a side effect)', () {
+    test('Cache.removeWhere() reads the clock once for the whole batch (plus '
+        'once for getKeys()) and does not bump LRU recency merely by testing '
+        'an entry (it must use peek, not access, or the predicate visiting '
+        'an entry would perturb eviction order as a side effect)', () {
       final counter = _ClockCounter();
       final cache = Cache<String, String>(
         store: LRUStore<String, String>(),
@@ -952,9 +953,9 @@ void main() {
       cache.set('b', '2');
       final before = counter.calls;
       cache.removeWhere((key, value) => false); // never matches
-      // 1 read for getKeys() (to enumerate live keys) + 1 per key for
-      // presentPeek() — never 2 reads per key (containsKey()+peek()).
-      expect(counter.calls - before, equals(3));
+      // 1 read for getKeys() (to enumerate live keys) + 1 shared read for
+      // the whole presentPeek() batch — not 1 per key.
+      expect(counter.calls - before, equals(2));
 
       // If removeWhere had bumped 'a' via access(), 'a' would now be MRU
       // and 'b' would be evicted first; peek-based visiting must leave

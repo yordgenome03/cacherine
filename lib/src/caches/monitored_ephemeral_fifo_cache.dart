@@ -113,22 +113,22 @@ class MonitoredEphemeralFIFOCache<K, V> extends ThreadSafeCache<K, V>
   /// an equivalent series of [get] calls (missing keys are omitted without
   /// recording a miss, per `doc/monitored_cache.md`).
   @override
-  Future<Map<K, V>> getAll(Iterable<K> keys) async {
-    final values = <K, V>{};
-    for (final key in keys) {
-      final stopwatch = Stopwatch()..start();
-      final (found, value) = await _engine.lock.synchronized(
-        () => _engine.engine.presentValue(key),
-      );
-      stopwatch.stop();
-      if (found) {
-        metrics.recordHit(stopwatch.elapsed);
-        if (value != null || null is V) {
-          values[key] = value as V;
+  Future<Map<K, V>> getAll(Iterable<K> keys) {
+    return _engine.lock.synchronized(() {
+      final values = <K, V>{};
+      for (final key in keys) {
+        final stopwatch = Stopwatch()..start();
+        final (found, value) = _engine.engine.presentValue(key);
+        stopwatch.stop();
+        if (found) {
+          metrics.recordHit(stopwatch.elapsed);
+          if (value != null || null is V) {
+            values[key] = value as V;
+          }
         }
       }
-    }
-    return values;
+      return values;
+    });
   }
 
   /// Removes all entries that match [test]. Reads each key via a single
@@ -138,16 +138,16 @@ class MonitoredEphemeralFIFOCache<K, V> extends ThreadSafeCache<K, V>
   /// metric [remove] documents. Peek-based, so testing an entry for removal
   /// never consumes it as a side effect.
   @override
-  Future<void> removeWhere(FutureOr<bool> Function(K key, V value) test) async {
-    for (final key in await getKeys()) {
-      final (found, value) = await _engine.lock.synchronized(
-        () => _engine.engine.presentPeek(key),
-      );
-      if (!found) continue;
-      if (await test(key, value as V)) {
-        await remove(key);
+  Future<void> removeWhere(FutureOr<bool> Function(K key, V value) test) {
+    return _engine.lock.synchronized(() async {
+      for (final key in _engine.engine.getKeys().toList()) {
+        final (found, value) = _engine.engine.presentPeek(key);
+        if (!found) continue;
+        if (await test(key, value as V)) {
+          await remove(key);
+        }
       }
-    }
+    });
   }
 
   /// Returns the existing value for [key], or computes, stores, and returns
@@ -159,22 +159,8 @@ class MonitoredEphemeralFIFOCache<K, V> extends ThreadSafeCache<K, V>
   /// [set] instead of the engine directly — safe from deadlock because the
   /// lock is reentrant — so a subclass override of [set] still runs.
   @override
-  Future<V> getOrCompute(K key, FutureOr<V> Function() valueFactory) async {
-    var found = false;
-    return await monitoredGet(key, () async {
-          return await _engine.lock.synchronized(() async {
-            final (f, existing) = _engine.engine.presentValue(key);
-            if (f) {
-              found = true;
-              return existing;
-            }
-            final value = await valueFactory();
-            await set(key, value);
-            return value;
-          });
-        }, found: () => found)
-        as V;
-  }
+  Future<V> getOrCompute(K key, FutureOr<V> Function() valueFactory) =>
+      monitoredGetOrCompute(key, _engine, valueFactory, set);
 
   /// Updates the value for [key] and returns the new value.
   ///
@@ -187,27 +173,13 @@ class MonitoredEphemeralFIFOCache<K, V> extends ThreadSafeCache<K, V>
     K key,
     FutureOr<V> Function(V value) update, {
     FutureOr<V> Function()? ifAbsent,
-  }) async {
-    var found = false;
-    return await monitoredGet(key, () async {
-          return await _engine.lock.synchronized(() async {
-            final (f, existing) = _engine.engine.presentValue(key);
-            if (f) {
-              found = true;
-              final value = await update(existing as V);
-              await set(key, value);
-              return value;
-            }
-            if (ifAbsent == null) {
-              throw StateError('Cannot update missing cache key: $key');
-            }
-            final value = await ifAbsent();
-            await set(key, value);
-            return value;
-          });
-        }, found: () => found)
-        as V;
-  }
+  }) => monitoredUpdate(
+    key,
+    _engine,
+    update,
+    writeThrough: set,
+    ifAbsent: ifAbsent,
+  );
 
   @override
   Future<void> remove(K key) async {

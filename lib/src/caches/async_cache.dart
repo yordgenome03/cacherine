@@ -86,19 +86,20 @@ class AsyncCache<K, V> extends ThreadSafeCache<K, V> {
   /// the lock; on a TTL-enabled instance each also reads the clock
   /// independently, so an entry can expire (or another call can mutate the
   /// cache) between the two. This override reads each key with a single
-  /// [Cache.presentValue] snapshot taken under one lock acquisition.
+  /// [Cache.presentValue] snapshot, under a single lock acquisition for the
+  /// whole batch (matching [setAll]) rather than one per key.
   @override
-  Future<Map<K, V>> getAll(Iterable<K> keys) async {
-    final values = <K, V>{};
-    for (final key in keys) {
-      final (found, value) = await lock.synchronized(
-        () => engine.presentValue(key),
-      );
-      if (found && (value != null || null is V)) {
-        values[key] = value as V;
+  Future<Map<K, V>> getAll(Iterable<K> keys) {
+    return lock.synchronized(() {
+      final values = <K, V>{};
+      for (final key in keys) {
+        final (found, value) = engine.presentValue(key);
+        if (found && (value != null || null is V)) {
+          values[key] = value as V;
+        }
       }
-    }
-    return values;
+      return values;
+    });
   }
 
   /// The [ThreadSafeCache.removeWhere] default checks presence and peeks each
@@ -106,20 +107,22 @@ class AsyncCache<K, V> extends ThreadSafeCache<K, V> {
   /// acquiring the lock; on a TTL-enabled instance each also reads the clock
   /// independently, so an entry can expire (or another call can mutate the
   /// cache) between the two. This override reads each key with a single
-  /// [Cache.presentPeek] snapshot taken under one lock acquisition (peek-based,
-  /// so testing an entry for removal never perturbs its eviction-policy
-  /// state).
+  /// [Cache.presentPeek] snapshot (peek-based, so testing an entry for
+  /// removal never perturbs its eviction-policy state), under a single lock
+  /// acquisition for the whole batch (matching [setAll]) rather than one per
+  /// key — each matched [remove] call re-enters the same lock safely, since
+  /// it's reentrant.
   @override
-  Future<void> removeWhere(FutureOr<bool> Function(K key, V value) test) async {
-    for (final key in await getKeys()) {
-      final (found, value) = await lock.synchronized(
-        () => engine.presentPeek(key),
-      );
-      if (!found) continue;
-      if (await test(key, value as V)) {
-        await remove(key);
+  Future<void> removeWhere(FutureOr<bool> Function(K key, V value) test) {
+    return lock.synchronized(() async {
+      for (final key in engine.getKeys().toList()) {
+        final (found, value) = engine.presentPeek(key);
+        if (!found) continue;
+        if (await test(key, value as V)) {
+          await remove(key);
+        }
       }
-    }
+    });
   }
 
   /// Checks [Cache.checkWeightRejection] and then writes [key]/[value]

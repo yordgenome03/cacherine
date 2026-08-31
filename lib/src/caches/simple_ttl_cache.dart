@@ -1,5 +1,6 @@
 import '../interfaces/simple_ttl_cache.dart';
 import '../stores/ttl_fifo_store.dart';
+import '_composed_engine_ops.dart';
 import 'cache.dart';
 
 /// **Non-thread-safe TTL (Time-To-Live) Cache**
@@ -97,11 +98,12 @@ class SimpleTTLCache<K, V> extends SimpleTTLCacheInterface<K, V> {
   @override
   V getOrSet(K key, V Function() valueFactory, {Duration? ttl}) {
     _engine.validateSetArgs(ttl: ttl);
-    final (found, existing) = _engine.presentValue(key);
-    if (found) return existing as V;
-    final value = valueFactory();
-    set(key, value, ttl: ttl);
-    return value;
+    return syncComposedGetOrSet(
+      _engine,
+      key,
+      valueFactory,
+      (k, v) => set(k, v, ttl: ttl),
+    );
   }
 
   /// Updates the value for [key] and returns the new value.
@@ -121,18 +123,13 @@ class SimpleTTLCache<K, V> extends SimpleTTLCacheInterface<K, V> {
     Duration? ttl,
   }) {
     _engine.validateSetArgs(ttl: ttl);
-    final (found, existing) = _engine.presentValue(key);
-    if (found) {
-      final value = update(existing as V);
-      set(key, value, ttl: ttl);
-      return value;
-    }
-    if (ifAbsent == null) {
-      throw StateError('Cannot update missing cache key: $key');
-    }
-    final value = ifAbsent();
-    set(key, value, ttl: ttl);
-    return value;
+    return syncComposedUpdate(
+      _engine,
+      key,
+      update,
+      writeThrough: (k, v) => set(k, v, ttl: ttl),
+      ifAbsent: ifAbsent,
+    );
   }
 
   /// Retrieves values for all currently present [keys].

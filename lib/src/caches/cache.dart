@@ -136,8 +136,11 @@ class Cache<K, V> extends SimpleCache<K, V> {
   /// expiry. Exposed (not private) so [AsyncCache]/[MonitoredCache]/
   /// [MonitoredTTLCache] can build the same atomicity into their own
   /// `getOrCompute`/`update` overloads.
-  (bool, V?) presentValue(K key) {
-    if (_ttlEnabled) _dropIfExpired(key, clock());
+  (bool, V?) presentValue(K key) =>
+      _presentValueAt(key, _ttlEnabled ? clock() : null);
+
+  (bool, V?) _presentValueAt(K key, DateTime? now) {
+    if (now != null) _dropIfExpired(key, now);
     if (!_store.containsKey(key)) return (false, null);
     return (true, _accessAndReconcile(key));
   }
@@ -150,8 +153,11 @@ class Cache<K, V> extends SimpleCache<K, V> {
   /// perturb policy state — [removeWhere] must not bump LRU recency or LFU
   /// frequency merely by testing an entry for removal, matching [peek]'s
   /// no-side-effect contract.
-  (bool, V?) presentPeek(K key) {
-    if (_ttlEnabled) _dropIfExpired(key, clock());
+  (bool, V?) presentPeek(K key) =>
+      _presentPeekAt(key, _ttlEnabled ? clock() : null);
+
+  (bool, V?) _presentPeekAt(K key, DateTime? now) {
+    if (now != null) _dropIfExpired(key, now);
     if (!_store.containsKey(key)) return (false, null);
     return (true, _store.peek(key));
   }
@@ -267,6 +273,21 @@ class Cache<K, V> extends SimpleCache<K, V> {
   /// doomed write *before* delegating to this cache's own (possibly
   /// overridden) [set], which — like [Cache]'s own [set] — has no way to
   /// report back whether it actually stored anything.
+  ///
+  /// **If you are writing a new compound write operation against this
+  /// method, get the result's `weight` back to [set] exactly as [trySet]
+  /// does:**
+  /// ```dart
+  /// final result = checkWeightRejection(key, value, weight);
+  /// if (result.rejected) { /* ... */ }
+  /// set(key, value, weight: result.weight ?? weight, ttl: ttl); // correct
+  /// set(key, value, weight: weight, ttl: ttl); // WRONG — recomputes weight
+  /// ```
+  /// The second form calls [weigher] a second time for the same write,
+  /// reopening the exact non-determinism gap this method exists to close.
+  /// Prefer calling [trySet] itself (which already does this correctly)
+  /// over calling this method directly, unless you specifically need the
+  /// resolved `weight` for something [trySet] doesn't expose.
   ({bool rejected, int? weight}) checkWeightRejection(
     K key,
     V value,
@@ -294,20 +315,20 @@ class Cache<K, V> extends SimpleCache<K, V> {
     return true;
   }
 
-  /// Writes [key]/[value] through this cache's own (possibly overridden)
-  /// [set] and returns [value], or throws [StateError] if
-  /// [checkWeightRejection] reports the write would be rejected — used by
-  /// [getOrSet]/[update], which (unlike [set]) must report what was actually
-  /// stored rather than silently returning a value that was never cached.
+  /// Writes [key]/[value] via [trySet] and returns [value], or throws
+  /// [StateError] if the write was rejected — used by [getOrSet]/[update],
+  /// which (unlike [set]) must report what was actually stored rather than
+  /// silently returning a value that was never cached. Delegating to
+  /// [trySet] (rather than calling [checkWeightRejection] a second time)
+  /// keeps this cache's "compute the weight once, thread it through to
+  /// [set]" invariant honored in exactly one place inside this class.
   V _storeOrThrow(K key, V value, int? weight, Duration? ttl) {
-    final result = checkWeightRejection(key, value, weight);
-    if (result.rejected) {
+    if (!trySet(key, value, weight: weight, ttl: ttl)) {
       throw StateError(
         'Cannot store value for cache key: $key — its weight exceeds '
         'maxWeight and can never fit.',
       );
     }
-    set(key, value, weight: result.weight ?? weight, ttl: ttl);
     return value;
   }
 
@@ -368,12 +389,16 @@ class Cache<K, V> extends SimpleCache<K, V> {
   /// The [SimpleCache.getAll] default checks presence and reads each key with
   /// separate [containsKey]/[get] calls; on a TTL-enabled instance each reads
   /// the clock independently, so an entry can expire between the two calls.
-  /// This override reads each key with a single [presentValue] snapshot.
+  /// This override reads each key with a single [presentValue]-equivalent
+  /// snapshot, sharing one clock read across the whole batch rather than
+  /// reading it once per key — this is still one consistent point-in-time
+  /// view, which is what this method's own contract calls for.
   @override
   Map<K, V> getAll(Iterable<K> keys) {
+    final now = _ttlEnabled ? clock() : null;
     final values = <K, V>{};
     for (final key in keys) {
-      final (found, value) = presentValue(key);
+      final (found, value) = _presentValueAt(key, now);
       if (found && (value != null || null is V)) {
         values[key] = value as V;
       }
@@ -384,14 +409,16 @@ class Cache<K, V> extends SimpleCache<K, V> {
   /// The [SimpleCache.removeWhere] default checks presence and peeks each key
   /// with separate [containsKey]/[peek] calls; on a TTL-enabled instance each
   /// reads the clock independently, so an entry can expire between the two
-  /// calls. This override reads each key with a single [presentPeek]
-  /// snapshot (peek-based, so testing an entry for removal never perturbs its
-  /// eviction-policy state).
+  /// calls. This override reads each key with a single [presentPeek]-
+  /// equivalent snapshot (peek-based, so testing an entry for removal never
+  /// perturbs its eviction-policy state), sharing one clock read across the
+  /// whole batch rather than reading it once per key.
   @override
   void removeWhere(bool Function(K key, V value) test) {
+    final now = _ttlEnabled ? clock() : null;
     final snapshot = getKeys();
     for (final key in (snapshot is List<K> ? snapshot : snapshot.toList())) {
-      final (found, value) = presentPeek(key);
+      final (found, value) = _presentPeekAt(key, now);
       if (!found) continue;
       if (test(key, value as V)) {
         remove(key);
