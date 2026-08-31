@@ -27,14 +27,21 @@ import 'cache.dart';
 /// `weight`/`ttl` parameters) rather than inheriting [AsyncCache]'s wider
 /// ones.
 ///
-/// [getAll]/[setAll]/[removeWhere] are left to [ThreadSafeCache]'s default
-/// implementations, which call this class's own (overridable) [get]/[set]/
-/// [containsKey]/[peek]/[remove] — so a subclass overriding one of those
-/// still has its override invoked. [getOrCompute]/[update] are overridden to
-/// hold [AsyncCache.lock] across the whole check-compute-store sequence
-/// (atomicity: no duplicate computation for a racing missing key, matching
-/// [AsyncCache.getOrCompute]) while still writing through this class's own
-/// [set] — safe from deadlock because that lock is reentrant.
+/// [setAll] is left to [ThreadSafeCache]'s default implementation, which
+/// calls this class's own (overridable) [set] — so a subclass override still
+/// sees every write. [getAll]/[removeWhere] are NOT left to their
+/// [ThreadSafeCache] defaults, unlike every other legacy facade: those
+/// defaults check presence and then separately read/peek, each independently
+/// acquiring the lock — but [get] here is destructive (an entry is removed on
+/// retrieval), so a second caller's concurrent [get] can land in the gap and
+/// consume the entry first, silently dropping it from [getAll]'s result (or,
+/// for [removeWhere], throwing when [peek] then returns `null` for a
+/// non-nullable `V`). They delegate straight to the underlying [AsyncCache]'s
+/// already-atomic implementations instead. [getOrCompute]/[update] are
+/// overridden to hold [AsyncCache.lock] across the whole check-compute-store
+/// sequence (atomicity: no duplicate computation for a racing missing key,
+/// matching [AsyncCache.getOrCompute]) while still writing through this
+/// class's own [set] — safe from deadlock because that lock is reentrant.
 class EphemeralFIFOCache<K, V> extends ThreadSafeCache<K, V> {
   final AsyncCache<K, V> _engine;
 
@@ -66,6 +73,21 @@ class EphemeralFIFOCache<K, V> extends ThreadSafeCache<K, V> {
 
   @override
   Future<void> set(K key, V value) => _engine.set(key, value);
+
+  /// Retrieves values for all currently present [keys], consuming each one
+  /// (per [get]'s "removed on retrieval" behavior) via a single atomic
+  /// snapshot per key — see the class doc comment for why this can't be left
+  /// to [ThreadSafeCache]'s default.
+  @override
+  Future<Map<K, V>> getAll(Iterable<K> keys) => _engine.getAll(keys);
+
+  /// Removes all entries that match [test]. Reads each key via a single
+  /// atomic peek-based snapshot — see the class doc comment for why this
+  /// can't be left to [ThreadSafeCache]'s default. Peek-based, so testing an
+  /// entry for removal never consumes it as a side effect.
+  @override
+  Future<void> removeWhere(FutureOr<bool> Function(K key, V value) test) =>
+      _engine.removeWhere(test);
 
   @override
   Future<V> getOrCompute(K key, FutureOr<V> Function() valueFactory) {

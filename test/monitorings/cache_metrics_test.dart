@@ -59,6 +59,25 @@ void main() {
       ); // 100th percentile = max value
     });
 
+    // Regression coverage: the even-length median branch used to truncate
+    // each of the two middle samples to whole milliseconds via
+    // `.inMilliseconds` before averaging, discarding all sub-millisecond
+    // precision — realistic for an in-memory cache, whose actual latencies
+    // are far below 1ms. `averageLatency` never had this truncation, so the
+    // two could (and did) disagree for the same data.
+    test('getLatencyPercentile(50) preserves sub-millisecond precision for '
+        'an even sample count', () {
+      final metrics = CacheMetrics();
+      metrics.recordHit(const Duration(microseconds: 400));
+      metrics.recordHit(const Duration(microseconds: 800));
+
+      expect(
+        metrics.getLatencyPercentile(50),
+        equals(const Duration(microseconds: 600)),
+      );
+      expect(metrics.averageLatency, equals(const Duration(microseconds: 600)));
+    });
+
     test('averageLatency includes miss samples', () {
       final metrics = CacheMetrics();
 

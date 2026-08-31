@@ -1,5 +1,28 @@
+import 'dart:async';
+
 import 'package:cacherine/cacherine.dart';
 import 'package:test/test.dart';
+
+// See ephemeral_fifo_cache_test.dart's _RacyEphemeralFIFOCache for why this
+// deterministically reproduces the race: get() is destructive for this
+// store, so hooking containsKey() to trigger a concurrent get() as a side
+// effect simulates a second caller consuming the entry in the gap a
+// check-then-read default implementation would leave exposed.
+class _RacyMonitoredEphemeralFIFOCache<K, V>
+    extends MonitoredEphemeralFIFOCache<K, V> {
+  _RacyMonitoredEphemeralFIFOCache({required super.maxSize, super.alertConfig});
+
+  K? raceOnContainsKeyFor;
+
+  @override
+  Future<bool> containsKey(K key) async {
+    final result = await super.containsKey(key);
+    if (key == raceOnContainsKeyFor) {
+      await get(key);
+    }
+    return result;
+  }
+}
 
 void main() {
   group('MonitoredEphemeralFIFOCache Tests', () {
@@ -314,6 +337,43 @@ void main() {
       );
       await cache.set('a', '1');
       expect(cache.toString(), contains('a'));
+    });
+  });
+
+  group('MonitoredEphemeralFIFOCache - getAll()/removeWhere() destructive-read '
+      'race', () {
+    final config = CacheAlertConfig(notifyCallback: (_) {});
+
+    test('getAll() is not exposed to a concurrent get() landing between a '
+        'presence check and the read', () async {
+      final cache = _RacyMonitoredEphemeralFIFOCache<String, int>(
+        maxSize: 10,
+        alertConfig: config,
+      )..raceOnContainsKeyFor = 'x';
+      await cache.set('x', 1);
+      await cache.set('y', 2);
+
+      final result = await cache.getAll(['x', 'y']);
+
+      expect(result, equals({'x': 1, 'y': 2}));
+      expect(await cache.get('x'), isNull);
+      expect(await cache.get('y'), isNull);
+    });
+
+    test('removeWhere() does not throw when a key is consumed by a '
+        'concurrent get() between the presence check and the peek', () async {
+      final cache = _RacyMonitoredEphemeralFIFOCache<String, int>(
+        maxSize: 10,
+        alertConfig: config,
+      )..raceOnContainsKeyFor = 'x';
+      await cache.set('x', 1);
+      await cache.set('y', 2);
+
+      await expectLater(
+        cache.removeWhere((key, value) async => false),
+        completes,
+      );
+      expect(await cache.get('y'), equals(2));
     });
   });
 }

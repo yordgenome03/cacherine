@@ -217,7 +217,7 @@ class CacheMetrics {
       final mid1 = sorted[sorted.length ~/ 2 - 1];
       final mid2 = sorted[sorted.length ~/ 2];
       return Duration(
-        milliseconds: (mid1.inMilliseconds + mid2.inMilliseconds) ~/ 2,
+        microseconds: (mid1.inMicroseconds + mid2.inMicroseconds) ~/ 2,
       );
     }
 

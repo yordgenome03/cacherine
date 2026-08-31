@@ -1,5 +1,30 @@
+import 'dart:async';
+
 import 'package:test/test.dart';
 import 'package:cacherine/src/caches/ephemeral_fifo_cache.dart';
+
+// Deterministically reproduces a race that only affects this store: get()
+// is destructive here (an entry is removed on read), so if getAll()/
+// removeWhere() check presence and then separately read/peek — as
+// ThreadSafeCache's default implementations do, each call independently
+// acquiring the lock — a second caller's concurrent get() can land in the
+// gap and consume the entry first. Overriding containsKey() to trigger that
+// concurrent get() as a side effect reproduces the exact interleaving
+// without depending on real scheduling luck.
+class _RacyEphemeralFIFOCache<K, V> extends EphemeralFIFOCache<K, V> {
+  _RacyEphemeralFIFOCache(super.maxSize);
+
+  K? raceOnContainsKeyFor;
+
+  @override
+  Future<bool> containsKey(K key) async {
+    final result = await super.containsKey(key);
+    if (key == raceOnContainsKeyFor) {
+      await get(key); // simulates a concurrent caller's destructive get()
+    }
+    return result;
+  }
+}
 
 void main() {
   group('EphemeralFIFOCache - Basic Functionality', () {
@@ -273,4 +298,42 @@ void main() {
       expect(cache.toString(), contains('a'));
     });
   });
+
+  group(
+    'EphemeralFIFOCache - getAll()/removeWhere() destructive-read race',
+    () {
+      test('getAll() is not exposed to a concurrent get() landing between a '
+          'presence check and the read — the read must be atomic, with no '
+          'separate presence-check step for a race to land in', () async {
+        final cache = _RacyEphemeralFIFOCache<String, int>(10)
+          ..raceOnContainsKeyFor = 'x';
+        await cache.set('x', 1);
+        await cache.set('y', 2);
+
+        final result = await cache.getAll(['x', 'y']);
+
+        // If getAll() is implemented as an atomic per-key read (no exposed
+        // containsKey() step), this subclass's containsKey() override never
+        // fires during getAll(), so nothing races 'x' away — both keys come
+        // back, each consumed by getAll()'s own read.
+        expect(result, equals({'x': 1, 'y': 2}));
+        expect(await cache.get('x'), isNull); // consumed by getAll() itself
+        expect(await cache.get('y'), isNull);
+      });
+
+      test('removeWhere() does not throw when a key is consumed by a '
+          'concurrent get() between the presence check and the peek', () async {
+        final cache = _RacyEphemeralFIFOCache<String, int>(10)
+          ..raceOnContainsKeyFor = 'x';
+        await cache.set('x', 1);
+        await cache.set('y', 2);
+
+        await expectLater(
+          cache.removeWhere((key, value) async => false),
+          completes,
+        );
+        expect(await cache.get('y'), equals(2)); // untouched by the race
+      });
+    },
+  );
 }

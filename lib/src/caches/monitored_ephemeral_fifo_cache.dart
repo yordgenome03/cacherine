@@ -39,13 +39,18 @@ import 'cache.dart';
 /// [MonitoredTTLCache]) so `is CacheMonitoring<K, V>` and `is Disposable`
 /// keep holding for callers relying on them.
 ///
-/// [getAll]/[setAll]/[removeWhere] are left to [ThreadSafeCache]'s default
-/// implementations, which call this class's own (overridable) [get]/[set]/
-/// [containsKey]/[peek]/[remove] — so a subclass overriding one of those
-/// still has its override invoked (and, since [get]/[remove] are already
-/// monitored, the defaults automatically record the traffic/eviction
-/// metrics `doc/monitored_cache.md` documents for those bulk operations
-/// too, with no separate bookkeeping needed here).
+/// [setAll] is left to [ThreadSafeCache]'s default implementation, which
+/// calls this class's own (overridable) [set] — so a subclass override still
+/// sees every write. [getAll]/[removeWhere] are NOT left to their
+/// [ThreadSafeCache] defaults: those check presence and then separately
+/// read/peek, each independently acquiring the lock — but [get] here is
+/// destructive (an entry is removed on retrieval), so a second caller's
+/// concurrent [get] can land in the gap and consume the entry first, silently
+/// dropping it from [getAll]'s result (or, for [removeWhere], throwing when
+/// peeking then returns `null` for a non-nullable `V`). They read each key
+/// via a single atomic snapshot instead, recording the same hit/latency/
+/// manual-eviction metrics `doc/monitored_cache.md` documents for these bulk
+/// operations (matching [MonitoredTTLCache]'s equivalent overrides).
 class MonitoredEphemeralFIFOCache<K, V> extends ThreadSafeCache<K, V>
     with CacheMonitoring<K, V>, PeriodicSweeper
     implements Disposable {
@@ -100,6 +105,50 @@ class MonitoredEphemeralFIFOCache<K, V> extends ThreadSafeCache<K, V>
 
   @override
   Future<void> set(K key, V value) => _engine.set(key, value);
+
+  /// Retrieves values for all currently present [keys], consuming each one
+  /// (per [get]'s "removed on retrieval" behavior) via a single atomic
+  /// snapshot per key — see the class doc comment for why this can't be left
+  /// to [ThreadSafeCache]'s default. Records the same hit/latency metrics as
+  /// an equivalent series of [get] calls (missing keys are omitted without
+  /// recording a miss, per `doc/monitored_cache.md`).
+  @override
+  Future<Map<K, V>> getAll(Iterable<K> keys) async {
+    final values = <K, V>{};
+    for (final key in keys) {
+      final stopwatch = Stopwatch()..start();
+      final (found, value) = await _engine.lock.synchronized(
+        () => _engine.engine.presentValue(key),
+      );
+      stopwatch.stop();
+      if (found) {
+        metrics.recordHit(stopwatch.elapsed);
+        if (value != null || null is V) {
+          values[key] = value as V;
+        }
+      }
+    }
+    return values;
+  }
+
+  /// Removes all entries that match [test]. Reads each key via a single
+  /// atomic peek-based snapshot instead of [ThreadSafeCache]'s default — see
+  /// the class doc comment — and removes a match through [remove] (not the
+  /// unmonitored engine directly) so it still records the manual-eviction
+  /// metric [remove] documents. Peek-based, so testing an entry for removal
+  /// never consumes it as a side effect.
+  @override
+  Future<void> removeWhere(FutureOr<bool> Function(K key, V value) test) async {
+    for (final key in await getKeys()) {
+      final (found, value) = await _engine.lock.synchronized(
+        () => _engine.engine.presentPeek(key),
+      );
+      if (!found) continue;
+      if (await test(key, value as V)) {
+        await remove(key);
+      }
+    }
+  }
 
   /// Returns the existing value for [key], or computes, stores, and returns
   /// a new one — recording the same hit/miss/latency metrics as [get].
