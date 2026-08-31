@@ -1,5 +1,9 @@
 ## Unreleased - Composable Cache Engine, Weight-Based Eviction
 
+### Testing
+
+- Following up on the set()-bypass fixes above, audited the suite for missing coverage of documented performance/robustness/behavioral guarantees and closed the highest-confidence gaps: `Cache.update()`'s callback-throws-mid-computation path now asserts the cache/weight ledger is left untouched and the instance stays usable afterward; `AsyncCache`/`MonitoredCache`'s `getOrCompute()`/`update()` now assert the instance's lock is actually released (not just that the exception propagates) when the caller's `valueFactory`/`update` callback throws, guarding against a silent deadlock on every later call; `EvictionReason` attribution is now tested with `maxSize` and `maxWeight` configured together (previously each was only tested in isolation), pinning down that a write exceeding both at once is always attributed `.weight`, never `.capacity`; and `TTLFifoStore` was added to the shared `CacheStore` conformance suite (it was the only store implementation not covered by it) plus a dedicated policy test for its "update refreshes FIFO position" behavior, the one place it deliberately diverges from `FIFOStore`.
+
 ### New Features
 
 - **Weight-based eviction (closes #67)**: Added `SimpleWeightedLRUCache`, `WeightedLRUCache`, and `MonitoredWeightedLRUCache` — LRU caches bounded by a caller-supplied per-entry weight (e.g. estimated byte size) via a `weigher` callback and `maxWeight`, optionally alongside an entry-count `maxSize`. An explicit `weight:` argument can also be passed per `set()` call.

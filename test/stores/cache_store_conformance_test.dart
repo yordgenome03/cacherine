@@ -4,6 +4,7 @@ import 'package:cacherine/src/stores/fifo_store.dart';
 import 'package:cacherine/src/stores/lfu_store.dart';
 import 'package:cacherine/src/stores/lru_store.dart';
 import 'package:cacherine/src/stores/mru_store.dart';
+import 'package:cacherine/src/stores/ttl_fifo_store.dart';
 import 'package:test/test.dart';
 
 void main() {
@@ -14,6 +15,7 @@ void main() {
       'FIFOStore': FIFOStore<String, String>.new,
       'EphemeralFIFOStore': EphemeralFIFOStore<String, String>.new,
       'LFUStore': LFUStore<String, String>.new,
+      'TTLFifoStore': TTLFifoStore<String, String>.new,
     }.entries) {
       final name = entry.key;
       final make = entry.value;
@@ -145,6 +147,26 @@ void main() {
       store.put('b', '2');
       store.put('a', 'updated');
       expect(store.selectVictim(), equals('a'));
+    });
+  });
+
+  group('TTLFifoStore policy', () {
+    test('access() does not reorder', () {
+      final store = TTLFifoStore<String, String>();
+      store.put('a', '1');
+      store.put('b', '2');
+      store.access('a');
+      expect(store.selectVictim(), equals('a'));
+    });
+
+    test('put() on an existing key refreshes its position to the newest '
+        'slot — the opposite of FIFOStore, which deliberately does not '
+        'reorder on update', () {
+      final store = TTLFifoStore<String, String>();
+      store.put('a', '1');
+      store.put('b', '2');
+      store.put('a', 'updated');
+      expect(store.selectVictim(), equals('b'));
     });
   });
 

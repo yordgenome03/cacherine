@@ -384,6 +384,29 @@ void main() {
       // eagerly — only _write(), once it has a value to weigh, can.
       expect(() => cache.set('a', -1), throwsArgumentError);
     });
+
+    test('update() leaves the cache and weight ledger untouched when the '
+        'update callback throws mid-computation', () {
+      final cache = Cache<String, int>(
+        store: LRUStore<String, int>(),
+        weigher: (key, value) => value,
+        maxWeight: 100,
+      );
+      cache.set('a', 1);
+
+      expect(
+        () => cache.update('a', (value) => throw Exception('boom')),
+        throwsException,
+      );
+
+      expect(cache.get('a'), equals(1));
+      expect(cache.currentWeight, equals(1));
+      // The cache is still fully usable afterward — nothing was left
+      // half-written by the failed update.
+      cache.set('b', 2);
+      expect(cache.get('b'), equals(2));
+      expect(cache.currentWeight, equals(3));
+    });
   });
 
   group('AsyncCache — cache-aside and update helpers', () {
@@ -449,6 +472,52 @@ void main() {
       expect(await cache.get('a'), equals(1));
       expect(await cache.get('b'), equals(2));
       expect(await cache.get('c'), equals(3));
+    });
+
+    // Regression coverage: getOrCompute()/update() run the caller's
+    // valueFactory/update callback while holding this instance's lock (see
+    // the class doc comment). That relies on package:synchronized's
+    // Lock.synchronized releasing the lock even when the guarded callback
+    // throws — nothing in this suite verified that assumption. If it were
+    // ever violated (or a future refactor broke the release-on-throw path),
+    // every later call on this instance would hang forever instead of
+    // failing loudly, so these bound the "does it recover" check with a
+    // timeout rather than letting a regression hang the whole test run.
+    test('getOrCompute() releases its lock when valueFactory throws, so a '
+        'later call does not deadlock', () async {
+      final cache = AsyncCache<String, int>(
+        Cache(store: LRUStore<String, int>()),
+      );
+
+      await expectLater(
+        () => cache.getOrCompute('a', () => throw Exception('boom')),
+        throwsException,
+      );
+
+      await expectLater(
+        cache.set('b', 1).timeout(const Duration(seconds: 2)),
+        completes,
+      );
+      expect(await cache.get('b'), equals(1));
+    });
+
+    test('update() releases its lock when the update callback throws, so a '
+        'later call does not deadlock', () async {
+      final cache = AsyncCache<String, int>(
+        Cache(store: LRUStore<String, int>()),
+      );
+      await cache.set('a', 1);
+
+      await expectLater(
+        () => cache.update('a', (value) => throw Exception('boom')),
+        throwsException,
+      );
+
+      await expectLater(
+        cache.set('b', 2).timeout(const Duration(seconds: 2)),
+        completes,
+      );
+      expect(await cache.get('b'), equals(2));
     });
   });
 
@@ -739,6 +808,83 @@ void main() {
       );
     });
 
+    // Regression coverage: _write()'s eviction loop recomputes
+    // `wasOverWeight = exceedsWeight()` on every iteration and reports
+    // `wasOverWeight ? EvictionReason.weight : EvictionReason.capacity` — but
+    // every existing reason test above configures only one of
+    // maxSize/maxWeight, so this ternary's behavior when *both* are
+    // configured (and which one actually binds for a given write) was never
+    // exercised. These three cases pin down: capacity-only-binding,
+    // weight-only-binding, and — since removing an entry can only ever
+    // shrink both count and weight, never re-trigger either — the case where
+    // both conditions are exceeded by the same incoming write, which this
+    // ternary always attributes to `.weight`, never `.capacity`.
+    group(
+      'reason attribution when maxSize and maxWeight are both configured',
+      () {
+        test('is capacity when only the count limit is actually exceeded', () {
+          final reasons = <EvictionReason>[];
+          final cache = Cache<String, String>(
+            store: LRUStore<String, String>(),
+            maxSize: 2,
+            weigher: _lengthWeigher,
+            maxWeight: 100,
+          )..onEvict = reasons.add;
+
+          cache.set('a', '1'); // weight 1, count 1
+          cache.set(
+            'b',
+            '1',
+          ); // weight 2, count 2 — at maxSize, weight is nowhere near maxWeight
+          cache.set(
+            'c',
+            '1',
+          ); // count would be 3 > maxSize; weight would be 3, still <= 100
+
+          expect(reasons, equals([EvictionReason.capacity]));
+        });
+
+        test('is weight when only the weight limit is actually exceeded', () {
+          final reasons = <EvictionReason>[];
+          final cache = Cache<String, String>(
+            store: LRUStore<String, String>(),
+            maxSize: 10,
+            weigher: _lengthWeigher,
+            maxWeight: 2,
+          )..onEvict = reasons.add;
+
+          cache.set('a', '1'); // weight 1, count 1
+          cache.set(
+            'b',
+            '1',
+          ); // weight 2, count 2 — at maxWeight, count nowhere near maxSize
+          cache.set(
+            'c',
+            '1',
+          ); // weight would be 3 > maxWeight; count would be 3, still <= 10
+
+          expect(reasons, equals([EvictionReason.weight]));
+        });
+
+        test('is weight, not capacity, when the same write exceeds both limits '
+            'at once', () {
+          final reasons = <EvictionReason>[];
+          final cache = Cache<String, String>(
+            store: LRUStore<String, String>(),
+            maxSize: 2,
+            weigher: _lengthWeigher,
+            maxWeight: 2,
+          )..onEvict = reasons.add;
+
+          cache.set('a', '1'); // weight 1, count 1
+          cache.set('b', '1'); // weight 2, count 2 — exactly at both limits
+          cache.set('c', '1'); // count would be 3 > 2 AND weight would be 3 > 2
+
+          expect(reasons, equals([EvictionReason.weight]));
+        });
+      },
+    );
+
     test('expiry eviction is recorded as EvictionReason.expired', () async {
       var now = DateTime(2024);
       final cache = MonitoredCache<String, String>(
@@ -846,6 +992,26 @@ void main() {
         cache.update('missing', (v) async => v),
         throwsStateError,
       );
+    });
+
+    // Same lock-release-on-throw concern as AsyncCache above, but here the
+    // callback additionally runs inside monitoredGet()'s wrapping — confirm
+    // that doesn't change the outcome.
+    test('getOrCompute() releases its lock when valueFactory throws, so a '
+        'later call does not deadlock', () async {
+      final cache = MonitoredCache<String, int>(store: LRUStore<String, int>());
+      addTearDown(cache.dispose);
+
+      await expectLater(
+        () => cache.getOrCompute('a', () => throw Exception('boom')),
+        throwsException,
+      );
+
+      await expectLater(
+        cache.set('b', 1).timeout(const Duration(seconds: 2)),
+        completes,
+      );
+      expect(await cache.get('b'), equals(1));
     });
   });
 
