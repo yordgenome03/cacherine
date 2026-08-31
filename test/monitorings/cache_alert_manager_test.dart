@@ -74,6 +74,43 @@ void main() {
       );
     });
 
+    // Regression coverage: every threshold in _checkAlerts uses a strict
+    // inequality (`<`/`>`), so a metric exactly equal to its threshold must
+    // NOT alert. Every existing test above only exercises "well past" the
+    // threshold, which would not catch an accidental `<=`/`>=` flip. hitRate
+    // is a pure ratio with no time-window dependency, so this is safe from
+    // the real-clock timing jitter that would make a window-based metric
+    // (e.g. evictionsPerMinute) flaky to pin to an exact boundary.
+    test('does not alert when hitRate is exactly at the threshold — only '
+        'strictly below alerts', () async {
+      // 5 hits, 5 misses -> hitRate exactly 0.5, equal to the configured
+      // threshold.
+      for (var i = 0; i < 5; i++) {
+        metrics.recordHit(Duration.zero);
+      }
+      for (var i = 0; i < 5; i++) {
+        metrics.recordMiss(Duration.zero);
+      }
+      alertManager.monitor();
+      await Future.delayed(const Duration(milliseconds: 200));
+      expect(
+        receivedAlerts.any(
+          (alert) => alert.contains('Warning: Low hit rate detected'),
+        ),
+        isFalse,
+      );
+
+      // One more miss tips the rate just below the threshold.
+      metrics.recordMiss(Duration.zero);
+      await Future.delayed(const Duration(milliseconds: 200));
+      expect(
+        receivedAlerts.any(
+          (alert) => alert.contains('Warning: Low hit rate detected'),
+        ),
+        isTrue,
+      );
+    });
+
     test('Triggers alert when miss rate is too high', () async {
       // 80% of requests are misses
       for (int i = 0; i < 8; i++) {
@@ -230,6 +267,51 @@ void main() {
       expect(
         receivedAlerts.any((alert) => alert.contains('expired eviction')),
         isFalse,
+      );
+    });
+
+    // Regression coverage: same strict-inequality boundary concern as the
+    // hitRate test above, but for a window-based metric. Real-clock timing
+    // jitter would make an exact-boundary assertion flaky if the eviction
+    // count within the "last N ms" depended on wall-clock elapsed time, so
+    // this freezes CacheMetrics' clock — evictionsPerMinute then depends
+    // only on how many recordEvictionReason() calls have happened, not on
+    // how much real time passed between them and the timer tick.
+    test('does not fire a per-reason alert when that reason is exactly at '
+        'its threshold — only strictly above alerts', () async {
+      alertManager.dispose();
+      final frozenAt = DateTime(2024);
+      final frozenMetrics = CacheMetrics(clock: () => frozenAt);
+      final config = CacheAlertConfig(
+        notifyCallback: (alert) => receivedAlerts.add(alert),
+        evictionsPerMinuteThreshold: 1000000, // keep the aggregate alert off
+        evictionsPerReasonThreshold: {EvictionReason.weight: 600},
+        alertCheckInterval: const Duration(milliseconds: 100),
+      );
+      alertManager = CacheAlertManager(frozenMetrics, config);
+      alertManager.monitor();
+
+      // With a frozen clock, every recorded eviction is "at" the same
+      // instant, so it always falls inside the window — 1 eviction over a
+      // 100ms window scales to exactly 600/min (1 * 60000ms/min / 100ms),
+      // precisely at the configured threshold.
+      frozenMetrics.recordEvictionReason(EvictionReason.weight);
+      await Future.delayed(const Duration(milliseconds: 250));
+      expect(
+        receivedAlerts.any(
+          (alert) => alert.contains('Warning: High weight eviction rate'),
+        ),
+        isFalse,
+      );
+
+      // A second eviction doubles the rate to 1200/min, over the threshold.
+      frozenMetrics.recordEvictionReason(EvictionReason.weight);
+      await Future.delayed(const Duration(milliseconds: 250));
+      expect(
+        receivedAlerts.any(
+          (alert) => alert.contains('Warning: High weight eviction rate'),
+        ),
+        isTrue,
       );
     });
 

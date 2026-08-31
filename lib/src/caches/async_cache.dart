@@ -122,23 +122,26 @@ class AsyncCache<K, V> extends ThreadSafeCache<K, V> {
     }
   }
 
-  /// Checks [Cache.wouldRejectWrite] and then writes [key]/[value] through
-  /// this cache's own (possibly overridden) [set], returning [value] — or
-  /// throws [StateError] if the write would be rejected because its weight
-  /// exceeds [Cache.maxWeight]. Delegating to [set] (rather than writing
-  /// through [engine] directly) means a subclass's [set] override still runs
+  /// Checks [Cache.checkWeightRejection] and then writes [key]/[value]
+  /// through this cache's own (possibly overridden) [set], returning [value]
+  /// — or throws [StateError] if the write would be rejected because its
+  /// weight exceeds [Cache.maxWeight]. Passes the already-computed weight
+  /// back to [set] explicitly (rather than leaving it to recompute via a
+  /// weigher call of its own) and delegates to [set] (rather than writing
+  /// through [engine] directly), so a subclass's [set] override still runs
   /// for [getOrCompute]/[update], which — unlike [set] — must report what
   /// was actually cached rather than silently returning a value that never
   /// was. Exposed (not private) so [MonitoredCache]'s overrides of the same
   /// methods can reuse it.
   Future<V> storeOrThrow(K key, V value, {int? weight, Duration? ttl}) async {
-    if (engine.wouldRejectWrite(key, value, weight: weight)) {
+    final result = engine.checkWeightRejection(key, value, weight);
+    if (result.rejected) {
       throw StateError(
         'Cannot store value for cache key: $key — its weight exceeds '
         'maxWeight and can never fit.',
       );
     }
-    await set(key, value, weight: weight, ttl: ttl);
+    await set(key, value, weight: result.weight ?? weight, ttl: ttl);
     return value;
   }
 

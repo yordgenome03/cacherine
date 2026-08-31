@@ -251,46 +251,63 @@ class Cache<K, V> extends SimpleCache<K, V> {
     return w;
   }
 
-  /// Returns `true` if storing [value] under [key] with [weight] would be
-  /// rejected because its weight exceeds [maxWeight] — the same "can never
-  /// fit" case [set] silently accepts as a no-op. Always `false` when
-  /// weighing is disabled. Exposed so [trySet]/[getOrSet]/[update] and
-  /// [AsyncCache.storeOrThrow] can detect a doomed write *before* delegating
-  /// to this cache's own (possibly overridden) [set], which — like [Cache]'s
-  /// own [set] — has no way to report back whether it actually stored
-  /// anything.
-  bool wouldRejectWrite(K key, V value, {int? weight}) {
-    final entryWeight = _computeWeight(key, value, weight);
-    return entryWeight != null && entryWeight > maxWeight!;
+  /// Computes the weight [value] would have under [key] (see
+  /// [_computeWeight]) and whether storing it would be rejected for
+  /// exceeding [maxWeight] — the same "can never fit" case [set] silently
+  /// accepts as a no-op. `rejected` is always `false` when weighing is
+  /// disabled, and `weight` is `null` in that case.
+  ///
+  /// A single weigher invocation, not two: the returned `weight` must be
+  /// passed back as the explicit `weight:` argument to [set], so [_write]
+  /// reuses it instead of calling [weigher] again — otherwise a
+  /// non-deterministic weigher (unsupported, but not otherwise guarded
+  /// against) could disagree with itself between this check and the actual
+  /// write, letting an oversized entry slip past this very check. Exposed so
+  /// [trySet]/[getOrSet]/[update] and [AsyncCache.storeOrThrow] can detect a
+  /// doomed write *before* delegating to this cache's own (possibly
+  /// overridden) [set], which — like [Cache]'s own [set] — has no way to
+  /// report back whether it actually stored anything.
+  ({bool rejected, int? weight}) checkWeightRejection(
+    K key,
+    V value,
+    int? explicitWeight,
+  ) {
+    final entryWeight = _computeWeight(key, value, explicitWeight);
+    final rejected = entryWeight != null && entryWeight > maxWeight!;
+    return (rejected: rejected, weight: entryWeight);
   }
 
   /// Like [set], but returns whether [value] was actually stored instead of
   /// silently accepting a weight-exceeds-[maxWeight] rejection. Checks
-  /// [wouldRejectWrite] and then delegates to this cache's own (possibly
-  /// overridden) [set], so a subclass's [set] override still runs. Exposed so
+  /// [checkWeightRejection] and then delegates to this cache's own (possibly
+  /// overridden) [set] — passing the already-computed weight back in
+  /// explicitly, so [set] reuses it instead of invoking [weigher] again — so
+  /// a subclass's [set] override still runs. Exposed so
   /// [AsyncCache]/[MonitoredCache] can detect that rejection from their own
   /// `getOrCompute`/`update` overloads (which — unlike [set] — must report
   /// what was actually cached).
   bool trySet(K key, V value, {int? weight, Duration? ttl}) {
     validateSetArgs(weight: weight, ttl: ttl);
-    if (wouldRejectWrite(key, value, weight: weight)) return false;
-    set(key, value, weight: weight, ttl: ttl);
+    final result = checkWeightRejection(key, value, weight);
+    if (result.rejected) return false;
+    set(key, value, weight: result.weight ?? weight, ttl: ttl);
     return true;
   }
 
   /// Writes [key]/[value] through this cache's own (possibly overridden)
-  /// [set] and returns [value], or throws [StateError] if [wouldRejectWrite]
-  /// — used by [getOrSet]/[update], which (unlike [set]) must report what was
-  /// actually stored rather than silently returning a value that was never
-  /// cached.
+  /// [set] and returns [value], or throws [StateError] if
+  /// [checkWeightRejection] reports the write would be rejected — used by
+  /// [getOrSet]/[update], which (unlike [set]) must report what was actually
+  /// stored rather than silently returning a value that was never cached.
   V _storeOrThrow(K key, V value, int? weight, Duration? ttl) {
-    if (wouldRejectWrite(key, value, weight: weight)) {
+    final result = checkWeightRejection(key, value, weight);
+    if (result.rejected) {
       throw StateError(
         'Cannot store value for cache key: $key — its weight exceeds '
         'maxWeight and can never fit.',
       );
     }
-    set(key, value, weight: weight, ttl: ttl);
+    set(key, value, weight: result.weight ?? weight, ttl: ttl);
     return value;
   }
 
@@ -463,7 +480,7 @@ class Cache<K, V> extends SimpleCache<K, V> {
   /// Stores [key]/[value], evicting existing entries first if needed to make
   /// room. A no-op if [value]'s weight (explicit or weigher-computed)
   /// exceeds [maxWeight] — the same "can never fit" case callers detect
-  /// ahead of time via [wouldRejectWrite].
+  /// ahead of time via [checkWeightRejection].
   void _write(K key, V value, int? explicitWeight, Duration? entryTtl) {
     final now = _ttlEnabled ? clock() : null;
     if (now != null) _dropIfExpired(key, now);

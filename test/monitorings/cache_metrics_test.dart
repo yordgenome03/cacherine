@@ -272,6 +272,63 @@ void main() {
       },
     );
 
+    test('snapshot() stays fast even at the full maxEvictionSamples retention '
+        'cap — a coarse smoke test against an accidental O(n²) regression '
+        'in the per-snapshot window scan, not a precise benchmark', () {
+      final metrics = CacheMetrics();
+      for (var i = 0; i < CacheMetrics.maxEvictionSamples; i++) {
+        metrics.recordEviction();
+      }
+      final stopwatch = Stopwatch()..start();
+      for (var i = 0; i < 200; i++) {
+        metrics.snapshot(const Duration(minutes: 1));
+      }
+      stopwatch.stop();
+      // 200 snapshot() calls, each doing an O(n) scan of 10,000 retained
+      // samples, is comfortably sub-second on any CI machine; a regression
+      // to something quadratic (or worse) in the retained-sample count
+      // would blow well past this bound.
+      expect(stopwatch.elapsedMilliseconds, lessThan(5000));
+    });
+
+    test(
+      'a sustained eviction storm well past maxEvictionSamples still reports '
+      'a correct rate for only the requested recent window, not the full '
+      'retained history',
+      () {
+        final metrics = CacheMetrics(clock: clock);
+
+        // 15,000 evictions, one simulated second apart — 50% more than
+        // maxEvictionSamples (10,000), so the oldest 5,000 are already
+        // rolled off the retained queue by the time this finishes.
+        // Alternates reason so both buckets get exercised.
+        for (var i = 0; i < 15000; i++) {
+          metrics.recordEvictionReason(
+            i.isEven ? EvictionReason.capacity : EvictionReason.weight,
+          );
+          now = now.add(const Duration(seconds: 1));
+        }
+
+        // Only the last 60 simulated seconds of activity should count
+        // toward a 1-minute window — not the 10,000 retained samples, and
+        // definitely not all 15,000 that ever happened.
+        final snapshot = metrics.snapshot(const Duration(minutes: 1));
+        final total = snapshot.evictionsPerMinuteByReason.values.fold(
+          0,
+          (a, b) => a + b,
+        );
+        expect(total, inInclusiveRange(55, 60));
+        expect(
+          snapshot.evictionsPerMinuteByReason[EvictionReason.capacity],
+          isNotNull,
+        );
+        expect(
+          snapshot.evictionsPerMinuteByReason[EvictionReason.weight],
+          isNotNull,
+        );
+      },
+    );
+
     test(
       'getRecentStats evictions_per_minute is correct when eviction count is within cap',
       () {

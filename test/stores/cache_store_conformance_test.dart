@@ -111,6 +111,15 @@ void main() {
       store.put('c', '3');
       expect(store.selectVictim(), equals('a'));
     });
+
+    test('selectVictim(excluding:) falls back to the next-least-recently-used '
+        'key when the LRU victim is excluded', () {
+      final store = LRUStore<String, String>();
+      store.put('a', '1');
+      store.put('b', '2');
+      store.put('c', '3');
+      expect(store.selectVictim(excluding: 'a'), equals('b'));
+    });
   });
 
   group('MRUStore policy', () {
@@ -148,6 +157,15 @@ void main() {
       store.put('a', 'updated');
       expect(store.selectVictim(), equals('a'));
     });
+
+    test('selectVictim(excluding:) falls back to the next-oldest key when '
+        'the FIFO victim is excluded', () {
+      final store = FIFOStore<String, String>();
+      store.put('a', '1');
+      store.put('b', '2');
+      store.put('c', '3');
+      expect(store.selectVictim(excluding: 'a'), equals('b'));
+    });
   });
 
   group('TTLFifoStore policy', () {
@@ -183,6 +201,15 @@ void main() {
       store.put('a', '1');
       expect(store.peek('a'), equals('1'));
       expect(store.containsKey('a'), isTrue);
+    });
+
+    test('selectVictim(excluding:) falls back to the next-oldest key when '
+        'the FIFO victim is excluded', () {
+      final store = EphemeralFIFOStore<String, String>();
+      store.put('a', '1');
+      store.put('b', '2');
+      store.put('c', '3');
+      expect(store.selectVictim(excluding: 'a'), equals('b'));
     });
   });
 

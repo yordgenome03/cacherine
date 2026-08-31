@@ -50,6 +50,25 @@ void main() {
       expect(await cache.getKeys(), equals(['b', 'c', 'a']));
     });
 
+    // Unlike every other policy above, LFU's getKeys() order is explicitly
+    // documented as unspecified (doc/lfu_cache.md: "the order is unspecified.
+    // Do not use it to infer frequency, recency, or eviction order."). This
+    // doesn't test a specific order — it closes the gap of LFU being the only
+    // policy absent from this file, by pinning down what IS guaranteed: the
+    // correct *set* of live keys, regardless of the access pattern that
+    // produced them.
+    test('LFU getKeys returns exactly the live keys, in whatever order — order '
+        'itself is unspecified and must not be relied on', () async {
+      final cache = LFUCache<String, String>(3);
+
+      await cache.set('a', 'A');
+      await cache.set('b', 'B');
+      await cache.set('c', 'C');
+      await cache.get('a'); // bump frequency; must not change key *set*
+
+      expect(await cache.getKeys(), unorderedEquals(['a', 'b', 'c']));
+    });
+
     test('TTL getKeys returns live keys in insertion order', () async {
       var now = DateTime(2024);
       final cache = TTLCache<String, String>(

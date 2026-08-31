@@ -1,7 +1,29 @@
+import 'dart:async';
+
 import 'package:cacherine/cacherine.dart';
 import 'package:test/test.dart';
 
 int _lengthWeigher(String key, String value) => value.length;
+
+// Regression coverage: async_cache.dart's Lock(reentrant: true) exists so a
+// caller already holding the lock (e.g. mid-getOrCompute()/update()) can
+// re-enter it by calling back into this instance's own overridable set().
+// Every existing reentrancy test only has a set() override call
+// super.set() — this exercises a set() override that instead calls back
+// into a *different* public method (clear()) mid-write, to confirm that
+// doesn't deadlock (the lock is reentrant) or leave the cache in a
+// surprising state (the reentrant clear() and the eventual write are still
+// fully serialized with everything else on this instance, so the outcome is
+// exactly what sequential execution implies: clear(), then the write).
+class _ClearOnSetAsyncCache<K, V> extends AsyncCache<K, V> {
+  _ClearOnSetAsyncCache(super.engine);
+
+  @override
+  Future<void> set(K key, V value, {int? weight, Duration? ttl}) async {
+    await clear();
+    await super.set(key, value, weight: weight, ttl: ttl);
+  }
+}
 
 class _ClockCounter {
   int calls = 0;
@@ -198,6 +220,73 @@ void main() {
       expect(cache.get('a'), isNull);
       expect(cache.get('b'), isNull);
       expect(cache.get('c'), equals('3'));
+
+      // Regression coverage: _purgeExpired() recomputes _minExpiry from the
+      // survivors so later writes keep getting the O(1) short-circuit. Only
+      // 'c' survived the scan above (deadline now+5s); a further
+      // capacity-triggered write before that deadline, with nothing newly
+      // expired, must go back to skipping the scan — not fall back to
+      // scanning on every write forever because _minExpiry was left stale.
+      cache.set('d', '4'); // count 2, still under maxSize; no eviction yet
+      final scansAfterPurge = countingStore.keysAccessCount;
+      cache.set('e', '5'); // count 3 > maxSize; evicts 'c' on capacity
+      expect(countingStore.keysAccessCount, equals(scansAfterPurge));
+
+      expect(cache.get('c'), isNull);
+      expect(cache.get('d'), equals('4'));
+      expect(cache.get('e'), equals('5'));
+    });
+  });
+
+  group('Cache — injected clock robustness', () {
+    // Regression coverage: _minExpiry is a lower bound derived from whatever
+    // `now` was in effect when each entry was written, and the short-circuit
+    // in _write() only scans for expired entries once `now` reaches it. If
+    // an injected clock (test-only; DateTime.now() doesn't do this in
+    // practice) ever reports a timestamp earlier than a prior call, entries
+    // simply haven't reached their deadline *yet* by that clock's own
+    // reckoning — this is not corruption, just TTL correctly deferring to
+    // whatever the clock says "now" is. This test pins down that the cache
+    // survives such a jump without corrupting state, and self-heals — once
+    // the clock advances forward past the true deadlines again, purging
+    // resumes normally on the next capacity-triggered write, exactly as if
+    // the backward jump had never happened.
+    test('a temporarily backward-jumping clock does not corrupt the cache — '
+        'purging resumes normally once the clock catches back up', () {
+      var now = DateTime(2024, 1, 1, 0, 2, 0); // t = 120s
+      final countingStore = _KeysAccessCountingStore(
+        TTLFifoStore<String, String>(),
+      );
+      final cache = Cache<String, String>(
+        store: countingStore,
+        maxSize: 2,
+        ttl: const Duration(seconds: 5),
+        clock: () => now,
+      );
+
+      cache.set('a', '1'); // deadline t=125s; _minExpiry=125s
+      now = DateTime(2024, 1, 1, 0, 1, 0); // clock jumps backward to t=60s
+      cache.set('b', '2'); // count 2, still under maxSize; deadline t=65s
+
+      // Capacity-triggered write while the (backward-jumped) clock still
+      // reads before either deadline: nothing has "expired" by this clock's
+      // own reckoning, so the scan is correctly skipped, and eviction falls
+      // back to the store's own policy (FIFO here) instead.
+      final scansBefore = countingStore.keysAccessCount;
+      cache.set('c', '3'); // count 3 > maxSize; evicts 'a' (FIFO-oldest)
+      expect(countingStore.keysAccessCount, equals(scansBefore));
+      expect(cache.get('a'), isNull); // evicted by policy, not by expiry
+      expect(cache.get('b'), equals('2'));
+      expect(cache.get('c'), equals('3'));
+
+      // Now advance the clock forward past every deadline recorded so far.
+      now = DateTime(2024, 1, 1, 0, 5, 0); // t = 300s
+      final scansAfterCatchUp = countingStore.keysAccessCount;
+      cache.set('d', '4'); // count 3 > maxSize; must purge, not just evict
+      expect(countingStore.keysAccessCount, greaterThan(scansAfterCatchUp));
+      expect(cache.get('b'), isNull); // purged for being expired
+      expect(cache.get('c'), isNull); // purged for being expired
+      expect(cache.get('d'), equals('4'));
     });
   });
 
@@ -409,6 +498,94 @@ void main() {
     });
   });
 
+  group('Cache — weigher invocation count', () {
+    // Regression coverage: checkWeightRejection() (used by trySet()'s and
+    // _storeOrThrow()'s pre-check, i.e. getOrSet()/update()/trySet()) computes
+    // the weight once and threads it back into the delegated set() call as an
+    // explicit weight: — so set()/_write() reuses that number instead of
+    // calling the weigher a second time for the same logical write. This
+    // pins the count down explicitly (rather than leaving "how many times a
+    // possibly-expensive weigher runs per write" as an unverified accident
+    // of the implementation).
+    test('a miss through getOrSet()/update()/trySet() calls the weigher '
+        'exactly once, not once per internal check', () {
+      var weighCalls = 0;
+      int countingWeigher(String key, String value) {
+        weighCalls++;
+        return value.length;
+      }
+
+      final cache = Cache<String, String>(
+        store: LRUStore<String, String>(),
+        weigher: countingWeigher,
+        maxWeight: 100,
+      );
+
+      weighCalls = 0;
+      cache.getOrSet('a', () => '1');
+      expect(weighCalls, equals(1));
+
+      weighCalls = 0;
+      cache.update('a', (v) => '22');
+      expect(weighCalls, equals(1));
+
+      weighCalls = 0;
+      expect(cache.trySet('b', '333'), isTrue);
+      expect(weighCalls, equals(1));
+    });
+
+    test('a plain set() calls the weigher exactly once', () {
+      var weighCalls = 0;
+      int countingWeigher(String key, String value) {
+        weighCalls++;
+        return value.length;
+      }
+
+      final cache = Cache<String, String>(
+        store: LRUStore<String, String>(),
+        weigher: countingWeigher,
+        maxWeight: 100,
+      );
+
+      cache.set('a', '1');
+      expect(weighCalls, equals(1));
+    });
+
+    // Regression coverage: before checkWeightRejection() threaded a single
+    // computed weight through to set(), trySet()/getOrSet()/update() called
+    // the weigher once as a pre-check and then a second, independent time
+    // inside the delegated set()/_write(). Under a non-deterministic weigher
+    // (unsupported per lib/src/interfaces/weigher.dart's "should be
+    // pure/deterministic" contract, but not otherwise guarded against), the
+    // two calls could disagree — the pre-check could see a small "fits"
+    // weight while the actual write computed and stored a much larger one,
+    // letting an oversized entry slip past the very check meant to prevent
+    // that. A single shared computation makes this scenario moot: there is
+    // only one call to disagree with itself.
+    test('a stateful (non-deterministic) weigher cannot make trySet() report '
+        'success for a write that violates maxWeight, because the weigher '
+        'is only consulted once', () {
+      var calls = 0;
+      // Would return a small "fits" weight on a first call and a huge one on
+      // a second call for the same write, if it were ever called twice.
+      int flakyWeigher(String key, String value) {
+        calls++;
+        return calls == 1 ? 1 : 1000;
+      }
+
+      final cache = Cache<String, String>(
+        store: LRUStore<String, String>(),
+        weigher: flakyWeigher,
+        maxWeight: 10,
+      );
+
+      expect(cache.trySet('a', 'x'), isTrue);
+      expect(calls, equals(1));
+      expect(cache.currentWeight, equals(1));
+      expect(cache.get('a'), equals('x'));
+    });
+  });
+
   group('AsyncCache — cache-aside and update helpers', () {
     test(
       'putIfAbsent() computes and stores only when the key is absent',
@@ -518,6 +695,116 @@ void main() {
         completes,
       );
       expect(await cache.get('b'), equals(2));
+    });
+
+    // Same single-computation guarantee as the sync Cache group above,
+    // exercised through AsyncCache.storeOrThrow() (used by
+    // getOrCompute()/update()).
+    test('a miss through getOrCompute()/update() calls the weigher exactly '
+        'once, not once per internal check', () async {
+      var weighCalls = 0;
+      int countingWeigher(String key, int value) {
+        weighCalls++;
+        return value;
+      }
+
+      final cache = AsyncCache<String, int>(
+        Cache(
+          store: LRUStore<String, int>(),
+          weigher: countingWeigher,
+          maxWeight: 100,
+        ),
+      );
+
+      weighCalls = 0;
+      await cache.getOrCompute('a', () async => 1);
+      expect(weighCalls, equals(1));
+
+      weighCalls = 0;
+      await cache.update('a', (v) async => 2);
+      expect(weighCalls, equals(1));
+    });
+  });
+
+  group('AsyncCache — single-instance lock contention', () {
+    // Regression coverage: the class doc comment documents that
+    // getOrCompute()/update() hold this instance's lock across the whole
+    // awaited valueFactory/update callback, so "concurrent callers on
+    // *other* keys are blocked too (the lock is per-instance, not per-key)"
+    // — a real tradeoff, not per-key locking. Every existing
+    // "serializes concurrent computations" test races two calls on the
+    // *same* key, which only proves no duplicate computation happens; it
+    // doesn't touch this documented cross-key blocking at all. This drives a
+    // slow computation on one key and confirms a plain set() on a
+    // completely unrelated key is genuinely blocked behind it, not merely
+    // that both eventually complete.
+    test('a slow getOrCompute() on one key blocks a concurrent set() on an '
+        'unrelated key until it finishes', () async {
+      final cache = AsyncCache<String, int>(
+        Cache(store: LRUStore<String, int>()),
+      );
+      final computeStarted = Completer<void>();
+      final releaseCompute = Completer<int>();
+
+      final aFuture = cache.getOrCompute('A', () {
+        computeStarted.complete();
+        return releaseCompute.future;
+      });
+      await computeStarted
+          .future; // A's computation is in flight, holding the lock
+
+      var bDone = false;
+      final bFuture = cache.set('B', 1).then((_) => bDone = true);
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+      expect(bDone, isFalse); // still blocked, despite being an unrelated key
+
+      releaseCompute.complete(42);
+      expect(await aFuture, equals(42));
+      await bFuture;
+      expect(bDone, isTrue);
+    });
+  });
+
+  group('AsyncCache — reentrant subclass overrides', () {
+    test('a set() override that reentrantly calls clear() mid-write does '
+        'not deadlock, and leaves the cache in the state sequential '
+        'execution implies', () async {
+      final cache = _ClearOnSetAsyncCache<String, int>(
+        Cache(store: LRUStore<String, int>()),
+      );
+      await cache.set('seed', 0);
+
+      final result = await cache
+          .getOrCompute('a', () async => 1)
+          .timeout(const Duration(seconds: 2));
+
+      expect(result, equals(1));
+      // clear() ran (from within the set() override, reentering the
+      // already-held lock) before 'a' was written, so 'seed' must be gone
+      // and 'a' must be present.
+      expect(await cache.get('seed'), isNull);
+      expect(await cache.get('a'), equals(1));
+    });
+  });
+
+  group('Cache — unbounded configuration', () {
+    // Regression coverage: Cache's constructor validates maxSize/weigher+
+    // maxWeight/ttl independently but never rejects all three being omitted
+    // — Cache(store: ...) alone is a legal, fully unbounded cache. This was
+    // previously an untested configuration; this confirms it's functionally
+    // correct at a real scale, not just "presumably fine because nothing
+    // rejects it".
+    test('a fully unbounded Cache (no maxSize/maxWeight/ttl) correctly holds '
+        'a large number of distinct entries', () {
+      final cache = Cache<int, int>(store: LRUStore<int, int>());
+      const n = 50000;
+      for (var i = 0; i < n; i++) {
+        cache.set(i, i * 2);
+      }
+      expect(cache.getKeys().length, equals(n));
+      expect(cache.get(0), equals(0));
+      expect(cache.get(n ~/ 2), equals(n));
+      expect(cache.get(n - 1), equals((n - 1) * 2));
     });
   });
 
@@ -1059,6 +1346,41 @@ void main() {
       expect(await cache.get('b'), isNull);
       expect(await cache.get('a'), equals(1));
       expect(await cache.get('c'), equals(3));
+    });
+
+    // Regression coverage: lib/src/stores/lfu_store.dart's `excluding`
+    // parameter exists specifically so Cache._write()'s eviction loop can
+    // grow an *existing* key's weight without that same key ever being
+    // selected as its own eviction victim. test/stores/
+    // cache_store_conformance_test.dart exercises that parameter directly
+    // against LFUStore in isolation; this drives it end-to-end through the
+    // actual integration that motivated it — a weight-bounded LFU Cache
+    // overwriting an existing key that happens to be the sole occupant of
+    // the minimum-frequency bucket, forcing selectVictim(excluding:) to fall
+    // through to the next bucket rather than reporting nothing evictable.
+    test('a weight-bounded LFU cache correctly falls through frequency '
+        'buckets to find a victim other than the key currently being '
+        'written to', () {
+      final cache = Cache<String, int>(
+        store: LFUStore<String, int>(),
+        weigher: (key, value) => value,
+        maxWeight: 9,
+      );
+
+      cache.set('a', 1); // freq(a) = 1, weight 1
+      cache.set('b', 1); // freq(b) = 1, weight 1
+      cache.get('b'); // freq(b) = 2; 'a' is now the sole freq-1 occupant
+
+      // Growing 'a' to weight 9 requires evicting to stay within maxWeight
+      // (9), but 'a' — the key being written — must be excluded from
+      // eviction. The min-frequency (1) bucket now holds only 'a', so the
+      // store must fall through to the freq-2 bucket and evict 'b' instead
+      // of reporting "nothing to evict".
+      cache.set('a', 9);
+
+      expect(cache.get('a'), equals(9));
+      expect(cache.get('b'), isNull);
+      expect(cache.currentWeight, equals(9));
     });
   });
 }
