@@ -763,6 +763,45 @@ void main() {
       await bFuture;
       expect(bDone, isTrue);
     });
+
+    // Regression coverage: removeWhere() used to check each key's presence
+    // and peek it with two *separate* lock acquisitions per key, so a
+    // concurrent operation could interleave between keys. It now holds the
+    // lock for the whole batch (matching setAll()'s already-established
+    // pattern) — this pins that down by making the predicate itself slow
+    // (a realistic case: removeWhere() predicates can be async) and
+    // confirming an unrelated set() is blocked for the whole call, not just
+    // between individual key checks.
+    test('a slow removeWhere() predicate blocks a concurrent set() on an '
+        'unrelated key until the whole call finishes', () async {
+      final cache = AsyncCache<String, int>(
+        Cache(store: LRUStore<String, int>()),
+      );
+      await cache.set('a', 1);
+      await cache.set('b', 2);
+
+      final predicateStarted = Completer<void>();
+      final releasePredicate = Completer<bool>();
+
+      final removeFuture = cache.removeWhere((key, value) {
+        if (key == 'a') {
+          predicateStarted.complete();
+          return releasePredicate.future;
+        }
+        return false;
+      });
+      await predicateStarted.future; // in flight on 'a', holding the lock
+
+      var setDone = false;
+      final setFuture = cache.set('c', 3).then((_) => setDone = true);
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+      expect(setDone, isFalse); // still blocked, despite being an unrelated key
+
+      releasePredicate.complete(false);
+      await removeFuture;
+      await setFuture;
+      expect(setDone, isTrue);
+    });
   });
 
   group('AsyncCache — reentrant subclass overrides', () {
