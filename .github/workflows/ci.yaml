@@ -138,3 +138,57 @@ jobs:
             echo "test-matrix result: ${{ needs.test-matrix.result }}"
             exit 1
           fi
+
+  # Diffs this branch's public API against the latest version published on
+  # pub.dev using dart_apitool (https://pub.dev/packages/dart_apitool), and
+  # fails only if it finds a breaking change not matched by a major version
+  # bump (--version-check-mode onlyBreakingChanges). Deliberately does NOT
+  # use the stricter "fully" mode, which would also require every additive
+  # (non-breaking) change to already carry its eventual minor bump — this
+  # repo bumps pubspec.yaml's version as a release-time step, not per-PR, so
+  # "fully" mode would fail on every PR that adds new public API without
+  # yet bumping the version (true as of this job's own introduction: see
+  # CHANGELOG's "Unreleased" section for several additions still sitting on
+  # the currently-published version). "onlyBreakingChanges" instead mirrors
+  # exactly what this project already polices by hand (CHANGELOG's own
+  # "### Breaking Changes" precedent) without that false-positive.
+  api-diff:
+    name: api-diff
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        timeout-minutes: 2
+
+      - name: Set up Dart SDK
+        uses: dart-lang/setup-dart@v1
+        with:
+          sdk: stable
+        timeout-minutes: 2
+
+      - name: Install dart_apitool
+        run: dart pub global activate dart_apitool
+        timeout-minutes: 3
+
+      - name: Diff public API against the latest published version
+        run: |
+          dart pub global run dart_apitool:main diff \
+            --old "pub://cacherine" \
+            --new "." \
+            --report-format markdown \
+            --report-file-path api-diff-report.md \
+            --version-check-mode onlyBreakingChanges
+        timeout-minutes: 5
+
+      - name: Upload API diff report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: api-diff-report
+          path: api-diff-report.md
+          retention-days: 30
+        timeout-minutes: 2
