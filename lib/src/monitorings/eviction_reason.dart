@@ -1,6 +1,6 @@
 /// **Why a cache entry was evicted.**
 ///
-/// Passed to [CacheMetrics.recordEviction] so per-cause eviction rates can be
+/// Passed to [CacheMetrics.recordEvictionReason] so per-cause eviction rates can be
 /// broken out in [CacheMetricsSnapshot.evictionsPerMinuteByReason] and
 /// [CacheAlertConfig.evictionsPerReasonThreshold], in addition to the
 /// existing aggregate [CacheMetricsSnapshot.evictionsPerMinute].
