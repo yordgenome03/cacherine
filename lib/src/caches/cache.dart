@@ -336,6 +336,22 @@ class Cache<K, V> extends SimpleCache<K, V> {
   /// value's weight exceeds [maxWeight] — unlike [set], this method has a
   /// non-`void` return contract, so it cannot silently report a value that
   /// was never actually cached.
+  ///
+  /// **Known limitation:** unlike [set] (which always dispatches through
+  /// this cache's own, possibly overridden, implementation via [trySet]),
+  /// the presence check and read here go through [presentValue] directly —
+  /// a subclass override of [get]/[containsKey] is **not** observed by this
+  /// method. This is deliberate, not an oversight: [Cache] is a general
+  /// engine that may or may not have a `ttl` configured depending on how a
+  /// given instance was built, and only [presentValue]'s single-clock
+  /// snapshot is safe for the `ttl`-configured case (two separate dispatched
+  /// calls would each read the clock independently, reopening the TTL
+  /// check-then-fetch race [presentValue] exists to close) — there is no way
+  /// to know at this call site whether a *specific* instance actually needs
+  /// that. Contrast with the non-TTL legacy facades (`LRUCache` and
+  /// siblings), which dispatch through `containsKey`/`get` in their own
+  /// `getOrCompute`/`update` precisely because those classes never have a
+  /// `ttl`, so the tradeoff doesn't apply to them.
   @override
   V getOrSet(K key, V Function() valueFactory, {int? weight, Duration? ttl}) {
     validateSetArgs(weight: weight, ttl: ttl);
@@ -357,6 +373,10 @@ class Cache<K, V> extends SimpleCache<K, V> {
   /// supplied, or if the resulting value's weight exceeds [maxWeight] —
   /// unlike [set], this method has a non-`void` return contract, so it
   /// cannot silently report a value that was never actually cached.
+  ///
+  /// **Known limitation:** see [getOrSet] — the same "reads via
+  /// [presentValue], not dispatched through [get]/[containsKey]" tradeoff
+  /// applies here, for the same reason.
   @override
   V update(
     K key,

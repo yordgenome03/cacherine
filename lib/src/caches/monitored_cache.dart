@@ -91,6 +91,22 @@ class MonitoredCache<K, V> extends AsyncCache<K, V>
     }, found: () => found);
   }
 
+  /// **Known limitation:** the presence check and read here go through
+  /// [Cache.presentValue] directly rather than dispatching through this
+  /// class's own [get] — unlike the non-TTL `Monitored*Cache` legacy facades
+  /// (`MonitoredLRUCache` and siblings), which dispatch through
+  /// `containsKey`/`get` in their own `getOrCompute` precisely because those
+  /// classes never have a `ttl`. This class may or may not, depending on how
+  /// a given instance was built, and only [Cache.presentValue]'s
+  /// single-clock snapshot is safe for the `ttl`-configured case (even under
+  /// this method's own lock hold: the race is wall-clock time passing
+  /// between two separate `clock()` reads, not concurrent access from
+  /// another caller). Two consequences: a subclass override of [get] is
+  /// **not** observed by this method's presence check, and — because the
+  /// hit metric can only be recorded via the same [monitoredGet] call that
+  /// also runs [valueFactory]/the update callback — a hit is not recorded
+  /// at all if that callback throws after a hit is found (`update` only;
+  /// [valueFactory] here never runs on a hit).
   @override
   Future<V> getOrCompute(
     K key,
@@ -121,6 +137,10 @@ class MonitoredCache<K, V> extends AsyncCache<K, V>
   /// metrics. This override additionally records the same hit/miss/latency
   /// metrics as an equivalent [getOrCompute] call, per `doc/monitored_cache.md`
   /// ("`update()` follow[s] `getOrCompute()` hit/miss semantics").
+  ///
+  /// **Known limitation:** see [getOrCompute] — the same
+  /// not-dispatched-through-[get] tradeoff applies here, and a hit is not
+  /// recorded if the update callback throws after a hit is found.
   @override
   Future<V> update(
     K key,

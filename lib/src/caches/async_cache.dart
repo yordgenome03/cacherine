@@ -148,6 +148,18 @@ class AsyncCache<K, V> extends ThreadSafeCache<K, V> {
     return value;
   }
 
+  /// **Known limitation:** unlike [set] (which always dispatches through
+  /// this cache's own, possibly overridden, implementation), the presence
+  /// check and read here go through [Cache.presentValue] directly — a
+  /// subclass override of [get]/[containsKey] is **not** observed by this
+  /// method. Deliberate, not an oversight: this class is a general engine
+  /// that may or may not have a `ttl`/`weigher` configured, and only
+  /// [Cache.presentValue]'s single-clock snapshot is safe for the
+  /// `ttl`-configured case — there is no way to know at this call site
+  /// whether a *specific* instance actually needs that. Contrast with the
+  /// non-TTL legacy facades (`LRUCache` and siblings), which dispatch
+  /// through `containsKey`/`get` in their own `getOrCompute` precisely
+  /// because those classes never have a `ttl`.
   @override
   Future<V> getOrCompute(
     K key,
@@ -172,6 +184,9 @@ class AsyncCache<K, V> extends ThreadSafeCache<K, V> {
     Duration? ttl,
   }) => getOrCompute(key, valueFactory, weight: weight, ttl: ttl);
 
+  /// **Known limitation:** see [getOrCompute] — the same "reads via
+  /// [Cache.presentValue], not dispatched through [get]/[containsKey]"
+  /// tradeoff applies here, for the same reason.
   @override
   Future<V> update(
     K key,
