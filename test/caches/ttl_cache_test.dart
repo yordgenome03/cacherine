@@ -187,6 +187,29 @@ void main() {
 
       expect(await cache.get('long'), equals('value-long'));
     });
+
+    // Every other case here uses TTLs of a few seconds. This pins down an
+    // extreme (but not DateTime-range-breaking) per-entry override —
+    // Duration's internal representation is a 64-bit microsecond count, so a
+    // deadline computed as `now.add(hugeTtl)` could in principle overflow —
+    // confirming a ~100-year TTL survives normal-scale time advances without
+    // corrupting the expiry ledger or crashing.
+    test('an extremely large per-entry TTL override does not overflow or '
+        'corrupt expiry accounting', () async {
+      final cache = TTLCache<String, String>(
+        ttl: const Duration(seconds: 5),
+        clock: fakeClock,
+      );
+
+      await cache.set(
+        'long',
+        'value-long',
+        ttl: const Duration(days: 365 * 100),
+      );
+      fakeNow = fakeNow.add(const Duration(days: 365 * 10)); // 10 years
+
+      expect(await cache.get('long'), equals('value-long'));
+    });
   });
 
   group('TTLCache - getKeys()', () {

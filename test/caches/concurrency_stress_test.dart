@@ -203,6 +203,101 @@ void main() {
       expect(await cache.size, lessThanOrEqualTo(maxSize));
     });
 
+    test('hundreds of concurrent mixed operations against a weight-bounded '
+        'WeightedLRUCache never exceed maxWeight and leave the cache in a '
+        'usable state', () async {
+      const maxWeight = 50;
+      final cache = WeightedLRUCache<String, int>(
+        weigher: (key, value) => value,
+        maxWeight: maxWeight,
+      );
+      final keyPool = List.generate(10, (i) => 'k$i');
+      final random = Random(13);
+
+      final operations = List.generate(500, (i) {
+        final key = keyPool[random.nextInt(keyPool.length)];
+        // Weights stay well under maxWeight individually (1-9), so no
+        // single write is ever unconditionally rejected — only capacity
+        // pressure from the aggregate should ever trigger eviction.
+        final weight = 1 + random.nextInt(9);
+        switch (random.nextInt(4)) {
+          case 0:
+            return () => cache.set(key, weight);
+          case 1:
+            return () => cache.get(key);
+          case 2:
+            return () => cache.remove(key);
+          default:
+            return () => cache.getOrCompute(key, () async => weight);
+        }
+      });
+
+      await Future.wait(operations.map((op) => op())).timeout(
+        _timeout,
+        onTimeout: () => fail(
+          'the mixed-op stress run against a weight-bounded '
+          'WeightedLRUCache never completed',
+        ),
+      );
+
+      expect(await cache.currentWeight, lessThanOrEqualTo(maxWeight));
+
+      // Confirm the cache is still fully usable afterward — a leaked,
+      // never-released lock would hang this instead of failing an
+      // assertion.
+      await cache
+          .set('sentinel', 1)
+          .timeout(
+            _timeout,
+            onTimeout: () =>
+                fail('cache is unusable (lock leaked?) after the stress run'),
+          );
+      expect(await cache.get('sentinel'), equals(1));
+    });
+
+    test('concurrent get()/set() traffic on a MonitoredTTLCache never '
+        'deadlocks with its own background sweep timer', () async {
+      final cache = MonitoredTTLCache<String, int>(
+        ttl: const Duration(milliseconds: 20),
+        sweepInterval: const Duration(milliseconds: 5),
+      );
+      final keyPool = List.generate(8, (i) => 'k$i');
+      final random = Random(17);
+
+      final operations = List.generate(300, (i) {
+        final key = keyPool[random.nextInt(keyPool.length)];
+        switch (random.nextInt(3)) {
+          case 0:
+            return () => cache.set(key, i);
+          case 1:
+            return () => cache.get(key);
+          default:
+            return () => cache.getOrCompute(key, () async => i);
+        }
+      });
+
+      await Future.wait(operations.map((op) => op())).timeout(
+        _timeout,
+        onTimeout: () => fail(
+          'concurrent traffic on a MonitoredTTLCache racing its own sweep '
+          'timer never completed — a sweep firing mid-operation could '
+          'deadlock on the shared instance lock',
+        ),
+      );
+
+      cache.dispose();
+
+      // Confirm the cache is still fully usable afterward.
+      await cache
+          .set('sentinel', 999)
+          .timeout(
+            _timeout,
+            onTimeout: () =>
+                fail('cache is unusable (lock leaked?) after the stress run'),
+          );
+      expect(await cache.get('sentinel'), equals(999));
+    });
+
     test('MonitoredLRUCache: hit/miss/total-request counts stay exactly '
         'consistent under heavy concurrent get() traffic', () async {
       final cache = MonitoredLRUCache<String, int>(maxSize: 20);

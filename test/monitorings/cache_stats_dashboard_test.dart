@@ -253,6 +253,33 @@ void main() {
       expect('░'.allMatches(output).length, equals(20));
     });
 
+    // DashboardSnapshot's Duration fields (unlike hitRate) have no clamping
+    // or validation anywhere — they are never expected to be negative in
+    // practice, but nothing enforces that either. This confirms the
+    // internal _formatDuration() helper degrades gracefully (no crash, no
+    // thrown exception) rather than assuming that guarantee holds.
+    test('does not throw when a latency Duration is negative', () {
+      expect(
+        () => formatDashboard(
+          _makeSnap(p50Latency: const Duration(milliseconds: -5)),
+        ),
+        returnsNormally,
+      );
+    });
+
+    // Same idea for an extreme (but plausible after a long GC pause or a
+    // stalled valueFactory) large latency — the formatted string can end up
+    // far wider than the panel's fixed content width, so this only checks
+    // for a crash/exception, not for the box-drawing staying visually
+    // aligned (which the fixed-width row() padding does not guarantee for
+    // arbitrarily long content).
+    test('does not throw when a latency Duration is extremely large', () {
+      expect(
+        () => formatDashboard(_makeSnap(p99Latency: const Duration(days: 365))),
+        returnsNormally,
+      );
+    });
+
     test('output includes capturedAt under Captured at: label', () {
       final capturedAt = DateTime(2026, 5, 15, 16, 10, 0);
       final output = formatDashboard(_makeSnap(capturedAt: capturedAt));

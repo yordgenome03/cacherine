@@ -68,6 +68,38 @@ class _KeysAccessCountingStore<K, V> implements CacheStore<K, V> {
   void clear() => _inner.clear();
 }
 
+/// Wraps a [CacheStore] and pretends no victim is ever selectable — used to
+/// verify [Cache]'s eviction loop stays safe (no infinite loop, no crash)
+/// against a [CacheStore] implementation that cannot honor an eviction
+/// request, rather than assuming every store always can.
+class _NeverEvictsStore<K, V> implements CacheStore<K, V> {
+  _NeverEvictsStore(this._inner);
+  final CacheStore<K, V> _inner;
+
+  @override
+  Iterable<K> get keys => _inner.keys;
+  @override
+  int get length => _inner.length;
+  @override
+  bool get removesOnAccess => _inner.removesOnAccess;
+  @override
+  bool containsKey(K key) => _inner.containsKey(key);
+  @override
+  V? peek(K key) => _inner.peek(key);
+  @override
+  V? access(K key) => _inner.access(key);
+  @override
+  void put(K key, V value) => _inner.put(key, value);
+  @override
+  K? selectVictim({K? excluding}) => null;
+  @override
+  (K, V)? evictOne({K? excluding}) => null;
+  @override
+  bool remove(K key) => _inner.remove(key);
+  @override
+  void clear() => _inner.clear();
+}
+
 void main() {
   group('Cache engine — composed weight + TTL + LRU', () {
     test('an already-expired entry is purged and its slot reclaimed before a '
@@ -363,6 +395,82 @@ void main() {
         throwsStateError,
       );
       expect(await cache.get('b'), equals('ok'));
+    });
+  });
+
+  group('Cache — weight boundary and degenerate-store behavior', () {
+    // Regression coverage: the facade-level tests (weighted_lru_cache_test
+    // and simple_weighted_lru_cache_test) already confirm this behavior for
+    // WeightedLRUCache/SimpleWeightedLRUCache, but the composable Cache
+    // engine itself — which every one of those facades delegates to — never
+    // had a direct test for it. set() silently no-ops on an oversized write
+    // (documented, intentional, unlike getOrSet()/update() which throw); an
+    // existing value at that key must be left untouched, not cleared.
+    test('set() on an existing key whose new value is oversized leaves the '
+        'old value in place — a true no-op, not a clear-then-reject', () {
+      final cache = Cache<String, String>(
+        store: LRUStore<String, String>(),
+        weigher: _lengthWeigher,
+        maxWeight: 5,
+      );
+      cache.set('a', 'ok'); // weight 2, fits
+      cache.set('a', 'toolong'); // weight 7 > maxWeight; rejected
+
+      expect(cache.get('a'), equals('ok'));
+      expect(cache.currentWeight, equals(2));
+    });
+
+    test('an entry whose weight is exactly maxWeight is accepted', () {
+      final cache = Cache<String, String>(
+        store: LRUStore<String, String>(),
+        weigher: _lengthWeigher,
+        maxWeight: 5,
+      );
+      cache.set('a', 'aaaaa'); // weight 5 == maxWeight
+      expect(cache.get('a'), equals('aaaaa'));
+      expect(cache.currentWeight, equals(5));
+    });
+
+    // Documents current behavior rather than guarding against a bug: a
+    // weigher/explicit weight of 0 never makes exceedsWeight() true (0 added
+    // to currentWeight never increases it), so with no maxSize configured,
+    // zero-weight entries accumulate without bound or eviction.
+    test('zero-weight entries accumulate without bound when maxSize is not '
+        'set', () {
+      final cache = Cache<String, int>(
+        store: LRUStore<String, int>(),
+        weigher: (key, value) => 0,
+        maxWeight: 1,
+      );
+      for (var i = 0; i < 500; i++) {
+        cache.set('key$i', i);
+      }
+      expect(cache.currentWeight, equals(0));
+      expect(cache.getKeys().length, equals(500));
+      expect(cache.get('key0'), equals(0));
+      expect(cache.get('key499'), equals(499));
+    });
+
+    // Regression/safety coverage: Cache's contract assumes a well-behaved
+    // CacheStore, but its eviction loop in _write() must not spin forever or
+    // crash if evictOne() ever reports "nothing evictable" while capacity is
+    // still exceeded (e.g. a buggy custom CacheStore). It should instead
+    // give up evicting and let currentWeight temporarily exceed maxWeight,
+    // rather than dropping the write or looping without bound.
+    test('a store that can never select a victim does not deadlock or loop '
+        'forever — the write proceeds and currentWeight exceeds maxWeight', () {
+      final cache = Cache<String, String>(
+        store: _NeverEvictsStore(LRUStore<String, String>()),
+        weigher: _lengthWeigher,
+        maxWeight: 10,
+      );
+
+      cache.set('a', 'aaaaa'); // weight 5, fits
+      cache.set('b', 'bbbbbbbb'); // weight 8; 5+8=13 > 10 but nothing evicts
+
+      expect(cache.get('a'), equals('aaaaa'));
+      expect(cache.get('b'), equals('bbbbbbbb'));
+      expect(cache.currentWeight, equals(13)); // over maxWeight(10)
     });
   });
 
@@ -824,6 +932,70 @@ void main() {
       expect(await cache.get('seed'), isNull);
       expect(await cache.get('a'), equals(1));
     });
+
+    // Regression coverage: the test above only exercises reentrancy through
+    // an *overridden* set() calling back into the instance. A caller-supplied
+    // valueFactory/update callback — an ordinary, unsubclassed use of
+    // getOrCompute()/update() — can just as easily call back into the same
+    // instance's own methods (get/set/getOrCompute/update) while the lock is
+    // already held for the outer call. Since the lock is reentrant, this
+    // must not deadlock; these pin that down for get(), set(), and a nested
+    // getOrCompute() on a different key, all invoked directly from inside
+    // the callback rather than from a subclass override.
+    test('a valueFactory that calls get() on the same cache instance does '
+        'not deadlock', () async {
+      final cache = AsyncCache<String, int>(
+        Cache(store: LRUStore<String, int>()),
+      );
+      await cache.set('other', 100);
+
+      final result = await cache
+          .getOrCompute('a', () async {
+            final other = await cache.get('other');
+            return other! + 1;
+          })
+          .timeout(const Duration(seconds: 2));
+
+      expect(result, equals(101));
+      expect(await cache.get('a'), equals(101));
+    });
+
+    test('a valueFactory that calls set() on the same cache instance does '
+        'not deadlock', () async {
+      final cache = AsyncCache<String, int>(
+        Cache(store: LRUStore<String, int>()),
+      );
+
+      final result = await cache
+          .getOrCompute('a', () async {
+            await cache.set('side-effect', 7);
+            return 1;
+          })
+          .timeout(const Duration(seconds: 2));
+
+      expect(result, equals(1));
+      expect(await cache.get('a'), equals(1));
+      expect(await cache.get('side-effect'), equals(7));
+    });
+
+    test('an update callback that calls getOrCompute() on a different key '
+        'of the same cache instance does not deadlock', () async {
+      final cache = AsyncCache<String, int>(
+        Cache(store: LRUStore<String, int>()),
+      );
+      await cache.set('a', 1);
+
+      final result = await cache
+          .update('a', (v) async {
+            final b = await cache.getOrCompute('b', () async => 10);
+            return v + b;
+          })
+          .timeout(const Duration(seconds: 2));
+
+      expect(result, equals(11));
+      expect(await cache.get('a'), equals(11));
+      expect(await cache.get('b'), equals(10));
+    });
   });
 
   group('Cache — unbounded configuration', () {
@@ -1001,6 +1173,100 @@ void main() {
       // insertion/recency order exactly as set() left it.
       cache.set('c', '3');
       expect(cache.getKeys(), equals(['b', 'c']));
+    });
+
+    // Regression coverage: the clock-call-count tests above only prove the
+    // batch shares a single `now` snapshot — they never exercise a batch
+    // that actually mixes live and expired keys, so the *data* returned
+    // (not just the clock-read count) was never pinned down.
+    test('Cache.getAll() excludes keys that expired before the shared clock '
+        'snapshot while still returning keys that are live', () {
+      var now = DateTime(2024);
+      final cache = Cache<String, String>(
+        store: LRUStore<String, String>(),
+        ttl: const Duration(seconds: 10),
+        clock: () => now,
+      );
+      cache.set('a', '1');
+      cache.set('b', '2', ttl: const Duration(seconds: 1)); // expires sooner
+      cache.set('c', '3');
+
+      now = now.add(const Duration(seconds: 2)); // only 'b' has expired
+
+      expect(cache.getAll(['a', 'b', 'c']), equals({'a': '1', 'c': '3'}));
+      // The expired key was purged as a side effect, not merely skipped.
+      expect(cache.containsKey('b'), isFalse);
+    });
+
+    test('Cache.removeWhere() never invokes the predicate for a key that '
+        'expired before the shared clock snapshot, and it is already gone', () {
+      var now = DateTime(2024);
+      final cache = Cache<String, String>(
+        store: LRUStore<String, String>(),
+        ttl: const Duration(seconds: 10),
+        clock: () => now,
+      );
+      cache.set('a', '1');
+      cache.set('b', '2', ttl: const Duration(seconds: 1));
+      cache.set('c', '3');
+
+      now = now.add(const Duration(seconds: 2)); // only 'b' has expired
+
+      final tested = <String>[];
+      cache.removeWhere((key, value) {
+        tested.add(key);
+        return false;
+      });
+
+      expect(tested, unorderedEquals(['a', 'c'])); // 'b' never visited
+      expect(cache.containsKey('b'), isFalse);
+      expect(cache.get('a'), equals('1'));
+      expect(cache.get('c'), equals('3'));
+    });
+
+    test('AsyncCache.getAll() excludes keys that expired before the shared '
+        'clock snapshot while still returning keys that are live', () async {
+      var now = DateTime(2024);
+      final cache = AsyncCache<String, String>(
+        Cache(
+          store: LRUStore<String, String>(),
+          ttl: const Duration(seconds: 10),
+          clock: () => now,
+        ),
+      );
+      await cache.set('a', '1');
+      await cache.set('b', '2', ttl: const Duration(seconds: 1));
+      await cache.set('c', '3');
+
+      now = now.add(const Duration(seconds: 2));
+
+      expect(await cache.getAll(['a', 'b', 'c']), equals({'a': '1', 'c': '3'}));
+    });
+
+    test('AsyncCache.removeWhere() never invokes the predicate for a key '
+        'that expired before the shared clock snapshot', () async {
+      var now = DateTime(2024);
+      final cache = AsyncCache<String, String>(
+        Cache(
+          store: LRUStore<String, String>(),
+          ttl: const Duration(seconds: 10),
+          clock: () => now,
+        ),
+      );
+      await cache.set('a', '1');
+      await cache.set('b', '2', ttl: const Duration(seconds: 1));
+      await cache.set('c', '3');
+
+      now = now.add(const Duration(seconds: 2));
+
+      final tested = <String>[];
+      await cache.removeWhere((key, value) async {
+        tested.add(key);
+        return false;
+      });
+
+      expect(tested, unorderedEquals(['a', 'c']));
+      expect(await cache.containsKey('b'), isFalse);
     });
 
     test('AsyncCache.getAll() reads the clock once per key on a hit', () async {
@@ -1211,6 +1477,93 @@ void main() {
         });
       },
     );
+
+    // Regression coverage: the three cases just above pin down which reason
+    // Cache.onEvict reports when maxSize and maxWeight are both configured,
+    // but MonitoredCache wires onEvict to metrics.recordEvictionReason
+    // separately — that wiring itself is only otherwise exercised with a
+    // single limit configured (the capacity-only/weight-only tests above).
+    // These confirm the wiring also attributes correctly through
+    // MonitoredCache's own metrics snapshot when both limits are configured
+    // together, not just through the raw onEvict callback.
+    group('MonitoredCache metrics attribution when maxSize and maxWeight are '
+        'both configured', () {
+      test(
+        'is capacity when only the count limit is actually exceeded',
+        () async {
+          final cache = MonitoredCache<String, String>(
+            store: LRUStore<String, String>(),
+            maxSize: 2,
+            weigher: _lengthWeigher,
+            maxWeight: 100,
+          );
+
+          await cache.set('a', '1'); // weight 1, count 1
+          await cache.set('b', '1'); // weight 2, count 2 — at maxSize only
+          await cache.set('c', '1'); // count would exceed maxSize
+
+          final snapshot = cache.metrics.snapshot(const Duration(minutes: 1));
+          expect(
+            snapshot.evictionsPerMinuteByReason[EvictionReason.capacity],
+            greaterThan(0),
+          );
+          expect(
+            snapshot.evictionsPerMinuteByReason[EvictionReason.weight] ?? 0,
+            equals(0),
+          );
+        },
+      );
+
+      test(
+        'is weight when only the weight limit is actually exceeded',
+        () async {
+          final cache = MonitoredCache<String, String>(
+            store: LRUStore<String, String>(),
+            maxSize: 10,
+            weigher: _lengthWeigher,
+            maxWeight: 2,
+          );
+
+          await cache.set('a', '1'); // weight 1, count 1
+          await cache.set('b', '1'); // weight 2, count 2 — at maxWeight only
+          await cache.set('c', '1'); // weight would exceed maxWeight
+
+          final snapshot = cache.metrics.snapshot(const Duration(minutes: 1));
+          expect(
+            snapshot.evictionsPerMinuteByReason[EvictionReason.weight],
+            greaterThan(0),
+          );
+          expect(
+            snapshot.evictionsPerMinuteByReason[EvictionReason.capacity] ?? 0,
+            equals(0),
+          );
+        },
+      );
+
+      test('is weight, not capacity, when the same write exceeds both '
+          'limits at once', () async {
+        final cache = MonitoredCache<String, String>(
+          store: LRUStore<String, String>(),
+          maxSize: 2,
+          weigher: _lengthWeigher,
+          maxWeight: 2,
+        );
+
+        await cache.set('a', '1'); // weight 1, count 1
+        await cache.set('b', '1'); // weight 2, count 2 — at both limits
+        await cache.set('c', '1'); // exceeds both at once
+
+        final snapshot = cache.metrics.snapshot(const Duration(minutes: 1));
+        expect(
+          snapshot.evictionsPerMinuteByReason[EvictionReason.weight],
+          greaterThan(0),
+        );
+        expect(
+          snapshot.evictionsPerMinuteByReason[EvictionReason.capacity] ?? 0,
+          equals(0),
+        );
+      });
+    });
 
     test('expiry eviction is recorded as EvictionReason.expired', () async {
       var now = DateTime(2024);

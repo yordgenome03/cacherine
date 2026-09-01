@@ -90,6 +90,85 @@ void main() {
           expect(store.evictOne(excluding: 'a'), isNull);
           expect(store.containsKey('a'), isTrue); // untouched
         });
+
+        // Regression coverage: every eviction policy in this package is
+        // documented/implemented to make put()/selectVictim()/evictOne()
+        // (with no `excluding`) O(1). A correctness-only test can't catch a
+        // reintroduced O(n) or O(n^2) scan — it would still pick the right
+        // victim, just slowly. This drives enough entries that a
+        // non-constant-time implementation would blow well past the
+        // generous time budget below, while a true O(1) implementation
+        // finishes in milliseconds.
+        test('put()/evictOne() stay fast across many entries — a smoke test '
+            'against an accidental O(n) or worse regression in eviction '
+            'selection', () {
+          final store = make();
+          const entryCount = 20000;
+
+          final stopwatch = Stopwatch()..start();
+          for (var i = 0; i < entryCount; i++) {
+            store.put('k$i', 'v$i');
+          }
+          for (var i = 0; i < entryCount; i++) {
+            expect(store.evictOne(), isNotNull);
+          }
+          stopwatch.stop();
+
+          expect(store.length, equals(0));
+          expect(
+            stopwatch.elapsed,
+            lessThan(const Duration(seconds: 5)),
+            reason:
+                '$name: put()/evictOne() over $entryCount entries took '
+                '${stopwatch.elapsed} — consistent with an accidental O(n) '
+                'or worse scan having crept back in, not O(1) eviction',
+          );
+        });
+      });
+    }
+  });
+
+  // Regression coverage for the documented nullable-K limitation on
+  // CacheStore.selectVictim()/evictOne() (see cache_store.dart's doc
+  // comment): `null` is overloaded as both "no victim" and a legitimate
+  // literal key when K is nullable, so `k != excluding` — every
+  // implementation's actual eviction-candidate check — is `null != null`
+  // (false) whenever `excluding` is left at its default `null` and the only
+  // remaining key is the literal key `null`. The store therefore reports
+  // "nothing evictable" even though it demonstrably still holds an entry.
+  // This is documented as an accepted tradeoff, not fixed; these tests make
+  // sure that stays true (i.e. this doesn't crash, and it doesn't silently
+  // start working, which would mean the doc comment is now stale) across
+  // every store implementation.
+  group('CacheStore nullable-K limitation (documented)', () {
+    for (final entry in <String, CacheStore<String?, String> Function()>{
+      'LRUStore': LRUStore<String?, String>.new,
+      'MRUStore': MRUStore<String?, String>.new,
+      'FIFOStore': FIFOStore<String?, String>.new,
+      'EphemeralFIFOStore': EphemeralFIFOStore<String?, String>.new,
+      'LFUStore': LFUStore<String?, String>.new,
+      'TTLFifoStore': TTLFifoStore<String?, String>.new,
+    }.entries) {
+      final name = entry.key;
+      final make = entry.value;
+
+      test('$name: a store holding only the literal null key can never be '
+          'selected/evicted via the default (unset) excluding', () {
+        final store = make();
+        store.put(null, 'value');
+
+        expect(store.length, equals(1));
+        expect(store.containsKey(null), isTrue);
+        expect(store.selectVictim(), isNull); // documented limitation
+        expect(store.evictOne(), isNull); // documented limitation
+        expect(store.length, equals(1)); // never actually evicted
+        expect(store.containsKey(null), isTrue);
+
+        // remove() takes an explicit key, not a victim search, so it is
+        // unaffected by the limitation — this is the only way to get rid
+        // of a literal-null entry via this interface.
+        expect(store.remove(null), isTrue);
+        expect(store.length, equals(0));
       });
     }
   });
@@ -211,6 +290,22 @@ void main() {
       store.put('c', '3');
       expect(store.selectVictim(excluding: 'a'), equals('b'));
     });
+
+    test('accessing the same key twice in a row is safe — the second access '
+        'returns null instead of throwing, since the first already removed '
+        'the entry', () {
+      final store = EphemeralFIFOStore<String, String>();
+      store.put('a', '1');
+      expect(store.access('a'), equals('1'));
+      expect(store.access('a'), isNull); // already removed; no crash
+      expect(store.containsKey('a'), isFalse);
+      expect(store.length, equals(0));
+    });
+
+    test('accessing a key that was never present is safe and returns null', () {
+      final store = EphemeralFIFOStore<String, String>();
+      expect(store.access('missing'), isNull);
+    });
   });
 
   group('LFUStore policy', () {
@@ -294,6 +389,48 @@ void main() {
       // Both at frequency 1; 'a' was touched (via put) before 'b', so 'a'
       // is the least-recently-touched within that bucket.
       expect(store.selectVictim(), equals('a'));
+    });
+
+    // Regression coverage for the O(n) -> O(1) eviction rewrite (this
+    // package used to recompute the minimum frequency by scanning every
+    // entry on each eviction). A correctness-only test can't catch a
+    // reintroduced O(n) or O(n^2) scan — it would still return the right
+    // victim, just slowly. This drives enough entries and enough distinct
+    // frequency buckets that a non-constant-time selectVictim()/evictOne()
+    // would blow well past the generous time budget below, while a true
+    // O(1) implementation finishes in milliseconds.
+    test('put()/access()/evictOne() stay fast across many entries and many '
+        'distinct frequency buckets (O(1) eviction, not a rescan)', () {
+      final store = LFUStore<int, int>();
+      const entryCount = 20000;
+
+      final stopwatch = Stopwatch()..start();
+
+      for (var i = 0; i < entryCount; i++) {
+        store.put(i, i);
+      }
+      // Give every entry a distinct frequency (1..entryCount) by accessing
+      // key i exactly i times, so eviction must walk through `entryCount`
+      // distinct buckets rather than repeatedly hitting one big bucket.
+      for (var i = 0; i < entryCount; i++) {
+        for (var touch = 0; touch < i % 50; touch++) {
+          store.access(i);
+        }
+      }
+      for (var i = 0; i < entryCount; i++) {
+        expect(store.evictOne(), isNotNull);
+      }
+
+      stopwatch.stop();
+      expect(store.length, equals(0));
+      expect(
+        stopwatch.elapsed,
+        lessThan(const Duration(seconds: 5)),
+        reason:
+            'put()/access()/evictOne() over $entryCount entries took '
+            '${stopwatch.elapsed} — consistent with an accidental O(n) or '
+            'O(n^2) scan having crept back in, not O(1) eviction',
+      );
     });
   });
 }

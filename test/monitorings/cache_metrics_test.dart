@@ -59,6 +59,32 @@ void main() {
       ); // 100th percentile = max value
     });
 
+    test('getLatencyPercentile()/averageLatency return Duration.zero with '
+        'no samples recorded', () {
+      final metrics = CacheMetrics();
+
+      expect(metrics.averageLatency, equals(Duration.zero));
+      expect(metrics.getLatencyPercentile(50), equals(Duration.zero));
+      expect(metrics.getLatencyPercentile(95), equals(Duration.zero));
+      expect(metrics.getLatencyPercentile(99), equals(Duration.zero));
+    });
+
+    test('getLatencyPercentile()/averageLatency with exactly one sample '
+        'return that sample for every percentile', () {
+      final metrics = CacheMetrics();
+      metrics.recordHit(const Duration(milliseconds: 7));
+
+      expect(metrics.averageLatency, equals(const Duration(milliseconds: 7)));
+      expect(
+        metrics.getLatencyPercentile(50),
+        equals(const Duration(milliseconds: 7)),
+      );
+      expect(
+        metrics.getLatencyPercentile(99),
+        equals(const Duration(milliseconds: 7)),
+      );
+    });
+
     // Regression coverage: the even-length median branch used to truncate
     // each of the two middle samples to whole milliseconds via
     // `.inMilliseconds` before averaging, discarding all sub-millisecond
@@ -163,6 +189,43 @@ void main() {
         expect(recentStats['evictions_per_minute'], equals(60));
       },
     );
+
+    // Regression/spec coverage: unlike evictionsPerMinute (computed from a
+    // filtered, timestamped event log), hitRate/missRate are plain
+    // cumulative counters (_hits / _totalRequests) — snapshot()'s `window`
+    // parameter never filters them. A long-past bad stretch therefore stays
+    // baked into hitRate forever, diluting only as *more* traffic
+    // accumulates, never expiring out of a recent window the way eviction
+    // stats do. The test above happens to use a 1:1 hit/miss ratio in both
+    // halves, so it can't tell a windowed rate from a cumulative one apart
+    // — this pins down the distinction directly.
+    test('hitRate/missRate are cumulative for the instance\'s lifetime, not '
+        'filtered by snapshot()\'s window — unlike evictionsPerMinute', () {
+      final metrics = CacheMetrics(clock: clock);
+
+      // An old, all-miss stretch.
+      for (var i = 0; i < 8; i++) {
+        metrics.recordMiss(Duration.zero);
+      }
+
+      now = now.add(const Duration(minutes: 10));
+
+      // A recent, all-hit stretch — if hitRate were window-filtered, a
+      // short window here would report hitRate == 1.0.
+      for (var i = 0; i < 2; i++) {
+        metrics.recordHit(Duration.zero);
+      }
+
+      final shortWindow = metrics.snapshot(const Duration(seconds: 1));
+      final longWindow = metrics.snapshot(const Duration(minutes: 30));
+
+      // Both windows see the exact same cumulative rate: 2 hits / 10
+      // total, regardless of how narrow the window is.
+      expect(shortWindow.hitRate, equals(0.2));
+      expect(longWindow.hitRate, equals(0.2));
+      expect(shortWindow.hitRate, equals(longWindow.hitRate));
+      expect(shortWindow.totalRequests, equals(longWindow.totalRequests));
+    });
   });
 
   group('CacheMetrics - Reset Functionality', () {

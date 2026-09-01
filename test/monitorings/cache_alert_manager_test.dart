@@ -79,14 +79,32 @@ void main() {
     // and 0 is below almost any positive hitRateThreshold — a cache that
     // simply hasn't served any get()/getOrCompute() yet must not be
     // mistaken for one with a 0% hit rate.
-    test('does not trigger a low hit rate alert on a freshly-constructed '
-        'cache with zero traffic', () async {
-      alertManager.monitor();
+    //
+    // The plain `receivedAlerts` isEmpty assertion below incidentally
+    // already covers every other threshold too: with zero traffic,
+    // p95/p99/averageLatency are all Duration.zero and evictionsPerMinute
+    // is 0, so — as long as every threshold in the config above stays
+    // positive, per _checkAlerts' strict `>` comparisons — none of them can
+    // fire either. This spells that out per-alert-kind (rather than relying
+    // on one `isEmpty` to imply it), so a regression names which specific
+    // alert misfired instead of just "something did".
+    test(
+      'does not trigger any alert (hit rate, miss rate, latency, or '
+      'eviction rate) on a freshly-constructed cache with zero traffic',
+      () async {
+        alertManager.monitor();
 
-      await Future.delayed(const Duration(milliseconds: 200));
+        await Future.delayed(const Duration(milliseconds: 200));
 
-      expect(receivedAlerts, isEmpty);
-    });
+        expect(receivedAlerts, isEmpty);
+        expect(receivedAlerts, isNot(anyElement(contains('hit rate'))));
+        expect(receivedAlerts, isNot(anyElement(contains('miss rate'))));
+        expect(receivedAlerts, isNot(anyElement(contains('p95 latency'))));
+        expect(receivedAlerts, isNot(anyElement(contains('p99 latency'))));
+        expect(receivedAlerts, isNot(anyElement(contains('average latency'))));
+        expect(receivedAlerts, isNot(anyElement(contains('eviction rate'))));
+      },
+    );
 
     // Regression coverage: every threshold in _checkAlerts uses a strict
     // inequality (`<`/`>`), so a metric exactly equal to its threshold must
