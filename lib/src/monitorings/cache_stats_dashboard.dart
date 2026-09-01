@@ -40,8 +40,8 @@ class CacheStatsDashboard {
   ///
   /// [window] controls only the eviction-rate calculation (passed to
   /// [CacheMetrics.getRecentStats]). Hit rate, miss rate, latency percentiles,
-  /// and [totalRequests] are cumulative counters maintained by [CacheMetrics]
-  /// and are not scoped to [window].
+  /// and [CacheMetrics.totalRequests] are cumulative counters maintained by
+  /// [CacheMetrics] and are not scoped to [window].
   ///
   /// Throws [ArgumentError] if [window] is zero or negative.
   DashboardSnapshot snapshot(Duration window) {

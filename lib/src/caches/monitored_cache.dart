@@ -136,7 +136,7 @@ class MonitoredCache<K, V> extends AsyncCache<K, V>
   /// `presentValue` but — being unmonitored — does not record traffic
   /// metrics. This override additionally records the same hit/miss/latency
   /// metrics as an equivalent [getOrCompute] call, per `doc/monitored_cache.md`
-  /// ("`update()` follow[s] `getOrCompute()` hit/miss semantics").
+  /// ("`update()` follows `getOrCompute()` hit/miss semantics").
   ///
   /// **Known limitation:** see [getOrCompute] — the same
   /// not-dispatched-through-[get] tradeoff applies here, and a hit is not

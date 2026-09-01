@@ -107,7 +107,7 @@ class MonitoredMRUCache<K, V> extends ThreadSafeCache<K, V>
 
   /// Updates the value for [key] and returns the new value.
   ///
-  /// Per `doc/monitored_cache.md` ("`update()` follow[s] `getOrCompute()`
+  /// Per `doc/monitored_cache.md` ("`update()` follows `getOrCompute()`
   /// hit/miss semantics"), this records the same hit/miss/latency metrics as
   /// an equivalent [getOrCompute] call, and — see [getOrCompute] — writes
   /// through this class's own [set] under the same reentrant lock.

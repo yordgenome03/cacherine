@@ -160,7 +160,7 @@ class MonitoredTTLCache<K, V> extends ThreadSafeTTLCacheInterface<K, V>
   /// reads [key] with separate `containsKey`/`get` calls, each independently
   /// acquiring the lock and reading the clock; this override reads via a
   /// single snapshot instead (see [getOrCompute] for why), and — per
-  /// `doc/monitored_cache.md` ("`update()` follow[s] `getOrCompute()`
+  /// `doc/monitored_cache.md` ("`update()` follows `getOrCompute()`
   /// hit/miss semantics") — records the same hit/miss/latency metrics as an
   /// equivalent [getOrCompute] call, writing through this class's own [set]
   /// under the same reentrant lock.
