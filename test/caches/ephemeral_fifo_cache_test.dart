@@ -233,6 +233,22 @@ void main() {
       );
     });
 
+    // A repeated key within a single getAll() call is a distinct scenario
+    // from the concurrent-race test below: here the *same* call consumes
+    // the entry on its first occurrence, so the second occurrence is a
+    // same-call miss — but the result map still reflects the first,
+    // successful read, since nothing overwrites it afterward. Confirms
+    // that shape rather than a duplicate silently dropping the key or
+    // throwing on the destructive store.
+    test('getAll() with a repeated key returns the value once, consumed after '
+        'the call', () async {
+      final cache = EphemeralFIFOCache<String, int>(10);
+      await cache.set('a', 1);
+
+      expect(await cache.getAll(['a', 'a', 'a']), equals({'a': 1}));
+      expect(await cache.containsKey('a'), isFalse);
+    });
+
     test('setAll() stores every entry', () async {
       final cache = EphemeralFIFOCache<String, int>(10);
       await cache.setAll({'a': 1, 'b': 2});

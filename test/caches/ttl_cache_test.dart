@@ -137,6 +137,25 @@ void main() {
 
       expect(await cache.get('key'), equals('value'));
     });
+
+    // Every other test here advances the clock well past or well short of
+    // the TTL; this pins down the exact boundary instant instead, where an
+    // off-by-one in the expiry comparison could flip either way without any
+    // other test noticing. An entry set with a 10s TTL is documented as
+    // expired once its TTL has "elapsed" — read literally that's the
+    // instant `now == expiry`, which this asserts.
+    test('entry is expired at the exact instant TTL elapses (now == '
+        'expiry)', () async {
+      final cache = TTLCache<String, String>(
+        ttl: const Duration(seconds: 10),
+        clock: fakeClock,
+      );
+
+      await cache.set('key', 'value');
+      fakeNow = fakeNow.add(const Duration(seconds: 10));
+
+      expect(await cache.get('key'), isNull);
+    });
   });
 
   group('TTLCache - Per-entry TTL (set with ttl:)', () {

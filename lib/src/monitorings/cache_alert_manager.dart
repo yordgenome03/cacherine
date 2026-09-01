@@ -40,17 +40,24 @@ class CacheAlertManager {
 
   /// Checks the cache statistics and triggers alerts if any thresholds are exceeded.
   void _checkAlerts(CacheMetricsSnapshot stats) {
-    if (stats.hitRate < config.hitRateThreshold) {
-      config.notifyCallback(
-        'Warning: Low hit rate detected. '
-        'Actual: ${stats.hitRate} (Threshold: ${config.hitRateThreshold})',
-      );
-    }
-    if (stats.missRate > config.missRateThreshold) {
-      config.notifyCallback(
-        'Warning: High miss rate detected. '
-        'Actual: ${stats.missRate} (Threshold: ${config.missRateThreshold})',
-      );
+    // hitRate/missRate are both 0 when totalRequests is 0 (CacheMetrics'
+    // documented zero-traffic default), which would otherwise make a cache
+    // that simply hasn't served any get() yet look like it has a 0% hit
+    // rate and immediately trip hitRateThreshold. Neither rate means
+    // anything without at least one request to compute it from.
+    if (stats.totalRequests > 0) {
+      if (stats.hitRate < config.hitRateThreshold) {
+        config.notifyCallback(
+          'Warning: Low hit rate detected. '
+          'Actual: ${stats.hitRate} (Threshold: ${config.hitRateThreshold})',
+        );
+      }
+      if (stats.missRate > config.missRateThreshold) {
+        config.notifyCallback(
+          'Warning: High miss rate detected. '
+          'Actual: ${stats.missRate} (Threshold: ${config.missRateThreshold})',
+        );
+      }
     }
     if (stats.p95Latency.inMilliseconds > config.p95LatencyThreshold) {
       config.notifyCallback(

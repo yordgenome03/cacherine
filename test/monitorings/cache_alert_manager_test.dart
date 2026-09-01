@@ -74,6 +74,20 @@ void main() {
       );
     });
 
+    // Regression test: hitRate/missRate both default to 0 when
+    // totalRequests is 0 (CacheMetrics' documented zero-traffic behavior),
+    // and 0 is below almost any positive hitRateThreshold — a cache that
+    // simply hasn't served any get()/getOrCompute() yet must not be
+    // mistaken for one with a 0% hit rate.
+    test('does not trigger a low hit rate alert on a freshly-constructed '
+        'cache with zero traffic', () async {
+      alertManager.monitor();
+
+      await Future.delayed(const Duration(milliseconds: 200));
+
+      expect(receivedAlerts, isEmpty);
+    });
+
     // Regression coverage: every threshold in _checkAlerts uses a strict
     // inequality (`<`/`>`), so a metric exactly equal to its threshold must
     // NOT alert. Every existing test above only exercises "well past" the
@@ -345,6 +359,13 @@ void main() {
     test('Monitor checks at the correct interval', () async {
       final metrics = CacheMetrics();
       final receivedAlerts = [];
+
+      // A persistently low (but genuine — totalRequests > 0) hit rate, so
+      // every periodic check re-evaluates and re-fires the same alert.
+      // Zero-traffic would no longer do this on its own now that
+      // CacheAlertManager skips the hit/miss-rate checks when
+      // totalRequests == 0 (see "does not trigger ... zero traffic" above).
+      metrics.recordMiss(Duration.zero);
 
       final config = CacheAlertConfig(
         notifyCallback: receivedAlerts.add,

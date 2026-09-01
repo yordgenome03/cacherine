@@ -169,6 +169,23 @@ void main() {
       );
     });
 
+    test('getAll with an empty keys iterable returns an empty map', () {
+      final cache = _DefaultSimpleCache<String, int>();
+
+      cache.set('a', 1);
+
+      expect(cache.getAll(<String>[]), isEmpty);
+    });
+
+    test('getAll with a repeated key is idempotent for a non-destructive '
+        'cache', () {
+      final cache = _DefaultSimpleCache<String, int>();
+
+      cache.set('a', 1);
+
+      expect(cache.getAll(['a', 'a', 'a']), equals({'a': 1}));
+    });
+
     test(
       'getAll omits null returned after containsKey for non-nullable values',
       () {

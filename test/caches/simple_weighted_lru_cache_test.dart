@@ -127,6 +127,48 @@ void main() {
       expect(cache.currentWeight, equals(5));
     });
 
+    // Unlike set(), which silently no-ops on a write that can never fit
+    // (the test above), update()/getOrSet() have a non-void return
+    // contract and instead throw StateError — this is Cache's own
+    // documented behavior, inherited unchanged since
+    // SimpleWeightedLRUCache extends it directly, but was never exercised
+    // through this subclass.
+    test('An oversized update() throws StateError instead of silently '
+        'rejecting, and leaves the existing value untouched', () {
+      final cache = SimpleWeightedLRUCache<String, String>(
+        maxWeight: 10,
+        weigher: _lengthWeigher,
+      );
+
+      cache.set('key1', 'aaaaa'); // weight 5, fits
+
+      expect(
+        () => cache.update('key1', (v) => 'value1', weight: 999),
+        throwsStateError,
+      );
+
+      expect(cache.get('key1'), equals('aaaaa'));
+      expect(cache.currentWeight, equals(5));
+    });
+
+    test(
+      'An oversized getOrSet() miss throws StateError and stores nothing',
+      () {
+        final cache = SimpleWeightedLRUCache<String, String>(
+          maxWeight: 10,
+          weigher: _lengthWeigher,
+        );
+
+        expect(
+          () => cache.getOrSet('key1', () => 'value1', weight: 999),
+          throwsStateError,
+        );
+
+        expect(cache.containsKey('key1'), isFalse);
+        expect(cache.currentWeight, equals(0));
+      },
+    );
+
     test('maxSize is enforced alongside maxWeight', () {
       final cache = SimpleWeightedLRUCache<String, String>(
         maxWeight: 1000,
@@ -200,6 +242,21 @@ void main() {
         () => cache.set('key1', 'value1', weight: -1),
         throwsArgumentError,
       );
+    });
+
+    // A weigher is user-supplied and can throw (e.g. a bug in a
+    // size-estimation function). No prior test exercised this — confirms
+    // the exception propagates without leaving a partial entry behind.
+    test('a throwing weigher leaves the cache untouched', () {
+      final cache = SimpleWeightedLRUCache<String, String>(
+        maxWeight: 10,
+        weigher: (key, value) => throw StateError('boom'),
+      );
+
+      expect(() => cache.set('key1', 'value1'), throwsStateError);
+
+      expect(cache.containsKey('key1'), isFalse);
+      expect(cache.currentWeight, equals(0));
     });
   });
 }

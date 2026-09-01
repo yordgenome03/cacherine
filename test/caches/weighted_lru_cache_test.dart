@@ -100,6 +100,45 @@ void main() {
       expect(await cache.currentWeight, equals(5));
     });
 
+    // Unlike set(), which silently no-ops on a write that can never fit
+    // (the test above), update()/getOrCompute() have a non-void return
+    // contract and instead throw StateError — this is AsyncCache's own
+    // documented behavior, inherited unchanged since WeightedLRUCache
+    // extends it directly, but was never exercised through this subclass.
+    test('An oversized update() throws StateError instead of silently '
+        'rejecting, and leaves the existing value untouched', () async {
+      final cache = WeightedLRUCache<String, String>(
+        maxWeight: 10,
+        weigher: _lengthWeigher,
+      );
+
+      await cache.set('key1', 'aaaaa'); // weight 5, fits
+
+      await expectLater(
+        () => cache.update('key1', (v) async => 'value1', weight: 999),
+        throwsStateError,
+      );
+
+      expect(await cache.get('key1'), equals('aaaaa'));
+      expect(await cache.currentWeight, equals(5));
+    });
+
+    test('An oversized getOrCompute() miss throws StateError and stores '
+        'nothing', () async {
+      final cache = WeightedLRUCache<String, String>(
+        maxWeight: 10,
+        weigher: _lengthWeigher,
+      );
+
+      await expectLater(
+        () => cache.getOrCompute('key1', () async => 'value1', weight: 999),
+        throwsStateError,
+      );
+
+      expect(await cache.containsKey('key1'), isFalse);
+      expect(await cache.currentWeight, equals(0));
+    });
+
     test('maxSize is enforced alongside maxWeight', () async {
       final cache = WeightedLRUCache<String, String>(
         maxWeight: 1000,
@@ -189,6 +228,28 @@ void main() {
       );
 
       expect(cache.set('key1', 'value1', weight: -1), throwsArgumentError);
+    });
+
+    // A weigher is user-supplied and can throw (e.g. a bug in a
+    // size-estimation function). No prior test exercised this — confirms
+    // the exception propagates without leaving a partial entry behind, and
+    // that AsyncCache's lock is released rather than leaked (a subsequent
+    // operation completes instead of hanging).
+    test('a throwing weigher leaves the cache untouched and does not leak '
+        'the lock', () async {
+      final cache = WeightedLRUCache<String, String>(
+        maxWeight: 10,
+        weigher: (key, value) => throw StateError('boom'),
+      );
+
+      await expectLater(() => cache.set('key1', 'value1'), throwsStateError);
+
+      expect(await cache.containsKey('key1'), isFalse);
+      expect(await cache.currentWeight, equals(0));
+      await expectLater(
+        cache.get('key1').timeout(const Duration(seconds: 5)),
+        completion(isNull),
+      );
     });
   });
 }
