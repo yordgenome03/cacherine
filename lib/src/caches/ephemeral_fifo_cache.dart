@@ -92,7 +92,7 @@ class EphemeralFIFOCache<K, V> extends ThreadSafeCache<K, V> {
 
   @override
   Future<V> getOrCompute(K key, FutureOr<V> Function() valueFactory) =>
-      composedGetOrCompute(_engine, key, valueFactory, set);
+      composedGetOrCompute(_engine, key, containsKey, get, valueFactory, set);
 
   @override
   Future<V> update(
@@ -102,6 +102,8 @@ class EphemeralFIFOCache<K, V> extends ThreadSafeCache<K, V> {
   }) => composedUpdate(
     _engine,
     key,
+    containsKey,
+    get,
     update,
     ifAbsent: ifAbsent,
     writeThrough: set,

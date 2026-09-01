@@ -122,19 +122,36 @@ class MonitoredTTLCache<K, V> extends ThreadSafeTTLCacheInterface<K, V>
   /// the store), but writes through this class's own [set] instead of the
   /// engine directly — safe from deadlock because that lock is reentrant —
   /// so a subclass override of [set] still runs.
+  ///
+  /// Deliberately does **not** dispatch its presence check through this
+  /// class's own [containsKey]/[get] (unlike the non-TTL `Monitored*Cache`
+  /// legacy facades' shared `monitoredGetOrCompute`): two separate calls
+  /// would each independently read the clock, reopening the TTL
+  /// check-then-fetch race [Cache.presentValue] exists to close. A subclass
+  /// override of [containsKey]/[get] is therefore not observed by this
+  /// method's own presence check — only by direct calls to them — the same
+  /// documented tradeoff [getAll]/[removeWhere] below make.
   @override
   Future<V> getOrCompute(
     K key,
     FutureOr<V> Function() valueFactory, {
     Duration? ttl,
-  }) {
+  }) async {
     _engine.engine.validateSetArgs(ttl: ttl);
-    return monitoredGetOrCompute(
-      key,
-      _engine,
-      valueFactory,
-      (k, v) => set(k, v, ttl: ttl),
-    );
+    var found = false;
+    return await monitoredGet(key, () async {
+          return await _engine.lock.synchronized(() async {
+            final (f, existing) = _engine.engine.presentValue(key);
+            if (f) {
+              found = true;
+              return existing;
+            }
+            final value = await valueFactory();
+            await set(key, value, ttl: ttl);
+            return value;
+          });
+        }, found: () => found)
+        as V;
   }
 
   /// Updates the value for [key] and returns the new value.
@@ -142,25 +159,38 @@ class MonitoredTTLCache<K, V> extends ThreadSafeTTLCacheInterface<K, V>
   /// The inherited [ThreadSafeTTLCacheInterface] default checks presence and
   /// reads [key] with separate `containsKey`/`get` calls, each independently
   /// acquiring the lock and reading the clock; this override reads via a
-  /// single snapshot instead, and — per `doc/monitored_cache.md` ("`update()`
-  /// follow[s] `getOrCompute()` hit/miss semantics") — records the same
-  /// hit/miss/latency metrics as an equivalent [getOrCompute] call, writing
-  /// through this class's own [set] under the same reentrant lock.
+  /// single snapshot instead (see [getOrCompute] for why), and — per
+  /// `doc/monitored_cache.md` ("`update()` follow[s] `getOrCompute()`
+  /// hit/miss semantics") — records the same hit/miss/latency metrics as an
+  /// equivalent [getOrCompute] call, writing through this class's own [set]
+  /// under the same reentrant lock.
   @override
   Future<V> update(
     K key,
     FutureOr<V> Function(V value) update, {
     FutureOr<V> Function()? ifAbsent,
     Duration? ttl,
-  }) {
+  }) async {
     _engine.engine.validateSetArgs(ttl: ttl);
-    return monitoredUpdate(
-      key,
-      _engine,
-      update,
-      writeThrough: (k, v) => set(k, v, ttl: ttl),
-      ifAbsent: ifAbsent,
-    );
+    var found = false;
+    return await monitoredGet(key, () async {
+          return await _engine.lock.synchronized(() async {
+            final (f, existing) = _engine.engine.presentValue(key);
+            if (f) {
+              found = true;
+              final value = await update(existing as V);
+              await set(key, value, ttl: ttl);
+              return value;
+            }
+            if (ifAbsent == null) {
+              throw StateError('Cannot update missing cache key: $key');
+            }
+            final value = await ifAbsent();
+            await set(key, value, ttl: ttl);
+            return value;
+          });
+        }, found: () => found)
+        as V;
   }
 
   /// Retrieves values for all currently present [keys].

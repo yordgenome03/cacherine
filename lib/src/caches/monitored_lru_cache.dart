@@ -103,7 +103,7 @@ class MonitoredLRUCache<K, V> extends ThreadSafeCache<K, V>
   /// lock is reentrant — so a subclass override of [set] still runs.
   @override
   Future<V> getOrCompute(K key, FutureOr<V> Function() valueFactory) =>
-      monitoredGetOrCompute(key, _engine, valueFactory, set);
+      monitoredGetOrCompute(key, _engine, containsKey, get, valueFactory, set);
 
   /// Updates the value for [key] and returns the new value.
   ///
@@ -119,6 +119,8 @@ class MonitoredLRUCache<K, V> extends ThreadSafeCache<K, V>
   }) => monitoredUpdate(
     key,
     _engine,
+    containsKey,
+    get,
     update,
     writeThrough: set,
     ifAbsent: ifAbsent,

@@ -4,7 +4,6 @@ import '../interfaces/disposable.dart';
 import '../interfaces/periodic_sweeper.dart';
 import '../interfaces/thread_safe_ttl_cache.dart';
 import '../stores/ttl_fifo_store.dart';
-import '_composed_engine_ops.dart';
 import 'async_cache.dart';
 import 'cache.dart';
 
@@ -88,6 +87,15 @@ class TTLCache<K, V> extends ThreadSafeTTLCacheInterface<K, V>
   /// the store), but writes through this class's own [set] instead of the
   /// engine directly — safe from deadlock because that lock is reentrant —
   /// so a subclass override of [set] still runs.
+  ///
+  /// Deliberately does **not** dispatch its presence check through this
+  /// class's own [containsKey]/[get] (unlike the non-TTL legacy facades'
+  /// shared `composedGetOrCompute`): two separate calls would each
+  /// independently read the clock, reopening the TTL check-then-fetch race
+  /// [Cache.presentValue] exists to close. A subclass override of
+  /// [containsKey]/[get] is therefore not observed by this method's own
+  /// presence check — only by direct calls to [containsKey]/[get] themselves
+  /// — the same documented tradeoff [getAll]/[removeWhere] below make.
   @override
   Future<V> getOrCompute(
     K key,
@@ -95,12 +103,13 @@ class TTLCache<K, V> extends ThreadSafeTTLCacheInterface<K, V>
     Duration? ttl,
   }) {
     _engine.engine.validateSetArgs(ttl: ttl);
-    return composedGetOrCompute(
-      _engine,
-      key,
-      valueFactory,
-      (k, v) => set(k, v, ttl: ttl),
-    );
+    return _engine.lock.synchronized(() async {
+      final (found, existing) = _engine.engine.presentValue(key);
+      if (found) return existing as V;
+      final value = await valueFactory();
+      await set(key, value, ttl: ttl);
+      return value;
+    });
   }
 
   /// Updates the value for [key] and returns the new value.
@@ -108,8 +117,8 @@ class TTLCache<K, V> extends ThreadSafeTTLCacheInterface<K, V>
   /// The inherited [ThreadSafeTTLCacheInterface] default checks presence and
   /// reads [key] with separate `containsKey`/`get` calls, each independently
   /// acquiring the lock and reading the clock; this override reads via a
-  /// single snapshot instead, and — see [getOrCompute] — writes through this
-  /// class's own [set] under the same reentrant lock.
+  /// single snapshot instead (see [getOrCompute] for why), and writes through
+  /// this class's own [set] under the same reentrant lock.
   @override
   Future<V> update(
     K key,
@@ -118,13 +127,20 @@ class TTLCache<K, V> extends ThreadSafeTTLCacheInterface<K, V>
     Duration? ttl,
   }) {
     _engine.engine.validateSetArgs(ttl: ttl);
-    return composedUpdate(
-      _engine,
-      key,
-      update,
-      ifAbsent: ifAbsent,
-      writeThrough: (k, v) => set(k, v, ttl: ttl),
-    );
+    return _engine.lock.synchronized(() async {
+      final (found, existing) = _engine.engine.presentValue(key);
+      if (found) {
+        final value = await update(existing as V);
+        await set(key, value, ttl: ttl);
+        return value;
+      }
+      if (ifAbsent == null) {
+        throw StateError('Cannot update missing cache key: $key');
+      }
+      final value = await ifAbsent();
+      await set(key, value, ttl: ttl);
+      return value;
+    });
   }
 
   /// Retrieves values for all currently present [keys].

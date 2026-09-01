@@ -94,6 +94,53 @@ class _LoggingMonitoredTTLCache<K, V> extends MonitoredTTLCache<K, V> {
   }
 }
 
+// Regression coverage for https://github.com/yordgenome03/cacherine/pull/69
+// review comment on pullrequestreview-5073040192: getOrCompute()/update() on
+// the five non-TTL legacy facades (LRUCache and its siblings) used to check
+// presence and read by calling the composed engine directly instead of this
+// class's own (overridable) containsKey()/get() — bypassing a downstream
+// subclass's override of either, unlike the pre-existing
+// ThreadSafeCache.getOrCompute()/update() defaults these facades stand in
+// for (which always dispatched through containsKey()/get()). None of these
+// five facades configure a ttl, so — unlike TTLCache — there is no
+// check-then-fetch race for two separate dispatched calls to reintroduce.
+
+class _LoggingReadsLRUCache<K, V> extends LRUCache<K, V> {
+  final reads = <String>[];
+
+  _LoggingReadsLRUCache(super.maxSize);
+
+  @override
+  Future<V?> get(K key) {
+    reads.add('get($key)');
+    return super.get(key);
+  }
+
+  @override
+  Future<bool> containsKey(K key) {
+    reads.add('containsKey($key)');
+    return super.containsKey(key);
+  }
+}
+
+class _LoggingReadsMonitoredLRUCache<K, V> extends MonitoredLRUCache<K, V> {
+  final reads = <String>[];
+
+  _LoggingReadsMonitoredLRUCache({required super.maxSize, super.alertConfig});
+
+  @override
+  Future<V?> get(K key) {
+    reads.add('get($key)');
+    return super.get(key);
+  }
+
+  @override
+  Future<bool> containsKey(K key) {
+    reads.add('containsKey($key)');
+    return super.containsKey(key);
+  }
+}
+
 void main() {
   group('Legacy facade subclass compatibility', () {
     test('SimpleLRUCache subclass can override set(key, value) with the '
@@ -189,6 +236,78 @@ void main() {
       expect(cache.setCalls, equals(['a']));
       await cache.update('a', (v) async => v + 1);
       expect(cache.setCalls, equals(['a', 'a']));
+    });
+
+    test('LRUCache subclass\'s containsKey()/get() overrides see every read '
+        'made through getOrCompute()/update()', () async {
+      final cache = _LoggingReadsLRUCache<String, int>(10);
+      await cache.set('a', 1);
+      cache.reads.clear();
+
+      // Miss: only containsKey() runs (get() is never reached on a miss).
+      expect(await cache.getOrCompute('b', () async => 2), equals(2));
+      expect(cache.reads, equals(['containsKey(b)']));
+      cache.reads.clear();
+
+      // Hit: containsKey() then get() both dispatch through the overrides.
+      expect(await cache.getOrCompute('a', () async => 99), equals(1));
+      expect(cache.reads, equals(['containsKey(a)', 'get(a)']));
+      cache.reads.clear();
+
+      expect(await cache.update('a', (v) async => v + 1), equals(2));
+      expect(cache.reads, equals(['containsKey(a)', 'get(a)']));
+    });
+
+    test('MonitoredLRUCache subclass\'s containsKey()/get() overrides see '
+        'every read made through getOrCompute()/update()', () async {
+      final cache = _LoggingReadsMonitoredLRUCache<String, int>(maxSize: 10);
+      addTearDown(cache.dispose);
+      await cache.set('a', 1);
+      cache.reads.clear();
+
+      expect(await cache.getOrCompute('b', () async => 2), equals(2));
+      expect(cache.reads, equals(['containsKey(b)']));
+      cache.reads.clear();
+
+      expect(await cache.getOrCompute('a', () async => 99), equals(1));
+      expect(cache.reads, equals(['containsKey(a)', 'get(a)']));
+      cache.reads.clear();
+
+      expect(await cache.update('a', (v) async => v + 1), equals(2));
+      expect(cache.reads, equals(['containsKey(a)', 'get(a)']));
+    });
+
+    // Regression coverage for the same review comment: MonitoredLRUCache's
+    // update()/getOrCompute() used to wrap the *whole* check-compute-store
+    // sequence in one monitoredGet() call, so no hit/miss was recorded at
+    // all if the caller's update/valueFactory callback threw afterward.
+    // Dispatching the presence check through this class's own (already
+    // monitored) get() records the hit as soon as the read resolves —
+    // before the callback that might throw ever runs — matching the
+    // pre-existing ThreadSafeCache.update() default.
+    test('MonitoredLRUCache records a hit for update() even if the updater '
+        'throws after the read', () async {
+      final cache = MonitoredLRUCache<String, int>(maxSize: 10);
+      addTearDown(cache.dispose);
+      await cache.set('a', 1);
+
+      await expectLater(
+        cache.update('a', (v) => throw Exception('boom')),
+        throwsException,
+      );
+      expect(cache.metrics.hits, equals(1));
+      expect(cache.metrics.misses, equals(0));
+    });
+
+    test('MonitoredLRUCache records a hit for getOrCompute() even though '
+        'it never calls valueFactory on a hit', () async {
+      final cache = MonitoredLRUCache<String, int>(maxSize: 10);
+      addTearDown(cache.dispose);
+      await cache.set('a', 1);
+
+      expect(await cache.getOrCompute('a', () async => 99), equals(1));
+      expect(cache.metrics.hits, equals(1));
+      expect(cache.metrics.misses, equals(0));
     });
   });
 }
