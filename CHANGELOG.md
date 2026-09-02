@@ -1,4 +1,4 @@
-## Unreleased - Composable Cache Engine, Weight-Based Eviction
+## 2.5.0 - Composable Cache Engine, Weight-Based Eviction
 
 ### Maintenance
 
