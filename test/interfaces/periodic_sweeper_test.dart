@@ -86,5 +86,44 @@ void main() {
       await Future<void>.delayed(Duration.zero); // let it run to completion
       expect(sweepCompleted, isTrue);
     });
+
+    test('startSweep() after dispose() does nothing — the sweep never '
+        'starts, matching the documented "does nothing if dispose has '
+        'already been called" contract', () async {
+      final sweeper = _TestSweeper();
+      sweeper.dispose();
+
+      var calls = 0;
+      sweeper.startSweep(const Duration(milliseconds: 10), () => calls++);
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+
+      expect(calls, equals(0));
+    });
+
+    // Regression coverage: startSweep() wraps onSweep as
+    // `unawaited(Future.sync(onSweep))`. unawaited() is purely a lint marker
+    // — it attaches no error handler — so an exception thrown by onSweep
+    // becomes an unhandled asynchronous error rather than being silently
+    // swallowed, and (since the Timer.periodic callback itself never
+    // throws) the timer keeps firing on subsequent ticks regardless.
+    test('an exception thrown by onSweep surfaces as an unhandled zone error '
+        'and does not stop the timer from firing again', () async {
+      final sweeper = _TestSweeper();
+      var calls = 0;
+      final caughtErrors = <Object>[];
+
+      await runZonedGuarded(() async {
+        sweeper.startSweep(const Duration(milliseconds: 20), () {
+          calls++;
+          if (calls == 1) throw StateError('boom');
+        });
+        await Future<void>.delayed(const Duration(milliseconds: 90));
+        sweeper.dispose();
+      }, (error, stack) => caughtErrors.add(error));
+
+      expect(caughtErrors, hasLength(1));
+      expect(caughtErrors.single, isA<StateError>());
+      expect(calls, greaterThanOrEqualTo(3));
+    });
   });
 }

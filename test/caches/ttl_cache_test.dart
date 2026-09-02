@@ -92,6 +92,47 @@ void main() {
         );
       },
     );
+
+    test('getOrCompute() throws ArgumentError for an invalid ttl: override '
+        'without invoking valueFactory', () async {
+      final cache = TTLCache<String, String>(
+        ttl: const Duration(seconds: 10),
+        clock: fakeClock,
+      );
+
+      var factoryCalls = 0;
+      await expectLater(
+        () => cache.getOrCompute('key', () async {
+          factoryCalls++;
+          return 'value';
+        }, ttl: Duration.zero),
+        throwsArgumentError,
+      );
+      expect(factoryCalls, equals(0));
+    });
+
+    test('update() throws ArgumentError for an invalid ttl: override without '
+        'invoking ifAbsent', () async {
+      final cache = TTLCache<String, String>(
+        ttl: const Duration(seconds: 10),
+        clock: fakeClock,
+      );
+
+      var ifAbsentCalls = 0;
+      await expectLater(
+        () => cache.update(
+          'key',
+          (v) async => v,
+          ifAbsent: () async {
+            ifAbsentCalls++;
+            return 'value';
+          },
+          ttl: const Duration(seconds: -1),
+        ),
+        throwsArgumentError,
+      );
+      expect(ifAbsentCalls, equals(0));
+    });
   });
 
   group('TTLCache - Global TTL', () {

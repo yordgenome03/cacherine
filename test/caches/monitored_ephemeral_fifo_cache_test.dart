@@ -312,6 +312,38 @@ void main() {
       },
     );
 
+    // Regression coverage: unlike EphemeralFIFOCache (which delegates to
+    // AsyncCache.getAll), this facade hand-rolls getAll() directly over
+    // presentValue() — see the class doc comment — so the "same key
+    // consumed by its first occurrence within a single call" behavior isn't
+    // inherited from anywhere else and needs its own test here.
+    test('getAll() with a repeated key returns the value once, consumed '
+        'after the call', () async {
+      final cache = MonitoredEphemeralFIFOCache<String, int>(
+        maxSize: 10,
+        alertConfig: config,
+      );
+      await cache.set('a', 1);
+
+      expect(await cache.getAll(['a', 'a', 'a']), equals({'a': 1}));
+      expect(await cache.containsKey('a'), isFalse);
+    });
+
+    // Regression coverage: getAll()'s `if (value != null || null is V)`
+    // branch (preserving a stored null for a nullable V rather than
+    // dropping it) is exercised via get() elsewhere in this file, but that
+    // is a separately hand-rolled code path — this pins it down via getAll()
+    // specifically.
+    test('getAll() preserves a stored null for a nullable V', () async {
+      final cache = MonitoredEphemeralFIFOCache<String, String?>(
+        maxSize: 10,
+        alertConfig: config,
+      );
+      await cache.set('a', null);
+
+      expect(await cache.getAll(['a']), equals({'a': null}));
+    });
+
     test(
       'removeWhere() removes matching entries and records eviction',
       () async {

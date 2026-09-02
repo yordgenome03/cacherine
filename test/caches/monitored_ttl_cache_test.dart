@@ -62,6 +62,17 @@ void main() {
       );
     });
 
+    test('throws ArgumentError for negative sweepInterval', () {
+      expect(
+        () => MonitoredTTLCache<String, String>(
+          ttl: const Duration(seconds: 10),
+          sweepInterval: const Duration(seconds: -1),
+          alertConfig: config,
+        ),
+        throwsArgumentError,
+      );
+    });
+
     test(
       'set() throws ArgumentError for zero per-entry ttl override',
       () async {
@@ -78,6 +89,68 @@ void main() {
         );
       },
     );
+
+    test(
+      'set() throws ArgumentError for negative per-entry ttl override',
+      () async {
+        final cache = MonitoredTTLCache<String, String>(
+          ttl: const Duration(seconds: 10),
+          clock: fakeClock,
+          alertConfig: config,
+        );
+        addTearDown(cache.dispose);
+
+        await expectLater(
+          () => cache.set('key', 'value', ttl: const Duration(seconds: -1)),
+          throwsArgumentError,
+        );
+      },
+    );
+
+    test('getOrCompute() throws ArgumentError for an invalid ttl: override '
+        'without invoking valueFactory', () async {
+      final cache = MonitoredTTLCache<String, String>(
+        ttl: const Duration(seconds: 10),
+        clock: fakeClock,
+        alertConfig: config,
+      );
+      addTearDown(cache.dispose);
+
+      var factoryCalls = 0;
+      await expectLater(
+        () => cache.getOrCompute('key', () async {
+          factoryCalls++;
+          return 'value';
+        }, ttl: Duration.zero),
+        throwsArgumentError,
+      );
+      expect(factoryCalls, equals(0));
+    });
+
+    test('update() throws ArgumentError for an invalid ttl: override without '
+        'invoking ifAbsent', () async {
+      final cache = MonitoredTTLCache<String, String>(
+        ttl: const Duration(seconds: 10),
+        clock: fakeClock,
+        alertConfig: config,
+      );
+      addTearDown(cache.dispose);
+
+      var ifAbsentCalls = 0;
+      await expectLater(
+        () => cache.update(
+          'key',
+          (v) async => v,
+          ifAbsent: () async {
+            ifAbsentCalls++;
+            return 'value';
+          },
+          ttl: const Duration(seconds: -1),
+        ),
+        throwsArgumentError,
+      );
+      expect(ifAbsentCalls, equals(0));
+    });
   });
 
   group('MonitoredTTLCache - TTL behavior', () {
@@ -437,6 +510,23 @@ void main() {
       expect(cache.metrics.hits, equals(2));
       expect(cache.metrics.misses, equals(0)); // 'missing' is omitted, not a
       // recorded miss, per doc/monitored_cache.md.
+    });
+
+    // Regression coverage: getAll()'s `if (value != null || null is V)`
+    // branch (preserving a stored null for a nullable V rather than
+    // dropping it) is exercised via get() elsewhere in this file, but that
+    // is a separately hand-rolled code path — this pins it down via getAll()
+    // specifically.
+    test('getAll() preserves a stored null for a nullable V', () async {
+      final cache = MonitoredTTLCache<String, String?>(
+        ttl: const Duration(seconds: 100),
+        alertConfig: config,
+      );
+      addTearDown(cache.dispose);
+
+      await cache.set('a', null);
+
+      expect(await cache.getAll(['a']), equals({'a': null}));
     });
 
     test('removeWhere() records manual evictions via remove()', () async {
