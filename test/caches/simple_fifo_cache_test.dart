@@ -93,6 +93,23 @@ void main() {
       expect(cache.getKeys(), containsAll(['A', 'B', 'C']));
       expect(cache.get('B'), equals('newValueB'));
     });
+
+    // Regression coverage for
+    // https://github.com/yordgenome03/cacherine/pull/69#discussion_r3910691651:
+    // a literal `null` key used to be unevictable via maxSize capacity
+    // eviction — Cache._write's eviction loop mistook a legitimately-found
+    // null-keyed victim for "nothing evictable" and gave up, leaving the
+    // cache over capacity instead of evicting it.
+    test('a null key is evicted like any other key once maxSize is '
+        'exceeded', () {
+      final cache = SimpleFIFOCache<int?, String>(1);
+      cache.set(null, 'a');
+      cache.set(1, 'b');
+
+      expect(cache.getKeys().length, equals(1));
+      expect(cache.containsKey(null), isFalse);
+      expect(cache.get(1), equals('b'));
+    });
   });
 
   group('SimpleFIFOCache - Additional Behavior Validation', () {
@@ -168,6 +185,60 @@ void main() {
       cache.remove('missing');
       expect(cache.get('key1'), equals('value1'));
       expect(cache.getKeys().length, equals(1));
+    });
+  });
+
+  // Regression coverage: these methods are implemented by forwarding to an
+  // internal Cache engine (composition, not inheritance — see
+  // https://github.com/yordgenome03/cacherine/pull/69 review feedback on
+  // preserving this facade's original, narrower method surface), so each
+  // needs its own direct test rather than relying on Cache's own coverage.
+  group('SimpleFIFOCache - full interface coverage', () {
+    test('getAll() returns present keys, omitting missing ones', () {
+      final cache = SimpleFIFOCache<String, int>(10);
+      cache.set('a', 1);
+      cache.set('b', 2);
+      expect(cache.getAll(['a', 'b', 'missing']), equals({'a': 1, 'b': 2}));
+    });
+
+    test('setAll() stores every entry', () {
+      final cache = SimpleFIFOCache<String, int>(10);
+      cache.setAll({'a': 1, 'b': 2});
+      expect(cache.get('a'), equals(1));
+      expect(cache.get('b'), equals(2));
+    });
+
+    test('update() applies the function to an existing value', () {
+      final cache = SimpleFIFOCache<String, int>(10);
+      cache.set('a', 1);
+      expect(cache.update('a', (v) => v + 1), equals(2));
+      expect(cache.get('a'), equals(2));
+    });
+
+    test('update() uses ifAbsent to seed a missing key', () {
+      final cache = SimpleFIFOCache<String, int>(10);
+      expect(cache.update('a', (v) => v + 1, ifAbsent: () => 5), equals(5));
+      expect(cache.get('a'), equals(5));
+    });
+
+    test('update() throws StateError for a missing key with no ifAbsent', () {
+      final cache = SimpleFIFOCache<String, int>(10);
+      expect(() => cache.update('a', (v) => v + 1), throwsStateError);
+    });
+
+    test('removeWhere() removes matching entries', () {
+      final cache = SimpleFIFOCache<String, int>(10);
+      cache.set('a', 1);
+      cache.set('b', 2);
+      cache.removeWhere((key, value) => value == 1);
+      expect(cache.get('a'), isNull);
+      expect(cache.get('b'), equals(2));
+    });
+
+    test('toString() reflects current entries', () {
+      final cache = SimpleFIFOCache<String, int>(10);
+      cache.set('a', 1);
+      expect(cache.toString(), contains('a'));
     });
   });
 }

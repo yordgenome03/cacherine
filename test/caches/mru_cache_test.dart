@@ -110,4 +110,87 @@ void main() {
       await expectLater(cache.remove('key1'), completes);
     });
   });
+
+  // Regression coverage: these methods are implemented by forwarding to an
+  // internal AsyncCache engine (composition, not inheritance — see
+  // https://github.com/yordgenome03/cacherine/pull/69 review feedback on
+  // preserving this facade's original, narrower method surface), so each
+  // needs its own direct test rather than relying on AsyncCache's own
+  // coverage.
+  group('MRUCache - full interface coverage', () {
+    test('getAll() returns present keys, omitting missing ones', () async {
+      final cache = MRUCache<String, int>(10);
+      await cache.set('a', 1);
+      await cache.set('b', 2);
+      expect(
+        await cache.getAll(['a', 'b', 'missing']),
+        equals({'a': 1, 'b': 2}),
+      );
+    });
+
+    test('setAll() stores every entry', () async {
+      final cache = MRUCache<String, int>(10);
+      await cache.setAll({'a': 1, 'b': 2});
+      expect(await cache.get('a'), equals(1));
+      expect(await cache.get('b'), equals(2));
+    });
+
+    test(
+      'getOrCompute() computes and stores only when the key is absent',
+      () async {
+        final cache = MRUCache<String, int>(10);
+        var calls = 0;
+        Future<int> compute() async {
+          calls++;
+          return 1;
+        }
+
+        expect(await cache.getOrCompute('a', compute), equals(1));
+        expect(await cache.getOrCompute('a', compute), equals(1));
+        expect(calls, equals(1));
+      },
+    );
+
+    test('update() applies the function to an existing value', () async {
+      final cache = MRUCache<String, int>(10);
+      await cache.set('a', 1);
+      expect(await cache.update('a', (v) async => v + 1), equals(2));
+      expect(await cache.get('a'), equals(2));
+    });
+
+    test('update() uses ifAbsent to seed a missing key', () async {
+      final cache = MRUCache<String, int>(10);
+      expect(
+        await cache.update('a', (v) async => v + 1, ifAbsent: () async => 5),
+        equals(5),
+      );
+      expect(await cache.get('a'), equals(5));
+    });
+
+    test(
+      'update() throws StateError for a missing key with no ifAbsent',
+      () async {
+        final cache = MRUCache<String, int>(10);
+        await expectLater(
+          cache.update('a', (v) async => v + 1),
+          throwsStateError,
+        );
+      },
+    );
+
+    test('removeWhere() removes matching entries', () async {
+      final cache = MRUCache<String, int>(10);
+      await cache.set('a', 1);
+      await cache.set('b', 2);
+      await cache.removeWhere((key, value) async => value == 1);
+      expect(await cache.get('a'), isNull);
+      expect(await cache.get('b'), equals(2));
+    });
+
+    test('toString() reflects current entries', () async {
+      final cache = MRUCache<String, int>(10);
+      await cache.set('a', 1);
+      expect(cache.toString(), contains('a'));
+    });
+  });
 }

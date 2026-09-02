@@ -1,6 +1,14 @@
 import 'package:cacherine/src/caches/simple_ttl_cache.dart';
 import 'package:test/test.dart';
 
+class _ClockCounter {
+  int calls = 0;
+  DateTime call() {
+    calls++;
+    return DateTime(2024).add(Duration(microseconds: calls));
+  }
+}
+
 void main() {
   DateTime fakeNow = DateTime(2024);
   DateTime fakeClock() => fakeNow;
@@ -48,6 +56,47 @@ void main() {
         () => cache.set('key', 'value', ttl: const Duration(seconds: -1)),
         throwsArgumentError,
       );
+    });
+
+    test('getOrSet() throws ArgumentError for an invalid ttl: override without '
+        'invoking valueFactory', () {
+      final cache = SimpleTTLCache<String, String>(
+        ttl: const Duration(seconds: 10),
+        clock: fakeClock,
+      );
+
+      var factoryCalls = 0;
+      expect(
+        () => cache.getOrSet('key', () {
+          factoryCalls++;
+          return 'value';
+        }, ttl: Duration.zero),
+        throwsArgumentError,
+      );
+      expect(factoryCalls, equals(0));
+    });
+
+    test('update() throws ArgumentError for an invalid ttl: override without '
+        'invoking ifAbsent', () {
+      final cache = SimpleTTLCache<String, String>(
+        ttl: const Duration(seconds: 10),
+        clock: fakeClock,
+      );
+
+      var ifAbsentCalls = 0;
+      expect(
+        () => cache.update(
+          'key',
+          (v) => v,
+          ifAbsent: () {
+            ifAbsentCalls++;
+            return 'value';
+          },
+          ttl: const Duration(seconds: -1),
+        ),
+        throwsArgumentError,
+      );
+      expect(ifAbsentCalls, equals(0));
     });
   });
 
@@ -281,6 +330,85 @@ void main() {
       cache.set('a', '1');
 
       expect(cache.toString(), contains('a: 1'));
+    });
+  });
+
+  group('SimpleTTLCache - check-then-fetch atomicity', () {
+    // Regression coverage: getOrSet()/update()/getAll()/removeWhere() used to
+    // be inherited from SimpleTTLCacheInterface/SimpleCache defaults, which
+    // check presence via containsKey() and then separately fetch via
+    // get()/peek() — each call reads the clock independently, racing with
+    // expiry. These are now overridden to delegate to the composed Cache
+    // engine's presentValue()/presentPeek(), which read the clock once. A
+    // clock that advances by 1 microsecond on every call turns "two reads
+    // instead of one" into an observable difference.
+    test('getOrSet() reads the clock once per call on a hit', () {
+      final counter = _ClockCounter();
+      final cache = SimpleTTLCache<String, String>(
+        ttl: const Duration(seconds: 100),
+        clock: counter.call,
+      );
+      cache.set('a', 'value');
+      final before = counter.calls;
+      expect(cache.getOrSet('a', () => 'unused'), equals('value'));
+      expect(counter.calls - before, equals(1));
+    });
+
+    test('update() reads the clock exactly twice on a hit', () {
+      final counter = _ClockCounter();
+      final cache = SimpleTTLCache<String, int>(
+        ttl: const Duration(seconds: 100),
+        clock: counter.call,
+      );
+      cache.set('a', 1);
+      final before = counter.calls;
+      expect(cache.update('a', (v) => v + 1), equals(2));
+      expect(counter.calls - before, equals(2));
+    });
+
+    test('update() uses ifAbsent to seed a missing key', () {
+      final cache = SimpleTTLCache<String, int>(
+        ttl: const Duration(seconds: 100),
+      );
+      expect(cache.update('a', (v) => v + 1, ifAbsent: () => 5), equals(5));
+      expect(cache.get('a'), equals(5));
+    });
+
+    test('update() throws StateError for a missing key with no ifAbsent', () {
+      final cache = SimpleTTLCache<String, int>(
+        ttl: const Duration(seconds: 100),
+      );
+      expect(() => cache.update('missing', (v) => v), throwsStateError);
+    });
+
+    test('getAll() reads the clock once for the whole batch, not once per '
+        'key', () {
+      final counter = _ClockCounter();
+      final cache = SimpleTTLCache<String, String>(
+        ttl: const Duration(seconds: 100),
+        clock: counter.call,
+      );
+      cache.set('a', '1');
+      cache.set('b', '2');
+      final before = counter.calls;
+      expect(cache.getAll(['a', 'b']), equals({'a': '1', 'b': '2'}));
+      expect(counter.calls - before, equals(1));
+    });
+
+    test('removeWhere() reads the clock once for the whole batch (plus once '
+        'for getKeys())', () {
+      final counter = _ClockCounter();
+      final cache = SimpleTTLCache<String, String>(
+        ttl: const Duration(seconds: 100),
+        clock: counter.call,
+      );
+      cache.set('a', '1');
+      cache.set('b', '2');
+      final before = counter.calls;
+      cache.removeWhere((key, value) => false);
+      // 1 read for getKeys() + 1 shared read for the whole presentPeek()
+      // batch — not 1 per key.
+      expect(counter.calls - before, equals(2));
     });
   });
 }

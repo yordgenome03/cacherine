@@ -1,14 +1,6 @@
-import 'dart:collection';
-
 import '../interfaces/simple_cache.dart';
-
-final class _LFUNode<K, V> extends LinkedListEntry<_LFUNode<K, V>> {
-  K key;
-  V value;
-  int freq;
-
-  _LFUNode(this.key, this.value, this.freq);
-}
+import '../stores/lfu_store.dart';
+import 'cache.dart';
 
 /// **Non-thread-safe LFU (Least Frequently Used) Cache**
 ///
@@ -19,11 +11,19 @@ final class _LFUNode<K, V> extends LinkedListEntry<_LFUNode<K, V>> {
 ///
 /// It follows the LFU (Least Frequently Used) eviction policy,
 /// meaning **when the cache exceeds `maxSize`, the least frequently used item is removed.**
+///
+/// Wraps a [Cache] configured with an [LFUStore] — internally a composed
+/// engine rather than a subclass, so this class keeps its original
+/// `set`/`getOrSet`/`update`/`setAll` signatures (no `weight`/`ttl`
+/// parameters) rather than inheriting [Cache]'s wider ones. Only the
+/// primitive operations ([getKeys], [get], [peek], [containsKey], [set],
+/// [remove], [clear]) forward to the engine directly; bulk/compound helpers
+/// ([getAll], [setAll], [getOrSet], [update], [removeWhere]) are left to
+/// [SimpleCache]'s default implementations, which call this class's own
+/// (overridable) methods — so a subclass overriding, say, [set] still has
+/// that override invoked by [setAll]/[update]/etc.
 class SimpleLFUCache<K, V> extends SimpleCache<K, V> {
-  final int maxSize;
-  final HashMap<K, _LFUNode<K, V>> _keyMap = HashMap();
-  final HashMap<int, LinkedList<_LFUNode<K, V>>> _freqMap = HashMap();
-  int _minFreq = 0;
+  final Cache<K, V> _engine;
 
   /// **Creates an instance of [SimpleLFUCache] with the specified maximum size.**
   ///
@@ -31,151 +31,33 @@ class SimpleLFUCache<K, V> extends SimpleCache<K, V> {
   ///   If the cache exceeds this size, the **least frequently used item** is removed following the LFU policy.
   ///
   /// **Throws [ArgumentError] if [maxSize] is 0 or less.**
-  SimpleLFUCache(this.maxSize) {
-    if (maxSize <= 0) {
-      throw ArgumentError('maxSize must be greater than 0.');
-    }
-  }
+  SimpleLFUCache(int maxSize)
+    : _engine = Cache(store: LFUStore<K, V>(), maxSize: maxSize);
 
-  /// Returns all keys currently stored in the cache.
-  ///
-  /// **Note:** The iteration order is unspecified (backed by [HashMap]).
-  /// Do not rely on insertion order or any other stable ordering.
-  ///
-  /// **This method is not thread-safe.**
+  /// The maximum number of entries in the cache.
+  int get maxSize => _engine.maxSize!;
+
   @override
-  Iterable<K> getKeys() => _keyMap.keys;
+  Iterable<K> getKeys() => _engine.getKeys();
 
-  // Increments node frequency and moves it to the next bucket. Updates _minFreq
-  // if the vacated bucket was the minimum and is now empty.
-  void _promoteFreq(_LFUNode<K, V> node) {
-    final oldFreq = node.freq;
-    final oldBucket = _freqMap[oldFreq]!;
-    node.unlink();
-    if (oldBucket.isEmpty) {
-      _freqMap.remove(oldFreq);
-      if (oldFreq == _minFreq) _minFreq = oldFreq + 1;
-    }
-    node.freq = oldFreq + 1;
-    _freqMap
-        .putIfAbsent(node.freq, LinkedList<_LFUNode<K, V>>.new)
-        .addFirst(node);
-  }
-
-  // Moves node to the head of its current frequency bucket (LRU recency
-  // update) without changing its frequency or _minFreq. Called by set() to
-  // record that the key was touched, enabling correct LRU tiebreak on eviction.
-  void _refreshInBucket(_LFUNode<K, V> node) {
-    final bucket = _freqMap[node.freq]!;
-    node.unlink();
-    bucket.addFirst(node);
-  }
-
-  /// Retrieves the value associated with the specified key and increments its access count.
-  ///
-  /// - **Returns `null` if the key does not exist.**
-  ///
-  /// **This method is not thread-safe.**
   @override
-  V? get(K key) {
-    final node = _keyMap[key];
-    if (node == null) return null;
-    _promoteFreq(node);
-    return node.value;
-  }
+  V? get(K key) => _engine.get(key);
 
-  /// Retrieves [key] without incrementing its frequency.
-  ///
-  /// **This method is not thread-safe.**
   @override
-  V? peek(K key) => _keyMap[key]?.value;
+  V? peek(K key) => _engine.peek(key);
 
-  /// Checks whether [key] exists in the cache without incrementing its frequency.
-  ///
-  /// **This method is not thread-safe.**
   @override
-  bool containsKey(K key) => _keyMap.containsKey(key);
+  bool containsKey(K key) => _engine.containsKey(key);
 
-  /// Stores the specified key-value pair in the cache.
-  ///
-  /// - If `set()` is called on an existing key, **its value is updated**,
-  ///   **its usage count is not reset**, and **its recency is refreshed**
-  ///   (the entry moves to the most-recently-used position within its
-  ///   frequency bucket). This means a `set()` call protects the entry from
-  ///   being chosen as the eviction victim among same-frequency entries.
-  /// - If the cache exceeds **[maxSize]**, the **least frequently used element is removed** following the LFU policy.
-  ///   Among entries with the same frequency, the least recently used is evicted.
-  ///
-  /// **This method is not thread-safe.**
   @override
-  void set(K key, V value) {
-    final existing = _keyMap[key];
-    if (existing != null) {
-      existing.value = value;
-      _refreshInBucket(existing);
-      return;
-    }
-    if (_keyMap.length >= maxSize) {
-      assert(
-        _freqMap.containsKey(_minFreq),
-        'Eviction reached with stale _minFreq=$_minFreq not present in _freqMap. '
-        'Any code path that triggers eviction must go through the new-key '
-        'insertion branch, which resets _minFreq=1.',
-      );
-      final evictBucket = _freqMap[_minFreq]!;
-      final victim = evictBucket.last;
-      victim.unlink();
-      if (evictBucket.isEmpty) _freqMap.remove(_minFreq);
-      _keyMap.remove(victim.key);
-    }
-    final node = _LFUNode(key, value, 1);
-    _keyMap[key] = node;
-    _freqMap.putIfAbsent(1, LinkedList<_LFUNode<K, V>>.new).addFirst(node);
-    _minFreq = 1;
-  }
+  void set(K key, V value) => _engine.set(key, value);
 
-  /// Removes the entry with the given key from the cache.
-  ///
-  /// - If the key does not exist, this call is a no-op.
-  /// - The frequency counter for the key is also discarded.
-  ///
-  /// **This method is not thread-safe.**
   @override
-  void remove(K key) {
-    final node = _keyMap.remove(key);
-    if (node == null) return;
-    final bucket = _freqMap[node.freq]!;
-    node.unlink();
-    if (bucket.isEmpty) {
-      _freqMap.remove(node.freq);
-      if (_keyMap.isEmpty) _minFreq = 0;
-      // If items remain, _minFreq may be stale, but set() always resets it to
-      // 1 before the next eviction, so no O(n) recomputation is needed.
-    }
-  }
+  void remove(K key) => _engine.remove(key);
 
-  /// Clears all data stored in the cache.
-  ///
-  /// - Removes all keys and values from the cache.
-  ///
-  /// **This method is not thread-safe.**
   @override
-  void clear() {
-    _keyMap.clear();
-    _freqMap.clear();
-    _minFreq = 0;
-  }
+  void clear() => _engine.clear();
 
-  /// Returns a string representation of the current cache state.
-  ///
-  /// - Outputs **key-value pairs** currently stored in the cache as a string.
-  /// - The order of pairs is unspecified (backed by [HashMap]).
-  ///
-  /// **This method is not thread-safe.**
   @override
-  String toString() {
-    return Map.fromEntries(
-      _keyMap.values.map((n) => MapEntry(n.key, n.value)),
-    ).toString();
-  }
+  String toString() => _engine.toString();
 }

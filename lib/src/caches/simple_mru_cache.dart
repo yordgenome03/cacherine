@@ -1,5 +1,6 @@
-import 'dart:collection';
 import '../interfaces/simple_cache.dart';
+import '../stores/mru_store.dart';
+import 'cache.dart';
 
 /// **Non-thread-safe MRU (Most Recently Used) Cache**
 ///
@@ -10,9 +11,19 @@ import '../interfaces/simple_cache.dart';
 ///
 /// It follows the MRU (Most Recently Used) eviction policy,
 /// meaning **when the cache exceeds `maxSize`, the most recently used item is removed.**
+///
+/// Wraps a [Cache] configured with an [MRUStore] — internally a composed
+/// engine rather than a subclass, so this class keeps its original
+/// `set`/`getOrSet`/`update`/`setAll` signatures (no `weight`/`ttl`
+/// parameters) rather than inheriting [Cache]'s wider ones. Only the
+/// primitive operations ([getKeys], [get], [peek], [containsKey], [set],
+/// [remove], [clear]) forward to the engine directly; bulk/compound helpers
+/// ([getAll], [setAll], [getOrSet], [update], [removeWhere]) are left to
+/// [SimpleCache]'s default implementations, which call this class's own
+/// (overridable) methods — so a subclass overriding, say, [set] still has
+/// that override invoked by [setAll]/[update]/etc.
 class SimpleMRUCache<K, V> extends SimpleCache<K, V> {
-  final int maxSize;
-  final LinkedHashMap<K, V> _cache = LinkedHashMap();
+  final Cache<K, V> _engine;
 
   /// **Creates an instance of [SimpleMRUCache] with the specified maximum size.**
   ///
@@ -20,101 +31,33 @@ class SimpleMRUCache<K, V> extends SimpleCache<K, V> {
   ///   If the cache exceeds this size, **the most recently used item** is removed following the MRU policy.
   ///
   /// **Throws [ArgumentError] if [maxSize] is 0 or less.**
-  SimpleMRUCache(this.maxSize) {
-    if (maxSize <= 0) {
-      throw ArgumentError('maxSize must be greater than 0.');
-    }
-  }
+  SimpleMRUCache(int maxSize)
+    : _engine = Cache(store: MRUStore<K, V>(), maxSize: maxSize);
 
-  /// Returns all keys stored in the cache.
-  ///
-  /// **This method is not thread-safe.**
+  /// The maximum number of entries in the cache.
+  int get maxSize => _engine.maxSize!;
+
   @override
-  Iterable<K> getKeys() => _cache.keys;
+  Iterable<K> getKeys() => _engine.getKeys();
 
-  /// Retrieves the value associated with the specified key.
-  ///
-  /// - If the key exists, it is **marked as "most recently used"** by removing and reinserting it.
-  /// - **Returns `null` if the key does not exist.**
-  ///
-  /// **This method is not thread-safe.**
   @override
-  V? get(K key) {
-    if (!_cache.containsKey(key)) return null;
+  V? get(K key) => _engine.get(key);
 
-    // MRU: Remove and reinsert the key to mark it as the most recently used
-    final value = _cache.remove(key);
-    _cache[key] = value as V;
-    return value;
-  }
-
-  /// Retrieves [key] without updating MRU order.
-  ///
-  /// **This method is not thread-safe.**
   @override
-  V? peek(K key) => _cache[key];
+  V? peek(K key) => _engine.peek(key);
 
-  /// Checks whether [key] exists in the cache without updating MRU order.
-  ///
-  /// **This method is not thread-safe.**
   @override
-  bool containsKey(K key) => _cache.containsKey(key);
+  bool containsKey(K key) => _engine.containsKey(key);
 
-  /// Stores the specified key-value pair in the cache.
-  ///
-  /// - If `set()` is called on an existing key, **its value is updated**,
-  ///   and **its order is updated to mark it as "recently used."**
-  /// - If the cache exceeds **[maxSize]**, the **most recently used element is removed** following the MRU policy.
-  ///
-  /// **This method is not thread-safe.**
   @override
-  void set(K key, V value) {
-    // If the key exists, remove it to update its order
-    if (_cache.containsKey(key)) {
-      _cache.remove(key);
-    } else if (_cache.length >= maxSize) {
-      _evictMRUEntry(); // Evict using MRU policy
-    }
-    // Insert the key to mark it as the most recently used
-    _cache[key] = value;
-  }
+  void set(K key, V value) => _engine.set(key, value);
 
-  /// Evicts the most recently used (MRU) entry.
-  void _evictMRUEntry() {
-    if (_cache.isEmpty) return;
-
-    // Remove the last added key (most recently used key)
-    final K mruKey = _cache.keys.last;
-    _cache.remove(mruKey);
-  }
-
-  /// Removes the entry with the given key from the cache.
-  ///
-  /// - If the key does not exist, this call is a no-op.
-  ///
-  /// **This method is not thread-safe.**
   @override
-  void remove(K key) {
-    _cache.remove(key);
-  }
+  void remove(K key) => _engine.remove(key);
 
-  /// Clears all data stored in the cache.
-  ///
-  /// - Removes all keys and values from the cache.
-  ///
-  /// **This method is not thread-safe.**
   @override
-  void clear() {
-    _cache.clear();
-  }
+  void clear() => _engine.clear();
 
-  /// Returns a string representation of the current cache state.
-  ///
-  /// - Outputs **key-value pairs** currently stored in the cache as a string.
-  ///
-  /// **This method is not thread-safe.**
   @override
-  String toString() {
-    return _cache.toString();
-  }
+  String toString() => _engine.toString();
 }

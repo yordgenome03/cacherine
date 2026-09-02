@@ -1,4 +1,5 @@
 import 'cache_metrics.dart';
+import 'eviction_reason.dart';
 
 /// Immutable point-in-time snapshot of all cache metrics.
 class DashboardSnapshot {
@@ -9,6 +10,7 @@ class DashboardSnapshot {
   final Duration p95Latency;
   final Duration p99Latency;
   final int evictionsPerMinute;
+  final Map<EvictionReason, int> evictionsPerMinuteByReason;
   final int totalRequests;
   final DateTime capturedAt;
 
@@ -22,7 +24,10 @@ class DashboardSnapshot {
     required this.evictionsPerMinute,
     required this.totalRequests,
     required this.capturedAt,
-  });
+    Map<EvictionReason, int> evictionsPerMinuteByReason = const {},
+  }) : evictionsPerMinuteByReason = Map.unmodifiable(
+         evictionsPerMinuteByReason,
+       );
 }
 
 /// Wraps a [CacheMetrics] instance to provide typed snapshots and periodic streaming.
@@ -35,8 +40,8 @@ class CacheStatsDashboard {
   ///
   /// [window] controls only the eviction-rate calculation (passed to
   /// [CacheMetrics.getRecentStats]). Hit rate, miss rate, latency percentiles,
-  /// and [totalRequests] are cumulative counters maintained by [CacheMetrics]
-  /// and are not scoped to [window].
+  /// and [CacheMetrics.totalRequests] are cumulative counters maintained by
+  /// [CacheMetrics] and are not scoped to [window].
   ///
   /// Throws [ArgumentError] if [window] is zero or negative.
   DashboardSnapshot snapshot(Duration window) {
@@ -49,6 +54,7 @@ class CacheStatsDashboard {
       p95Latency: stats.p95Latency,
       p99Latency: stats.p99Latency,
       evictionsPerMinute: stats.evictionsPerMinute,
+      evictionsPerMinuteByReason: stats.evictionsPerMinuteByReason,
       totalRequests: stats.totalRequests,
       capturedAt: stats.capturedAt,
     );

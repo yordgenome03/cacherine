@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'cache_metrics.dart';
+import 'eviction_reason.dart';
 
 void _noopAlertCallback(String _) {}
 
@@ -39,17 +40,24 @@ class CacheAlertManager {
 
   /// Checks the cache statistics and triggers alerts if any thresholds are exceeded.
   void _checkAlerts(CacheMetricsSnapshot stats) {
-    if (stats.hitRate < config.hitRateThreshold) {
-      config.notifyCallback(
-        'Warning: Low hit rate detected. '
-        'Actual: ${stats.hitRate} (Threshold: ${config.hitRateThreshold})',
-      );
-    }
-    if (stats.missRate > config.missRateThreshold) {
-      config.notifyCallback(
-        'Warning: High miss rate detected. '
-        'Actual: ${stats.missRate} (Threshold: ${config.missRateThreshold})',
-      );
+    // hitRate/missRate are both 0 when totalRequests is 0 (CacheMetrics'
+    // documented zero-traffic default), which would otherwise make a cache
+    // that simply hasn't served any get() yet look like it has a 0% hit
+    // rate and immediately trip hitRateThreshold. Neither rate means
+    // anything without at least one request to compute it from.
+    if (stats.totalRequests > 0) {
+      if (stats.hitRate < config.hitRateThreshold) {
+        config.notifyCallback(
+          'Warning: Low hit rate detected. '
+          'Actual: ${stats.hitRate} (Threshold: ${config.hitRateThreshold})',
+        );
+      }
+      if (stats.missRate > config.missRateThreshold) {
+        config.notifyCallback(
+          'Warning: High miss rate detected. '
+          'Actual: ${stats.missRate} (Threshold: ${config.missRateThreshold})',
+        );
+      }
     }
     if (stats.p95Latency.inMilliseconds > config.p95LatencyThreshold) {
       config.notifyCallback(
@@ -76,6 +84,19 @@ class CacheAlertManager {
         '(Threshold: ${config.evictionsPerMinuteThreshold} evictions/min)',
       );
     }
+    final perReasonThreshold = config.evictionsPerReasonThreshold;
+    if (perReasonThreshold != null) {
+      for (final entry in stats.evictionsPerMinuteByReason.entries) {
+        final threshold = perReasonThreshold[entry.key];
+        if (threshold != null && entry.value > threshold) {
+          config.notifyCallback(
+            'Warning: High ${entry.key.name} eviction rate detected. '
+            'Actual: ${entry.value} evictions/min '
+            '(Threshold: $threshold evictions/min)',
+          );
+        }
+      }
+    }
   }
 }
 
@@ -89,6 +110,15 @@ class CacheAlertConfig {
   final int p95LatencyThreshold;
   final int p99LatencyThreshold;
   final int evictionsPerMinuteThreshold;
+
+  /// Optional, additive per-[EvictionReason] thresholds, checked alongside
+  /// [evictionsPerMinuteThreshold]. `null` (the default) disables per-reason
+  /// alerting entirely; a reason absent from the map is simply not checked.
+  /// Useful for distinguishing an expected `expired` rate (that's what TTL is
+  /// for) from a `capacity`/`weight` rate that signals the cache is
+  /// undersized — lumping them into one aggregate threshold can mask the
+  /// latter behind harmless expiry churn.
+  final Map<EvictionReason, int>? evictionsPerReasonThreshold;
   final int averageLatencyThreshold;
   final Duration alertCheckInterval;
 
@@ -104,6 +134,7 @@ class CacheAlertConfig {
     this.p95LatencyThreshold = 200,
     this.p99LatencyThreshold = 300,
     this.evictionsPerMinuteThreshold = 1000,
+    this.evictionsPerReasonThreshold,
     this.averageLatencyThreshold = 100,
     this.alertCheckInterval = const Duration(
       minutes: 1,

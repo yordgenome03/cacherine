@@ -1,4 +1,5 @@
 import 'package:cacherine/src/monitorings/cache_metrics.dart';
+import 'package:cacherine/src/monitorings/eviction_reason.dart';
 import 'package:test/test.dart';
 
 void main() {
@@ -56,6 +57,51 @@ void main() {
         metrics.getLatencyPercentile(100).inMilliseconds,
         equals(40),
       ); // 100th percentile = max value
+    });
+
+    test('getLatencyPercentile()/averageLatency return Duration.zero with '
+        'no samples recorded', () {
+      final metrics = CacheMetrics();
+
+      expect(metrics.averageLatency, equals(Duration.zero));
+      expect(metrics.getLatencyPercentile(50), equals(Duration.zero));
+      expect(metrics.getLatencyPercentile(95), equals(Duration.zero));
+      expect(metrics.getLatencyPercentile(99), equals(Duration.zero));
+    });
+
+    test('getLatencyPercentile()/averageLatency with exactly one sample '
+        'return that sample for every percentile', () {
+      final metrics = CacheMetrics();
+      metrics.recordHit(const Duration(milliseconds: 7));
+
+      expect(metrics.averageLatency, equals(const Duration(milliseconds: 7)));
+      expect(
+        metrics.getLatencyPercentile(50),
+        equals(const Duration(milliseconds: 7)),
+      );
+      expect(
+        metrics.getLatencyPercentile(99),
+        equals(const Duration(milliseconds: 7)),
+      );
+    });
+
+    // Regression coverage: the even-length median branch used to truncate
+    // each of the two middle samples to whole milliseconds via
+    // `.inMilliseconds` before averaging, discarding all sub-millisecond
+    // precision — realistic for an in-memory cache, whose actual latencies
+    // are far below 1ms. `averageLatency` never had this truncation, so the
+    // two could (and did) disagree for the same data.
+    test('getLatencyPercentile(50) preserves sub-millisecond precision for '
+        'an even sample count', () {
+      final metrics = CacheMetrics();
+      metrics.recordHit(const Duration(microseconds: 400));
+      metrics.recordHit(const Duration(microseconds: 800));
+
+      expect(
+        metrics.getLatencyPercentile(50),
+        equals(const Duration(microseconds: 600)),
+      );
+      expect(metrics.averageLatency, equals(const Duration(microseconds: 600)));
     });
 
     test('averageLatency includes miss samples', () {
@@ -143,6 +189,43 @@ void main() {
         expect(recentStats['evictions_per_minute'], equals(60));
       },
     );
+
+    // Regression/spec coverage: unlike evictionsPerMinute (computed from a
+    // filtered, timestamped event log), hitRate/missRate are plain
+    // cumulative counters (_hits / _totalRequests) — snapshot()'s `window`
+    // parameter never filters them. A long-past bad stretch therefore stays
+    // baked into hitRate forever, diluting only as *more* traffic
+    // accumulates, never expiring out of a recent window the way eviction
+    // stats do. The test above happens to use a 1:1 hit/miss ratio in both
+    // halves, so it can't tell a windowed rate from a cumulative one apart
+    // — this pins down the distinction directly.
+    test('hitRate/missRate are cumulative for the instance\'s lifetime, not '
+        'filtered by snapshot()\'s window — unlike evictionsPerMinute', () {
+      final metrics = CacheMetrics(clock: clock);
+
+      // An old, all-miss stretch.
+      for (var i = 0; i < 8; i++) {
+        metrics.recordMiss(Duration.zero);
+      }
+
+      now = now.add(const Duration(minutes: 10));
+
+      // A recent, all-hit stretch — if hitRate were window-filtered, a
+      // short window here would report hitRate == 1.0.
+      for (var i = 0; i < 2; i++) {
+        metrics.recordHit(Duration.zero);
+      }
+
+      final shortWindow = metrics.snapshot(const Duration(seconds: 1));
+      final longWindow = metrics.snapshot(const Duration(minutes: 30));
+
+      // Both windows see the exact same cumulative rate: 2 hits / 10
+      // total, regardless of how narrow the window is.
+      expect(shortWindow.hitRate, equals(0.2));
+      expect(longWindow.hitRate, equals(0.2));
+      expect(shortWindow.hitRate, equals(longWindow.hitRate));
+      expect(shortWindow.totalRequests, equals(longWindow.totalRequests));
+    });
   });
 
   group('CacheMetrics - Reset Functionality', () {
@@ -271,6 +354,63 @@ void main() {
       },
     );
 
+    test('snapshot() stays fast even at the full maxEvictionSamples retention '
+        'cap — a coarse smoke test against an accidental O(n²) regression '
+        'in the per-snapshot window scan, not a precise benchmark', () {
+      final metrics = CacheMetrics();
+      for (var i = 0; i < CacheMetrics.maxEvictionSamples; i++) {
+        metrics.recordEviction();
+      }
+      final stopwatch = Stopwatch()..start();
+      for (var i = 0; i < 200; i++) {
+        metrics.snapshot(const Duration(minutes: 1));
+      }
+      stopwatch.stop();
+      // 200 snapshot() calls, each doing an O(n) scan of 10,000 retained
+      // samples, is comfortably sub-second on any CI machine; a regression
+      // to something quadratic (or worse) in the retained-sample count
+      // would blow well past this bound.
+      expect(stopwatch.elapsedMilliseconds, lessThan(5000));
+    });
+
+    test(
+      'a sustained eviction storm well past maxEvictionSamples still reports '
+      'a correct rate for only the requested recent window, not the full '
+      'retained history',
+      () {
+        final metrics = CacheMetrics(clock: clock);
+
+        // 15,000 evictions, one simulated second apart — 50% more than
+        // maxEvictionSamples (10,000), so the oldest 5,000 are already
+        // rolled off the retained queue by the time this finishes.
+        // Alternates reason so both buckets get exercised.
+        for (var i = 0; i < 15000; i++) {
+          metrics.recordEvictionReason(
+            i.isEven ? EvictionReason.capacity : EvictionReason.weight,
+          );
+          now = now.add(const Duration(seconds: 1));
+        }
+
+        // Only the last 60 simulated seconds of activity should count
+        // toward a 1-minute window — not the 10,000 retained samples, and
+        // definitely not all 15,000 that ever happened.
+        final snapshot = metrics.snapshot(const Duration(minutes: 1));
+        final total = snapshot.evictionsPerMinuteByReason.values.fold(
+          0,
+          (a, b) => a + b,
+        );
+        expect(total, inInclusiveRange(55, 60));
+        expect(
+          snapshot.evictionsPerMinuteByReason[EvictionReason.capacity],
+          isNotNull,
+        );
+        expect(
+          snapshot.evictionsPerMinuteByReason[EvictionReason.weight],
+          isNotNull,
+        );
+      },
+    );
+
     test(
       'getRecentStats evictions_per_minute is correct when eviction count is within cap',
       () {
@@ -321,6 +461,19 @@ void main() {
           const Duration(minutes: 1),
         )['evictions_per_minute'],
         equals(0),
+      );
+    });
+  });
+
+  group('CacheMetricsSnapshot - Immutability', () {
+    test('evictionsPerMinuteByReason cannot be mutated by callers', () {
+      final metrics = CacheMetrics();
+      metrics.recordEvictionReason(EvictionReason.capacity);
+      final snapshot = metrics.snapshot(const Duration(minutes: 1));
+
+      expect(
+        () => snapshot.evictionsPerMinuteByReason[EvictionReason.weight] = 1,
+        throwsUnsupportedError,
       );
     });
   });

@@ -1,5 +1,28 @@
+import 'dart:async';
+
 import 'package:cacherine/cacherine.dart';
 import 'package:test/test.dart';
+
+// See ephemeral_fifo_cache_test.dart's _RacyEphemeralFIFOCache for why this
+// deterministically reproduces the race: get() is destructive for this
+// store, so hooking containsKey() to trigger a concurrent get() as a side
+// effect simulates a second caller consuming the entry in the gap a
+// check-then-read default implementation would leave exposed.
+class _RacyMonitoredEphemeralFIFOCache<K, V>
+    extends MonitoredEphemeralFIFOCache<K, V> {
+  _RacyMonitoredEphemeralFIFOCache({required super.maxSize, super.alertConfig});
+
+  K? raceOnContainsKeyFor;
+
+  @override
+  Future<bool> containsKey(K key) async {
+    final result = await super.containsKey(key);
+    if (key == raceOnContainsKeyFor) {
+      await get(key);
+    }
+    return result;
+  }
+}
 
 void main() {
   group('MonitoredEphemeralFIFOCache Tests', () {
@@ -182,6 +205,207 @@ void main() {
       );
       expect(cache, isA<Disposable>());
       expect(cache.dispose, returnsNormally);
+    });
+  });
+
+  // Regression coverage: these methods are implemented directly on this
+  // class (composing an AsyncCache engine, not inheriting MonitoredCache —
+  // see https://github.com/yordgenome03/cacherine/pull/69 review feedback
+  // on preserving is CacheMonitoring<K, V>/is Disposable and this facade's
+  // original method surface), so each needs its own direct test rather than
+  // relying on MonitoredCache's own coverage.
+  group('MonitoredEphemeralFIFOCache - full interface coverage', () {
+    final config = CacheAlertConfig(notifyCallback: (_) {});
+
+    test('peek()/containsKey() report presence without recording metrics '
+        'or consuming the entry', () async {
+      final cache = MonitoredEphemeralFIFOCache<String, String>(
+        maxSize: 10,
+        alertConfig: config,
+      );
+      await cache.set('a', '1');
+      expect(await cache.peek('a'), equals('1'));
+      expect(await cache.containsKey('a'), isTrue);
+      expect(await cache.containsKey('missing'), isFalse);
+      expect(cache.metrics.hits, equals(0));
+      expect(cache.metrics.misses, equals(0));
+    });
+
+    test('setAll() stores every entry', () async {
+      final cache = MonitoredEphemeralFIFOCache<String, String>(
+        maxSize: 10,
+        alertConfig: config,
+      );
+      await cache.setAll({'a': '1', 'b': '2'});
+      expect(await cache.get('a'), equals('1'));
+      expect(await cache.get('b'), equals('2'));
+    });
+
+    test('getOrCompute() records a hit on a present key and a miss on a '
+        'computed one', () async {
+      final cache = MonitoredEphemeralFIFOCache<String, String>(
+        maxSize: 10,
+        alertConfig: config,
+      );
+      await cache.set('a', '1');
+      expect(await cache.getOrCompute('a', () async => 'x'), equals('1'));
+      expect(cache.metrics.hits, equals(1));
+
+      var calls = 0;
+      Future<String> compute() async {
+        calls++;
+        return '2';
+      }
+
+      expect(await cache.getOrCompute('b', compute), equals('2'));
+      expect(await cache.getOrCompute('b', compute), equals('2'));
+      expect(calls, equals(1));
+      expect(cache.metrics.misses, equals(1));
+    });
+
+    test('update() records a hit on an existing key and a miss via '
+        'ifAbsent', () async {
+      final cache = MonitoredEphemeralFIFOCache<String, int>(
+        maxSize: 10,
+        alertConfig: config,
+      );
+      await cache.set('a', 1);
+      expect(await cache.update('a', (v) async => v + 1), equals(2));
+      expect(cache.metrics.hits, equals(1));
+
+      expect(
+        await cache.update('b', (v) async => v, ifAbsent: () async => 9),
+        equals(9),
+      );
+      expect(cache.metrics.misses, equals(1));
+    });
+
+    test(
+      'update() throws StateError for a missing key with no ifAbsent',
+      () async {
+        final cache = MonitoredEphemeralFIFOCache<String, int>(
+          maxSize: 10,
+          alertConfig: config,
+        );
+        await expectLater(
+          cache.update('missing', (v) async => v),
+          throwsStateError,
+        );
+      },
+    );
+
+    test(
+      'getAll() records a hit per present key, omitting missing ones',
+      () async {
+        final cache = MonitoredEphemeralFIFOCache<String, String>(
+          maxSize: 10,
+          alertConfig: config,
+        );
+        await cache.set('a', '1');
+        await cache.set('b', '2');
+        expect(
+          await cache.getAll(['a', 'b', 'missing']),
+          equals({'a': '1', 'b': '2'}),
+        );
+        expect(cache.metrics.hits, equals(2));
+        expect(cache.metrics.misses, equals(0));
+      },
+    );
+
+    // Regression coverage: unlike EphemeralFIFOCache (which delegates to
+    // AsyncCache.getAll), this facade hand-rolls getAll() directly over
+    // presentValue() — see the class doc comment — so the "same key
+    // consumed by its first occurrence within a single call" behavior isn't
+    // inherited from anywhere else and needs its own test here.
+    test('getAll() with a repeated key returns the value once, consumed '
+        'after the call', () async {
+      final cache = MonitoredEphemeralFIFOCache<String, int>(
+        maxSize: 10,
+        alertConfig: config,
+      );
+      await cache.set('a', 1);
+
+      expect(await cache.getAll(['a', 'a', 'a']), equals({'a': 1}));
+      expect(await cache.containsKey('a'), isFalse);
+    });
+
+    // Regression coverage: getAll()'s `if (value != null || null is V)`
+    // branch (preserving a stored null for a nullable V rather than
+    // dropping it) is exercised via get() elsewhere in this file, but that
+    // is a separately hand-rolled code path — this pins it down via getAll()
+    // specifically.
+    test('getAll() preserves a stored null for a nullable V', () async {
+      final cache = MonitoredEphemeralFIFOCache<String, String?>(
+        maxSize: 10,
+        alertConfig: config,
+      );
+      await cache.set('a', null);
+
+      expect(await cache.getAll(['a']), equals({'a': null}));
+    });
+
+    test(
+      'removeWhere() removes matching entries and records eviction',
+      () async {
+        final cache = MonitoredEphemeralFIFOCache<String, String>(
+          maxSize: 10,
+          alertConfig: config,
+        );
+        await cache.set('a', '1');
+        await cache.set('b', '2');
+        await cache.removeWhere((key, value) async => key == 'a');
+        expect(await cache.getKeys(), equals(['b']));
+        expect(
+          cache.metrics.snapshot(const Duration(minutes: 1)).evictionsPerMinute,
+          equals(1),
+        );
+      },
+    );
+
+    test('toString() reflects current entries', () async {
+      final cache = MonitoredEphemeralFIFOCache<String, String>(
+        maxSize: 10,
+        alertConfig: config,
+      );
+      await cache.set('a', '1');
+      expect(cache.toString(), contains('a'));
+    });
+  });
+
+  group('MonitoredEphemeralFIFOCache - getAll()/removeWhere() destructive-read '
+      'race', () {
+    final config = CacheAlertConfig(notifyCallback: (_) {});
+
+    test('getAll() is not exposed to a concurrent get() landing between a '
+        'presence check and the read', () async {
+      final cache = _RacyMonitoredEphemeralFIFOCache<String, int>(
+        maxSize: 10,
+        alertConfig: config,
+      )..raceOnContainsKeyFor = 'x';
+      await cache.set('x', 1);
+      await cache.set('y', 2);
+
+      final result = await cache.getAll(['x', 'y']);
+
+      expect(result, equals({'x': 1, 'y': 2}));
+      expect(await cache.get('x'), isNull);
+      expect(await cache.get('y'), isNull);
+    });
+
+    test('removeWhere() does not throw when a key is consumed by a '
+        'concurrent get() between the presence check and the peek', () async {
+      final cache = _RacyMonitoredEphemeralFIFOCache<String, int>(
+        maxSize: 10,
+        alertConfig: config,
+      )..raceOnContainsKeyFor = 'x';
+      await cache.set('x', 1);
+      await cache.set('y', 2);
+
+      await expectLater(
+        cache.removeWhere((key, value) async => false),
+        completes,
+      );
+      expect(await cache.get('y'), equals(2));
     });
   });
 }

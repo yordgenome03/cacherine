@@ -74,6 +74,75 @@ void main() {
       );
     });
 
+    // Regression test: hitRate/missRate both default to 0 when
+    // totalRequests is 0 (CacheMetrics' documented zero-traffic behavior),
+    // and 0 is below almost any positive hitRateThreshold — a cache that
+    // simply hasn't served any get()/getOrCompute() yet must not be
+    // mistaken for one with a 0% hit rate.
+    //
+    // The plain `receivedAlerts` isEmpty assertion below incidentally
+    // already covers every other threshold too: with zero traffic,
+    // p95/p99/averageLatency are all Duration.zero and evictionsPerMinute
+    // is 0, so — as long as every threshold in the config above stays
+    // positive, per _checkAlerts' strict `>` comparisons — none of them can
+    // fire either. This spells that out per-alert-kind (rather than relying
+    // on one `isEmpty` to imply it), so a regression names which specific
+    // alert misfired instead of just "something did".
+    test(
+      'does not trigger any alert (hit rate, miss rate, latency, or '
+      'eviction rate) on a freshly-constructed cache with zero traffic',
+      () async {
+        alertManager.monitor();
+
+        await Future.delayed(const Duration(milliseconds: 200));
+
+        expect(receivedAlerts, isEmpty);
+        expect(receivedAlerts, isNot(anyElement(contains('hit rate'))));
+        expect(receivedAlerts, isNot(anyElement(contains('miss rate'))));
+        expect(receivedAlerts, isNot(anyElement(contains('p95 latency'))));
+        expect(receivedAlerts, isNot(anyElement(contains('p99 latency'))));
+        expect(receivedAlerts, isNot(anyElement(contains('average latency'))));
+        expect(receivedAlerts, isNot(anyElement(contains('eviction rate'))));
+      },
+    );
+
+    // Regression coverage: every threshold in _checkAlerts uses a strict
+    // inequality (`<`/`>`), so a metric exactly equal to its threshold must
+    // NOT alert. Every existing test above only exercises "well past" the
+    // threshold, which would not catch an accidental `<=`/`>=` flip. hitRate
+    // is a pure ratio with no time-window dependency, so this is safe from
+    // the real-clock timing jitter that would make a window-based metric
+    // (e.g. evictionsPerMinute) flaky to pin to an exact boundary.
+    test('does not alert when hitRate is exactly at the threshold — only '
+        'strictly below alerts', () async {
+      // 5 hits, 5 misses -> hitRate exactly 0.5, equal to the configured
+      // threshold.
+      for (var i = 0; i < 5; i++) {
+        metrics.recordHit(Duration.zero);
+      }
+      for (var i = 0; i < 5; i++) {
+        metrics.recordMiss(Duration.zero);
+      }
+      alertManager.monitor();
+      await Future.delayed(const Duration(milliseconds: 200));
+      expect(
+        receivedAlerts.any(
+          (alert) => alert.contains('Warning: Low hit rate detected'),
+        ),
+        isFalse,
+      );
+
+      // One more miss tips the rate just below the threshold.
+      metrics.recordMiss(Duration.zero);
+      await Future.delayed(const Duration(milliseconds: 200));
+      expect(
+        receivedAlerts.any(
+          (alert) => alert.contains('Warning: Low hit rate detected'),
+        ),
+        isTrue,
+      );
+    });
+
     test('Triggers alert when miss rate is too high', () async {
       // 80% of requests are misses
       for (int i = 0; i < 8; i++) {
@@ -195,12 +264,126 @@ void main() {
         isTrue,
       );
     });
+
+    test('Triggers a per-reason alert when evictionsPerReasonThreshold is '
+        'exceeded for that reason', () async {
+      alertManager.dispose();
+      final config = CacheAlertConfig(
+        notifyCallback: (alert) => receivedAlerts.add(alert),
+        evictionsPerMinuteThreshold: 100000, // keep the aggregate alert off
+        evictionsPerReasonThreshold: {EvictionReason.weight: 5},
+        alertCheckInterval: const Duration(seconds: 1),
+      );
+      alertManager = CacheAlertManager(metrics, config);
+
+      alertManager.monitor();
+      await Future.delayed(const Duration(milliseconds: 100));
+
+      for (int i = 0; i < 10; i++) {
+        metrics.recordEvictionReason(EvictionReason.weight);
+      }
+      // A reason with no configured threshold must never alert, even with
+      // more evictions than the reason that does have one.
+      for (int i = 0; i < 50; i++) {
+        metrics.recordEvictionReason(EvictionReason.expired);
+      }
+
+      await Future.delayed(const Duration(milliseconds: 1200));
+
+      expect(
+        receivedAlerts.any(
+          (alert) => alert.contains('Warning: High weight eviction rate'),
+        ),
+        isTrue,
+      );
+      expect(
+        receivedAlerts.any((alert) => alert.contains('expired eviction')),
+        isFalse,
+      );
+    });
+
+    // Regression coverage: same strict-inequality boundary concern as the
+    // hitRate test above, but for a window-based metric. Real-clock timing
+    // jitter would make an exact-boundary assertion flaky if the eviction
+    // count within the "last N ms" depended on wall-clock elapsed time, so
+    // this freezes CacheMetrics' clock — evictionsPerMinute then depends
+    // only on how many recordEvictionReason() calls have happened, not on
+    // how much real time passed between them and the timer tick.
+    test('does not fire a per-reason alert when that reason is exactly at '
+        'its threshold — only strictly above alerts', () async {
+      alertManager.dispose();
+      final frozenAt = DateTime(2024);
+      final frozenMetrics = CacheMetrics(clock: () => frozenAt);
+      final config = CacheAlertConfig(
+        notifyCallback: (alert) => receivedAlerts.add(alert),
+        evictionsPerMinuteThreshold: 1000000, // keep the aggregate alert off
+        evictionsPerReasonThreshold: {EvictionReason.weight: 600},
+        alertCheckInterval: const Duration(milliseconds: 100),
+      );
+      alertManager = CacheAlertManager(frozenMetrics, config);
+      alertManager.monitor();
+
+      // With a frozen clock, every recorded eviction is "at" the same
+      // instant, so it always falls inside the window — 1 eviction over a
+      // 100ms window scales to exactly 600/min (1 * 60000ms/min / 100ms),
+      // precisely at the configured threshold.
+      frozenMetrics.recordEvictionReason(EvictionReason.weight);
+      await Future.delayed(const Duration(milliseconds: 250));
+      expect(
+        receivedAlerts.any(
+          (alert) => alert.contains('Warning: High weight eviction rate'),
+        ),
+        isFalse,
+      );
+
+      // A second eviction doubles the rate to 1200/min, over the threshold.
+      frozenMetrics.recordEvictionReason(EvictionReason.weight);
+      await Future.delayed(const Duration(milliseconds: 250));
+      expect(
+        receivedAlerts.any(
+          (alert) => alert.contains('Warning: High weight eviction rate'),
+        ),
+        isTrue,
+      );
+    });
+
+    test(
+      'evictionsPerReasonThreshold defaults to null and never alerts',
+      () async {
+        alertManager.dispose();
+        final config = CacheAlertConfig(
+          notifyCallback: (alert) => receivedAlerts.add(alert),
+          hitRateThreshold: 0,
+          missRateThreshold: 1,
+          evictionsPerMinuteThreshold: 100000,
+          alertCheckInterval: const Duration(seconds: 1),
+        );
+        expect(config.evictionsPerReasonThreshold, isNull);
+        alertManager = CacheAlertManager(metrics, config);
+
+        alertManager.monitor();
+        await Future.delayed(const Duration(milliseconds: 100));
+        for (int i = 0; i < 10; i++) {
+          metrics.recordEvictionReason(EvictionReason.capacity);
+        }
+        await Future.delayed(const Duration(milliseconds: 1200));
+
+        expect(receivedAlerts, isEmpty);
+      },
+    );
   });
 
   group('CacheAlertManager - Monitor Timing', () {
     test('Monitor checks at the correct interval', () async {
       final metrics = CacheMetrics();
       final receivedAlerts = [];
+
+      // A persistently low (but genuine — totalRequests > 0) hit rate, so
+      // every periodic check re-evaluates and re-fires the same alert.
+      // Zero-traffic would no longer do this on its own now that
+      // CacheAlertManager skips the hit/miss-rate checks when
+      // totalRequests == 0 (see "does not trigger ... zero traffic" above).
+      metrics.recordMiss(Duration.zero);
 
       final config = CacheAlertConfig(
         notifyCallback: receivedAlerts.add,

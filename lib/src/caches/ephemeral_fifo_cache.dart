@@ -1,16 +1,18 @@
 import 'dart:async';
-import 'dart:collection';
-import 'package:synchronized/synchronized.dart';
 
 import '../interfaces/thread_safe_cache.dart';
+import '../stores/ephemeral_fifo_store.dart';
+import '_composed_engine_ops.dart';
+import 'async_cache.dart';
+import 'cache.dart';
 
 /// **Async-safe Ephemeral FIFO (First In, First Out) Cache**
 ///
 /// This class implements a **FIFO-based cache** with an **ephemeral property**,
 /// meaning that **values are immediately removed after being retrieved**.
 ///
-/// It extends [ThreadSafeCache] and serializes concurrent async calls on the
-/// same cache instance within the same isolate using `Lock`.
+/// It serializes concurrent async calls on the same cache instance within
+/// the same isolate using `Lock`.
 ///
 /// - **Adopts FIFO (First In, First Out) eviction policy**
 /// - **Removes the oldest element when the cache exceeds `maxSize`**
@@ -19,10 +21,30 @@ import '../interfaces/thread_safe_cache.dart';
 /// ### **Note**
 /// - **Retrieved data cannot be reused (as it is deleted upon access)**
 /// - **If you need to retain keys after access, use `FIFOCache` instead**
+///
+/// Wraps an [AsyncCache] configured with an [EphemeralFIFOStore] —
+/// internally a composed engine rather than a subclass, so this class keeps
+/// its original `set`/`getOrCompute`/`update`/`setAll` signatures (no
+/// `weight`/`ttl` parameters) rather than inheriting [AsyncCache]'s wider
+/// ones.
+///
+/// [setAll] is left to [ThreadSafeCache]'s default implementation, which
+/// calls this class's own (overridable) [set] — so a subclass override still
+/// sees every write. [getAll]/[removeWhere] are NOT left to their
+/// [ThreadSafeCache] defaults, unlike every other legacy facade: those
+/// defaults check presence and then separately read/peek, each independently
+/// acquiring the lock — but [get] here is destructive (an entry is removed on
+/// retrieval), so a second caller's concurrent [get] can land in the gap and
+/// consume the entry first, silently dropping it from [getAll]'s result (or,
+/// for [removeWhere], throwing when [peek] then returns `null` for a
+/// non-nullable `V`). They delegate straight to the underlying [AsyncCache]'s
+/// already-atomic implementations instead. [getOrCompute]/[update] are
+/// overridden to hold [AsyncCache.lock] across the whole check-compute-store
+/// sequence (atomicity: no duplicate computation for a racing missing key,
+/// matching [AsyncCache.getOrCompute]) while still writing through this
+/// class's own [set] — safe from deadlock because that lock is reentrant.
 class EphemeralFIFOCache<K, V> extends ThreadSafeCache<K, V> {
-  final int maxSize;
-  final LinkedHashMap<K, V> _cache = LinkedHashMap();
-  final _lock = Lock();
+  final AsyncCache<K, V> _engine;
 
   /// **Creates an instance of [EphemeralFIFOCache] with the specified maximum size.**
   ///
@@ -30,113 +52,69 @@ class EphemeralFIFOCache<K, V> extends ThreadSafeCache<K, V> {
   ///   If the cache exceeds this size, **the oldest element is removed** following the FIFO policy.
   ///
   /// **Throws [ArgumentError] if [maxSize] is 0 or less.**
-  EphemeralFIFOCache(this.maxSize) {
-    if (maxSize <= 0) {
-      throw ArgumentError('maxSize must be greater than 0.');
-    }
-  }
+  EphemeralFIFOCache(int maxSize)
+    : _engine = AsyncCache(
+        Cache(store: EphemeralFIFOStore<K, V>(), maxSize: maxSize),
+      );
 
-  /// Returns all keys currently stored in the cache.
-  ///
-  /// **This method is async-safe.**
-  @override
-  Future<Iterable<K>> getKeys() async {
-    return await _lock.synchronized(() {
-      return Map<K, V>.of(_cache).keys;
-    });
-  }
-
-  /// Retrieves the value associated with the specified key and **removes the key from the cache**.
-  ///
-  /// - **Returns `null` if the key does not exist.**
-  ///
-  /// **This method is async-safe.**
-  @override
-  Future<V?> get(K key) async {
-    return await _lock.synchronized(() {
-      return _cache.remove(key); // Remove after retrieval
-    });
-  }
-
-  /// Retrieves [key] without removing it from the cache.
-  ///
-  /// **This method is async-safe.**
-  @override
-  Future<V?> peek(K key) async {
-    return await _lock.synchronized(() => _cache[key]);
-  }
-
-  /// Checks whether [key] exists in the cache without removing it.
-  ///
-  /// **This method is async-safe.**
-  @override
-  Future<bool> containsKey(K key) async {
-    return await _lock.synchronized(() => _cache.containsKey(key));
-  }
-
-  /// Stores the specified key-value pair in the cache.
-  ///
-  /// - If the key already exists, **the value is updated**.
-  /// - The updated key is treated as the **most recently added data**, but its order remains unchanged.
-  /// - If the cache exceeds **[maxSize]**, the **oldest element is removed** according to the FIFO policy.
-  ///
-  /// **This method is async-safe.**
-  @override
-  Future<void> set(K key, V value) async {
-    await _lock.synchronized(() {
-      if (!_cache.containsKey(key) && _cache.length >= maxSize) {
-        _cache.remove(
-          _cache.keys.first,
-        ); // Remove the oldest element following FIFO
-      }
-      _cache[key] = value; // Update value (order remains unchanged)
-    });
-  }
+  /// The maximum number of entries in the cache.
+  int get maxSize => _engine.maxSize!;
 
   @override
-  Future<V> getOrCompute(K key, FutureOr<V> Function() valueFactory) async {
-    return await _lock.synchronized(() async {
-      if (_cache.containsKey(key)) return _cache.remove(key) as V;
-      final value = await valueFactory();
-      if (_cache.length >= maxSize) {
-        _cache.remove(_cache.keys.first);
-      }
-      _cache[key] = value;
-      return value;
-    });
-  }
+  Future<Iterable<K>> getKeys() => _engine.getKeys();
 
-  /// Removes the entry with the given key from the cache.
-  ///
-  /// - If the key does not exist, this call is a no-op.
-  ///
-  /// **This method is async-safe.**
   @override
-  Future<void> remove(K key) async {
-    await _lock.synchronized(() {
-      _cache.remove(key);
-    });
-  }
+  Future<V?> get(K key) => _engine.get(key);
 
-  /// Clears all data stored in the cache.
-  ///
-  /// - Removes all keys and values from the cache.
-  ///
-  /// **This method is async-safe.**
   @override
-  Future<void> clear() async {
-    await _lock.synchronized(_cache.clear);
-  }
+  Future<V?> peek(K key) => _engine.peek(key);
 
-  /// Returns a string representation of the current cache state.
-  ///
-  /// - Outputs **key-value pairs** currently stored in the cache as a string.
-  ///
-  /// **Note:** `toString()` is synchronous and does not acquire the internal
-  /// lock. Treat the result as diagnostic output for a point-in-time view.
   @override
-  String toString() {
-    final snapshot = Map.of(_cache); // Take a snapshot of the cache
-    return snapshot.toString();
-  }
+  Future<bool> containsKey(K key) => _engine.containsKey(key);
+
+  @override
+  Future<void> set(K key, V value) => _engine.set(key, value);
+
+  /// Retrieves values for all currently present [keys], consuming each one
+  /// (per [get]'s "removed on retrieval" behavior) via a single atomic
+  /// snapshot per key — see the class doc comment for why this can't be left
+  /// to [ThreadSafeCache]'s default.
+  @override
+  Future<Map<K, V>> getAll(Iterable<K> keys) => _engine.getAll(keys);
+
+  /// Removes all entries that match [test]. Reads each key via a single
+  /// atomic peek-based snapshot — see the class doc comment for why this
+  /// can't be left to [ThreadSafeCache]'s default. Peek-based, so testing an
+  /// entry for removal never consumes it as a side effect.
+  @override
+  Future<void> removeWhere(FutureOr<bool> Function(K key, V value) test) =>
+      _engine.removeWhere(test);
+
+  @override
+  Future<V> getOrCompute(K key, FutureOr<V> Function() valueFactory) =>
+      composedGetOrCompute(_engine, key, containsKey, get, valueFactory, set);
+
+  @override
+  Future<V> update(
+    K key,
+    FutureOr<V> Function(V value) update, {
+    FutureOr<V> Function()? ifAbsent,
+  }) => composedUpdate(
+    _engine,
+    key,
+    containsKey,
+    get,
+    update,
+    ifAbsent: ifAbsent,
+    writeThrough: set,
+  );
+
+  @override
+  Future<void> remove(K key) => _engine.remove(key);
+
+  @override
+  Future<void> clear() => _engine.clear();
+
+  @override
+  String toString() => _engine.toString();
 }

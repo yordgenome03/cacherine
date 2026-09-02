@@ -188,4 +188,138 @@ void main() {
       expect(stats['evictions_per_minute'], equals(1));
     });
   });
+
+  // Regression coverage: these methods are implemented directly on this
+  // class (composing an AsyncCache engine, not inheriting MonitoredCache —
+  // see https://github.com/yordgenome03/cacherine/pull/69 review feedback
+  // on preserving is CacheMonitoring<K, V>/is Disposable and this facade's
+  // original method surface), so each needs its own direct test rather than
+  // relying on MonitoredCache's own coverage.
+  group('MonitoredLRUCache - full interface coverage', () {
+    final config = CacheAlertConfig(notifyCallback: (_) {});
+
+    test(
+      'peek()/containsKey() report presence without recording metrics',
+      () async {
+        final cache = MonitoredLRUCache<String, String>(
+          maxSize: 10,
+          alertConfig: config,
+        );
+        await cache.set('a', '1');
+        expect(await cache.peek('a'), equals('1'));
+        expect(await cache.containsKey('a'), isTrue);
+        expect(await cache.containsKey('missing'), isFalse);
+        expect(cache.metrics.hits, equals(0));
+        expect(cache.metrics.misses, equals(0));
+      },
+    );
+
+    test('setAll() stores every entry', () async {
+      final cache = MonitoredLRUCache<String, String>(
+        maxSize: 10,
+        alertConfig: config,
+      );
+      await cache.setAll({'a': '1', 'b': '2'});
+      expect(await cache.get('a'), equals('1'));
+      expect(await cache.get('b'), equals('2'));
+    });
+
+    test('getOrCompute() records a hit on a present key and a miss on a '
+        'computed one', () async {
+      final cache = MonitoredLRUCache<String, String>(
+        maxSize: 10,
+        alertConfig: config,
+      );
+      await cache.set('a', '1');
+      expect(await cache.getOrCompute('a', () async => 'x'), equals('1'));
+      expect(cache.metrics.hits, equals(1));
+
+      var calls = 0;
+      Future<String> compute() async {
+        calls++;
+        return '2';
+      }
+
+      expect(await cache.getOrCompute('b', compute), equals('2'));
+      expect(await cache.getOrCompute('b', compute), equals('2'));
+      expect(calls, equals(1));
+      expect(cache.metrics.misses, equals(1));
+    });
+
+    test('update() records a hit on an existing key and a miss via '
+        'ifAbsent', () async {
+      final cache = MonitoredLRUCache<String, int>(
+        maxSize: 10,
+        alertConfig: config,
+      );
+      await cache.set('a', 1);
+      expect(await cache.update('a', (v) async => v + 1), equals(2));
+      expect(cache.metrics.hits, equals(1));
+
+      expect(
+        await cache.update('b', (v) async => v, ifAbsent: () async => 9),
+        equals(9),
+      );
+      expect(cache.metrics.misses, equals(1));
+    });
+
+    test(
+      'update() throws StateError for a missing key with no ifAbsent',
+      () async {
+        final cache = MonitoredLRUCache<String, int>(
+          maxSize: 10,
+          alertConfig: config,
+        );
+        await expectLater(
+          cache.update('missing', (v) async => v),
+          throwsStateError,
+        );
+      },
+    );
+
+    test(
+      'getAll() records a hit per present key, omitting missing ones',
+      () async {
+        final cache = MonitoredLRUCache<String, String>(
+          maxSize: 10,
+          alertConfig: config,
+        );
+        await cache.set('a', '1');
+        await cache.set('b', '2');
+        expect(
+          await cache.getAll(['a', 'b', 'missing']),
+          equals({'a': '1', 'b': '2'}),
+        );
+        expect(cache.metrics.hits, equals(2));
+        expect(cache.metrics.misses, equals(0));
+      },
+    );
+
+    test(
+      'removeWhere() removes matching entries and records eviction',
+      () async {
+        final cache = MonitoredLRUCache<String, String>(
+          maxSize: 10,
+          alertConfig: config,
+        );
+        await cache.set('a', '1');
+        await cache.set('b', '2');
+        await cache.removeWhere((key, value) async => key == 'a');
+        expect(await cache.getKeys(), equals(['b']));
+        expect(
+          cache.metrics.snapshot(const Duration(minutes: 1)).evictionsPerMinute,
+          equals(1),
+        );
+      },
+    );
+
+    test('toString() reflects current entries', () async {
+      final cache = MonitoredLRUCache<String, String>(
+        maxSize: 10,
+        alertConfig: config,
+      );
+      await cache.set('a', '1');
+      expect(cache.toString(), contains('a'));
+    });
+  });
 }

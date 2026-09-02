@@ -1,8 +1,10 @@
 import 'dart:async';
-import 'dart:collection';
-import 'package:synchronized/synchronized.dart';
 
 import '../interfaces/thread_safe_cache.dart';
+import '../stores/mru_store.dart';
+import '_composed_engine_ops.dart';
+import 'async_cache.dart';
+import 'cache.dart';
 
 /// **Async-safe MRU (Most Recently Used) Cache**
 ///
@@ -11,10 +13,22 @@ import '../interfaces/thread_safe_cache.dart';
 ///
 /// **Adopts the MRU (Most Recently Used) eviction policy**,
 /// meaning **when the cache exceeds `maxSize`, the most recently accessed element is removed**.
+///
+/// Wraps an [AsyncCache] configured with an [MRUStore] — internally a
+/// composed engine rather than a subclass, so this class keeps its original
+/// `set`/`getOrCompute`/`update`/`setAll` signatures (no `weight`/`ttl`
+/// parameters) rather than inheriting [AsyncCache]'s wider ones.
+///
+/// [getAll]/[setAll]/[removeWhere] are left to [ThreadSafeCache]'s default
+/// implementations, which call this class's own (overridable) [get]/[set]/
+/// [containsKey]/[peek]/[remove] — so a subclass overriding one of those
+/// still has its override invoked. [getOrCompute]/[update] are overridden to
+/// hold [AsyncCache.lock] across the whole check-compute-store sequence
+/// (atomicity: no duplicate computation for a racing missing key, matching
+/// [AsyncCache.getOrCompute]) while still writing through this class's own
+/// [set] — safe from deadlock because that lock is reentrant.
 class MRUCache<K, V> extends ThreadSafeCache<K, V> {
-  final int maxSize;
-  final LinkedHashMap<K, V> _cache = LinkedHashMap();
-  final _lock = Lock();
+  final AsyncCache<K, V> _engine;
 
   /// **Creates an instance of [MRUCache] with the specified maximum size.**
   ///
@@ -22,132 +36,52 @@ class MRUCache<K, V> extends ThreadSafeCache<K, V> {
   ///   If the cache exceeds this size, **the most recently used element is removed** following the MRU policy.
   ///
   /// **Throws [ArgumentError] if [maxSize] is 0 or less.**
-  MRUCache(this.maxSize) {
-    if (maxSize <= 0) {
-      throw ArgumentError('maxSize must be greater than 0.');
-    }
-  }
+  MRUCache(int maxSize)
+    : _engine = AsyncCache(Cache(store: MRUStore<K, V>(), maxSize: maxSize));
 
-  /// Returns all keys currently stored in the cache.
-  ///
-  /// **This method is async-safe.**
-  @override
-  Future<Iterable<K>> getKeys() async {
-    return await _lock.synchronized(() {
-      return Map<K, V>.of(_cache).keys;
-    });
-  }
-
-  /// **Retrieves the value associated with the specified key.**
-  ///
-  /// - **If the key exists, it is removed and reinserted to mark it as "recently used."**
-  /// - **Returns `null` if the key does not exist.**
-  ///
-  /// **This method is async-safe.**
-  @override
-  Future<V?> get(K key) async {
-    return await _lock.synchronized(() {
-      if (!_cache.containsKey(key)) return null;
-
-      final value = _cache.remove(key);
-      _cache[key] =
-          value as V; // MRU: Reinsert to record "recently used" status
-      return value;
-    });
-  }
-
-  /// Retrieves [key] without updating MRU order.
-  ///
-  /// **This method is async-safe.**
-  @override
-  Future<V?> peek(K key) async {
-    return await _lock.synchronized(() => _cache[key]);
-  }
-
-  /// Checks whether [key] exists in the cache without updating MRU order.
-  ///
-  /// **This method is async-safe.**
-  @override
-  Future<bool> containsKey(K key) async {
-    return await _lock.synchronized(() => _cache.containsKey(key));
-  }
-
-  /// **Stores the specified key-value pair in the cache.**
-  ///
-  /// - If `set()` is called on an existing key, **its value is updated**,
-  ///   and **its order is updated to mark it as "recently used."**
-  /// - If the cache exceeds **[maxSize]**, the **most recently used element is removed** following the MRU policy.
-  ///
-  /// **This method is async-safe.**
-  @override
-  Future<void> set(K key, V value) async {
-    await _lock.synchronized(() {
-      // If the key already exists, remove it to update its order
-      if (_cache.containsKey(key)) {
-        _cache.remove(key);
-      } else if (_cache.length >= maxSize) {
-        _evictMRUEntry(); // Evict using MRU policy
-      }
-      // Insert the key to mark it as the most recently used
-      _cache[key] = value;
-    });
-  }
+  /// The maximum number of entries in the cache.
+  int get maxSize => _engine.maxSize!;
 
   @override
-  Future<V> getOrCompute(K key, FutureOr<V> Function() valueFactory) async {
-    return await _lock.synchronized(() async {
-      if (_cache.containsKey(key)) {
-        final value = _cache.remove(key);
-        _cache[key] = value as V;
-        return value;
-      }
-      final value = await valueFactory();
-      if (_cache.length >= maxSize) {
-        _evictMRUEntry();
-      }
-      _cache[key] = value;
-      return value;
-    });
-  }
+  Future<Iterable<K>> getKeys() => _engine.getKeys();
 
-  /// **Evicts the most recently used (MRU) entry.**
-  void _evictMRUEntry() {
-    if (_cache.isEmpty) return;
-
-    // Remove the last added key (most recently used key)
-    final K mruKey = _cache.keys.last;
-    _cache.remove(mruKey);
-  }
-
-  /// Removes the entry with the given key from the cache.
-  ///
-  /// - If the key does not exist, this call is a no-op.
-  ///
-  /// **This method is async-safe.**
   @override
-  Future<void> remove(K key) async {
-    await _lock.synchronized(() {
-      _cache.remove(key);
-    });
-  }
+  Future<V?> get(K key) => _engine.get(key);
 
-  /// Clears the cache, removing all stored data.
-  ///
-  /// **This method is async-safe.**
   @override
-  Future<void> clear() async {
-    await _lock.synchronized(_cache.clear);
-  }
+  Future<V?> peek(K key) => _engine.peek(key);
 
-  /// Returns a string representation of the current cache state.
-  ///
-  /// - Outputs **key-value pairs** currently stored in the cache as a string.
-  ///
-  /// **Note:** `toString()` is synchronous and does not acquire the internal
-  /// lock. Treat the result as diagnostic output for a point-in-time view.
   @override
-  String toString() {
-    final snapshot = Map.of(_cache); // Take a snapshot of the cache
-    return snapshot.toString();
-  }
+  Future<bool> containsKey(K key) => _engine.containsKey(key);
+
+  @override
+  Future<void> set(K key, V value) => _engine.set(key, value);
+
+  @override
+  Future<V> getOrCompute(K key, FutureOr<V> Function() valueFactory) =>
+      composedGetOrCompute(_engine, key, containsKey, get, valueFactory, set);
+
+  @override
+  Future<V> update(
+    K key,
+    FutureOr<V> Function(V value) update, {
+    FutureOr<V> Function()? ifAbsent,
+  }) => composedUpdate(
+    _engine,
+    key,
+    containsKey,
+    get,
+    update,
+    ifAbsent: ifAbsent,
+    writeThrough: set,
+  );
+
+  @override
+  Future<void> remove(K key) => _engine.remove(key);
+
+  @override
+  Future<void> clear() => _engine.clear();
+
+  @override
+  String toString() => _engine.toString();
 }

@@ -3,6 +3,14 @@ import 'dart:async';
 import 'package:cacherine/src/caches/ttl_cache.dart';
 import 'package:test/test.dart';
 
+class _ClockCounter {
+  int calls = 0;
+  DateTime call() {
+    calls++;
+    return DateTime(2024).add(Duration(microseconds: calls));
+  }
+}
+
 void main() {
   // A simple fake clock: start at a fixed instant and allow manual advancement.
   DateTime fakeNow = DateTime(2024, 1, 1);
@@ -84,6 +92,47 @@ void main() {
         );
       },
     );
+
+    test('getOrCompute() throws ArgumentError for an invalid ttl: override '
+        'without invoking valueFactory', () async {
+      final cache = TTLCache<String, String>(
+        ttl: const Duration(seconds: 10),
+        clock: fakeClock,
+      );
+
+      var factoryCalls = 0;
+      await expectLater(
+        () => cache.getOrCompute('key', () async {
+          factoryCalls++;
+          return 'value';
+        }, ttl: Duration.zero),
+        throwsArgumentError,
+      );
+      expect(factoryCalls, equals(0));
+    });
+
+    test('update() throws ArgumentError for an invalid ttl: override without '
+        'invoking ifAbsent', () async {
+      final cache = TTLCache<String, String>(
+        ttl: const Duration(seconds: 10),
+        clock: fakeClock,
+      );
+
+      var ifAbsentCalls = 0;
+      await expectLater(
+        () => cache.update(
+          'key',
+          (v) async => v,
+          ifAbsent: () async {
+            ifAbsentCalls++;
+            return 'value';
+          },
+          ttl: const Duration(seconds: -1),
+        ),
+        throwsArgumentError,
+      );
+      expect(ifAbsentCalls, equals(0));
+    });
   });
 
   group('TTLCache - Global TTL', () {
@@ -129,6 +178,25 @@ void main() {
 
       expect(await cache.get('key'), equals('value'));
     });
+
+    // Every other test here advances the clock well past or well short of
+    // the TTL; this pins down the exact boundary instant instead, where an
+    // off-by-one in the expiry comparison could flip either way without any
+    // other test noticing. An entry set with a 10s TTL is documented as
+    // expired once its TTL has "elapsed" — read literally that's the
+    // instant `now == expiry`, which this asserts.
+    test('entry is expired at the exact instant TTL elapses (now == '
+        'expiry)', () async {
+      final cache = TTLCache<String, String>(
+        ttl: const Duration(seconds: 10),
+        clock: fakeClock,
+      );
+
+      await cache.set('key', 'value');
+      fakeNow = fakeNow.add(const Duration(seconds: 10));
+
+      expect(await cache.get('key'), isNull);
+    });
   });
 
   group('TTLCache - Per-entry TTL (set with ttl:)', () {
@@ -157,6 +225,29 @@ void main() {
 
       await cache.set('long', 'value-long', ttl: const Duration(seconds: 20));
       fakeNow = fakeNow.add(const Duration(seconds: 10));
+
+      expect(await cache.get('long'), equals('value-long'));
+    });
+
+    // Every other case here uses TTLs of a few seconds. This pins down an
+    // extreme (but not DateTime-range-breaking) per-entry override —
+    // Duration's internal representation is a 64-bit microsecond count, so a
+    // deadline computed as `now.add(hugeTtl)` could in principle overflow —
+    // confirming a ~100-year TTL survives normal-scale time advances without
+    // corrupting the expiry ledger or crashing.
+    test('an extremely large per-entry TTL override does not overflow or '
+        'corrupt expiry accounting', () async {
+      final cache = TTLCache<String, String>(
+        ttl: const Duration(seconds: 5),
+        clock: fakeClock,
+      );
+
+      await cache.set(
+        'long',
+        'value-long',
+        ttl: const Duration(days: 365 * 100),
+      );
+      fakeNow = fakeNow.add(const Duration(days: 365 * 10)); // 10 years
 
       expect(await cache.get('long'), equals('value-long'));
     });
@@ -374,6 +465,85 @@ void main() {
 
       fakeNow = fakeNow.add(const Duration(hours: 2));
       expect(await cache.get('key'), isNull);
+    });
+  });
+
+  group('TTLCache - toString()', () {
+    test('renders the live entries as a map', () async {
+      final cache = TTLCache<String, String>(
+        ttl: const Duration(hours: 1),
+        clock: fakeClock,
+      );
+      await cache.set('key', 'value');
+      expect(cache.toString(), equals({'key': 'value'}.toString()));
+    });
+  });
+
+  group('TTLCache - check-then-fetch atomicity', () {
+    // Regression coverage: update()/getAll()/removeWhere() used to be
+    // inherited from ThreadSafeTTLCacheInterface/ThreadSafeCache defaults,
+    // which check presence via containsKey() and then separately fetch via
+    // get()/peek() — each call independently reacquires the composed
+    // AsyncCache's lock and reads the clock. These are now overridden to
+    // delegate to the composed AsyncCache, whose own update()/getAll()/
+    // removeWhere() read the clock (and lock) once per key.
+    test('update() reads the clock exactly twice on a hit', () async {
+      final counter = _ClockCounter();
+      final cache = TTLCache<String, int>(
+        ttl: const Duration(seconds: 100),
+        clock: counter.call,
+      );
+      await cache.set('a', 1);
+      final before = counter.calls;
+      expect(await cache.update('a', (v) async => v + 1), equals(2));
+      expect(counter.calls - before, equals(2));
+    });
+
+    test('update() uses ifAbsent to seed a missing key', () async {
+      final cache = TTLCache<String, int>(ttl: const Duration(seconds: 100));
+      expect(
+        await cache.update('a', (v) async => v + 1, ifAbsent: () async => 5),
+        equals(5),
+      );
+      expect(await cache.get('a'), equals(5));
+    });
+
+    test(
+      'update() throws StateError for a missing key with no ifAbsent',
+      () async {
+        final cache = TTLCache<String, int>(ttl: const Duration(seconds: 100));
+        await expectLater(
+          cache.update('missing', (v) async => v),
+          throwsStateError,
+        );
+      },
+    );
+
+    test('getAll() reads the clock once per key on a hit', () async {
+      final counter = _ClockCounter();
+      final cache = TTLCache<String, String>(
+        ttl: const Duration(seconds: 100),
+        clock: counter.call,
+      );
+      await cache.set('a', '1');
+      await cache.set('b', '2');
+      final before = counter.calls;
+      expect(await cache.getAll(['a', 'b']), equals({'a': '1', 'b': '2'}));
+      expect(counter.calls - before, equals(2));
+    });
+
+    test('removeWhere() reads the clock once per key', () async {
+      final counter = _ClockCounter();
+      final cache = TTLCache<String, String>(
+        ttl: const Duration(seconds: 100),
+        clock: counter.call,
+      );
+      await cache.set('a', '1');
+      await cache.set('b', '2');
+      final before = counter.calls;
+      await cache.removeWhere((key, value) async => false);
+      // 1 read for getKeys() + 1 per key for presentPeek().
+      expect(counter.calls - before, equals(3));
     });
   });
 }

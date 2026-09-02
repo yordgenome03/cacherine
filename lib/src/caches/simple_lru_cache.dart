@@ -1,6 +1,6 @@
-import 'dart:collection';
-
 import '../interfaces/simple_cache.dart';
+import '../stores/lru_store.dart';
+import 'cache.dart';
 
 /// **Non-thread-safe LRU (Least Recently Used) Cache**
 ///
@@ -11,9 +11,19 @@ import '../interfaces/simple_cache.dart';
 ///
 /// It follows the LRU (Least Recently Used) eviction policy,
 /// meaning **when the cache exceeds `maxSize`, the least recently used element is removed**.
+///
+/// Wraps a [Cache] configured with an [LRUStore] — internally a composed
+/// engine rather than a subclass, so this class keeps its original
+/// `set`/`getOrSet`/`update`/`setAll` signatures (no `weight`/`ttl`
+/// parameters) rather than inheriting [Cache]'s wider ones. Only the
+/// primitive operations ([getKeys], [get], [peek], [containsKey], [set],
+/// [remove], [clear]) forward to the engine directly; bulk/compound helpers
+/// ([getAll], [setAll], [getOrSet], [update], [removeWhere]) are left to
+/// [SimpleCache]'s default implementations, which call this class's own
+/// (overridable) methods — so a subclass overriding, say, [set] still has
+/// that override invoked by [setAll]/[update]/etc.
 class SimpleLRUCache<K, V> extends SimpleCache<K, V> {
-  final int maxSize;
-  final LinkedHashMap<K, V> _cache = LinkedHashMap();
+  final Cache<K, V> _engine;
 
   /// Creates an instance of [SimpleLRUCache] with the specified maximum size.
   ///
@@ -21,92 +31,33 @@ class SimpleLRUCache<K, V> extends SimpleCache<K, V> {
   ///   If the cache exceeds this size, the **least recently used element** is removed following the LRU policy.
   ///
   /// **Throws [ArgumentError] if [maxSize] is 0 or less.**
-  SimpleLRUCache(this.maxSize) {
-    if (maxSize <= 0) {
-      throw ArgumentError('maxSize must be greater than 0.');
-    }
-  }
+  SimpleLRUCache(int maxSize)
+    : _engine = Cache(store: LRUStore<K, V>(), maxSize: maxSize);
 
-  /// Returns all keys currently stored in the cache.
-  ///
-  /// **This method is not thread-safe.**
-  @override
-  Iterable<K> getKeys() => _cache.keys;
+  /// The maximum number of entries in the cache.
+  int get maxSize => _engine.maxSize!;
 
-  /// Retrieves the value associated with the specified key.
-  ///
-  /// - **Uses the LRU policy**, meaning that **when a value is retrieved, the element is moved to the end of the list**.
-  /// - **Returns `null` if the key does not exist.**
-  ///
-  /// **This method is not thread-safe.**
   @override
-  V? get(K key) {
-    if (!_cache.containsKey(key)) return null;
-    final value = _cache.remove(key);
-    _cache[key] = value as V; // LRU: Move accessed element to the end
-    return value;
-  }
+  Iterable<K> getKeys() => _engine.getKeys();
 
-  /// Retrieves [key] without updating LRU order.
-  ///
-  /// **This method is not thread-safe.**
   @override
-  V? peek(K key) => _cache[key];
+  V? get(K key) => _engine.get(key);
 
-  /// Checks whether [key] exists in the cache without updating LRU order.
-  ///
-  /// **This method is not thread-safe.**
   @override
-  bool containsKey(K key) => _cache.containsKey(key);
+  V? peek(K key) => _engine.peek(key);
 
-  /// Stores the specified key-value pair in the cache.
-  ///
-  /// - If `set()` is called on an existing key, **its value is updated**
-  ///   and moved to the end of the list following the LRU policy.
-  /// - If the cache exceeds **[maxSize]**, the **least recently used element is removed** following the LRU policy.
-  ///
-  /// **This method is not thread-safe.**
   @override
-  void set(K key, V value) {
-    if (_cache.containsKey(key)) {
-      _cache.remove(
-        key,
-      ); // Remove the existing key before inserting the new value
-    } else if (_cache.length >= maxSize) {
-      _cache.remove(
-        _cache.keys.first,
-      ); // Remove the least recently used element following LRU
-    }
-    _cache[key] = value;
-  }
+  bool containsKey(K key) => _engine.containsKey(key);
 
-  /// Removes the entry with the given key from the cache.
-  ///
-  /// - If the key does not exist, this call is a no-op.
-  ///
-  /// **This method is not thread-safe.**
   @override
-  void remove(K key) {
-    _cache.remove(key);
-  }
+  void set(K key, V value) => _engine.set(key, value);
 
-  /// Clears all data stored in the cache.
-  ///
-  /// - Removes all keys and values from the cache.
-  ///
-  /// **This method is not thread-safe.**
   @override
-  void clear() {
-    _cache.clear();
-  }
+  void remove(K key) => _engine.remove(key);
 
-  /// Returns a string representation of the current cache state.
-  ///
-  /// - Outputs **key-value pairs** currently stored in the cache as a string.
-  ///
-  /// **This method is not thread-safe.**
   @override
-  String toString() {
-    return _cache.toString();
-  }
+  void clear() => _engine.clear();
+
+  @override
+  String toString() => _engine.toString();
 }

@@ -1,6 +1,14 @@
 import 'package:cacherine/cacherine.dart';
 import 'package:test/test.dart';
 
+class _ClockCounter {
+  int calls = 0;
+  DateTime call() {
+    calls++;
+    return DateTime(2024).add(Duration(microseconds: calls));
+  }
+}
+
 void main() {
   DateTime fakeNow = DateTime(2024, 1, 1);
   DateTime fakeClock() => fakeNow;
@@ -54,6 +62,17 @@ void main() {
       );
     });
 
+    test('throws ArgumentError for negative sweepInterval', () {
+      expect(
+        () => MonitoredTTLCache<String, String>(
+          ttl: const Duration(seconds: 10),
+          sweepInterval: const Duration(seconds: -1),
+          alertConfig: config,
+        ),
+        throwsArgumentError,
+      );
+    });
+
     test(
       'set() throws ArgumentError for zero per-entry ttl override',
       () async {
@@ -70,6 +89,68 @@ void main() {
         );
       },
     );
+
+    test(
+      'set() throws ArgumentError for negative per-entry ttl override',
+      () async {
+        final cache = MonitoredTTLCache<String, String>(
+          ttl: const Duration(seconds: 10),
+          clock: fakeClock,
+          alertConfig: config,
+        );
+        addTearDown(cache.dispose);
+
+        await expectLater(
+          () => cache.set('key', 'value', ttl: const Duration(seconds: -1)),
+          throwsArgumentError,
+        );
+      },
+    );
+
+    test('getOrCompute() throws ArgumentError for an invalid ttl: override '
+        'without invoking valueFactory', () async {
+      final cache = MonitoredTTLCache<String, String>(
+        ttl: const Duration(seconds: 10),
+        clock: fakeClock,
+        alertConfig: config,
+      );
+      addTearDown(cache.dispose);
+
+      var factoryCalls = 0;
+      await expectLater(
+        () => cache.getOrCompute('key', () async {
+          factoryCalls++;
+          return 'value';
+        }, ttl: Duration.zero),
+        throwsArgumentError,
+      );
+      expect(factoryCalls, equals(0));
+    });
+
+    test('update() throws ArgumentError for an invalid ttl: override without '
+        'invoking ifAbsent', () async {
+      final cache = MonitoredTTLCache<String, String>(
+        ttl: const Duration(seconds: 10),
+        clock: fakeClock,
+        alertConfig: config,
+      );
+      addTearDown(cache.dispose);
+
+      var ifAbsentCalls = 0;
+      await expectLater(
+        () => cache.update(
+          'key',
+          (v) async => v,
+          ifAbsent: () async {
+            ifAbsentCalls++;
+            return 'value';
+          },
+          ttl: const Duration(seconds: -1),
+        ),
+        throwsArgumentError,
+      );
+      expect(ifAbsentCalls, equals(0));
+    });
   });
 
   group('MonitoredTTLCache - TTL behavior', () {
@@ -335,5 +416,179 @@ void main() {
         cache.dispose();
       }, returnsNormally);
     });
+
+    test('is a CacheMonitoring<K, V>, same as every other Monitored*Cache '
+        '(regression: an earlier version delegated to CacheMonitoring instead '
+        'of mixing it in directly, losing this type relationship)', () {
+      final cache = MonitoredTTLCache<String, String>(
+        ttl: const Duration(seconds: 10),
+        clock: fakeClock,
+        alertConfig: config,
+      );
+      expect(cache, isA<CacheMonitoring<String, String>>());
+      cache.dispose();
+    });
+  });
+
+  group('MonitoredTTLCache - check-then-fetch atomicity', () {
+    final config = CacheAlertConfig(notifyCallback: (_) {});
+
+    // Regression coverage: update()/getAll()/removeWhere() used to be
+    // inherited from ThreadSafeTTLCacheInterface/ThreadSafeCache defaults,
+    // which check presence via containsKey() and then separately fetch via
+    // get()/peek() — each call independently reacquires the composed
+    // AsyncCache's lock and reads the clock. These are now overridden to take
+    // a single atomic presentValue()/presentPeek() snapshot per key, reading
+    // the clock (and lock) once per key.
+    test('update() reads the clock exactly twice on a hit', () async {
+      final counter = _ClockCounter();
+      final cache = MonitoredTTLCache<String, int>(
+        ttl: const Duration(seconds: 100),
+        clock: counter.call,
+        alertConfig: config,
+      );
+      addTearDown(cache.dispose);
+
+      await cache.set('a', 1);
+      final before = counter.calls;
+      expect(await cache.update('a', (v) async => v + 1), equals(2));
+      expect(counter.calls - before, equals(2));
+    });
+
+    test('getAll() reads the clock once per key on a hit', () async {
+      final counter = _ClockCounter();
+      final cache = MonitoredTTLCache<String, String>(
+        ttl: const Duration(seconds: 100),
+        clock: counter.call,
+        alertConfig: config,
+      );
+      addTearDown(cache.dispose);
+
+      await cache.set('a', '1');
+      await cache.set('b', '2');
+      final before = counter.calls;
+      expect(await cache.getAll(['a', 'b']), equals({'a': '1', 'b': '2'}));
+      expect(counter.calls - before, equals(2));
+    });
+
+    test('removeWhere() reads the clock once per key', () async {
+      final counter = _ClockCounter();
+      final cache = MonitoredTTLCache<String, String>(
+        ttl: const Duration(seconds: 100),
+        clock: counter.call,
+        alertConfig: config,
+      );
+      addTearDown(cache.dispose);
+
+      await cache.set('a', '1');
+      await cache.set('b', '2');
+      final before = counter.calls;
+      await cache.removeWhere((key, value) async => false);
+      // 1 read for getKeys() + 1 per key for presentPeek().
+      expect(counter.calls - before, equals(3));
+    });
+
+    // Regression coverage for https://github.com/yordgenome03/cacherine/pull/69
+    // review feedback: getAll()/removeWhere() were bypassing this facade's
+    // monitored get()/remove(), silently dropping the hit/latency and
+    // manual-eviction metrics doc/monitored_cache.md:123-127 promises.
+    test('getAll() records a hit per present key, matching repeated get() '
+        'calls', () async {
+      final cache = MonitoredTTLCache<String, String>(
+        ttl: const Duration(seconds: 100),
+        alertConfig: config,
+      );
+      addTearDown(cache.dispose);
+
+      await cache.set('a', '1');
+      await cache.set('b', '2');
+      expect(
+        await cache.getAll(['a', 'b', 'missing']),
+        equals({'a': '1', 'b': '2'}),
+      );
+
+      expect(cache.metrics.hits, equals(2));
+      expect(cache.metrics.misses, equals(0)); // 'missing' is omitted, not a
+      // recorded miss, per doc/monitored_cache.md.
+    });
+
+    // Regression coverage: getAll()'s `if (value != null || null is V)`
+    // branch (preserving a stored null for a nullable V rather than
+    // dropping it) is exercised via get() elsewhere in this file, but that
+    // is a separately hand-rolled code path — this pins it down via getAll()
+    // specifically.
+    test('getAll() preserves a stored null for a nullable V', () async {
+      final cache = MonitoredTTLCache<String, String?>(
+        ttl: const Duration(seconds: 100),
+        alertConfig: config,
+      );
+      addTearDown(cache.dispose);
+
+      await cache.set('a', null);
+
+      expect(await cache.getAll(['a']), equals({'a': null}));
+    });
+
+    test('removeWhere() records manual evictions via remove()', () async {
+      final cache = MonitoredTTLCache<String, String>(
+        ttl: const Duration(seconds: 100),
+        alertConfig: config,
+      );
+      addTearDown(cache.dispose);
+
+      await cache.set('a', '1');
+      await cache.set('b', '2');
+      await cache.removeWhere((key, value) async => key == 'a');
+
+      expect(await cache.getKeys(), equals(['b']));
+      expect(
+        cache.metrics.snapshot(const Duration(minutes: 1)).evictionsPerMinute,
+        equals(1),
+      );
+    });
+
+    // Regression coverage: the pre-existing (pre-composable-engine) default
+    // update() called get() internally, so on a MonitoredTTLCache it recorded
+    // hit/miss metrics via virtual dispatch, matching
+    // doc/monitored_cache.md:122-123 ("update() follow[s] getOrCompute()
+    // hit/miss semantics"). The atomic presentValue()-based rewrite that
+    // fixed update()'s TTL check-then-fetch race delegated straight to the
+    // (unmonitored) engine instead, silently dropping those metrics.
+    test('update() records a hit on an existing key and a miss via '
+        'ifAbsent', () async {
+      final cache = MonitoredTTLCache<String, int>(
+        ttl: const Duration(seconds: 100),
+        alertConfig: config,
+      );
+      addTearDown(cache.dispose);
+
+      await cache.set('a', 1);
+      expect(await cache.update('a', (v) async => v + 1), equals(2));
+      expect(cache.metrics.hits, equals(1));
+      expect(cache.metrics.misses, equals(0));
+
+      expect(
+        await cache.update('b', (v) async => v, ifAbsent: () async => 9),
+        equals(9),
+      );
+      expect(cache.metrics.hits, equals(1));
+      expect(cache.metrics.misses, equals(1));
+    });
+
+    test(
+      'update() throws StateError for a missing key with no ifAbsent',
+      () async {
+        final cache = MonitoredTTLCache<String, int>(
+          ttl: const Duration(seconds: 100),
+          alertConfig: config,
+        );
+        addTearDown(cache.dispose);
+
+        await expectLater(
+          cache.update('missing', (v) async => v),
+          throwsStateError,
+        );
+      },
+    );
   });
 }

@@ -211,5 +211,36 @@ void main() {
         equals(1),
       );
     });
+
+    // Every case above advances the clock well past the TTL; this pins down
+    // the exact boundary instant (now == expiry) instead, matching the
+    // equivalent get()-boundary regression test in ttl_cache_test.dart —
+    // containsKey() has its own _dropIfExpired() call site and could drift
+    // from get()'s behavior without this.
+    test('TTLCache treats an entry as expired at the exact instant its TTL '
+        'elapses (now == expiry)', () async {
+      final cache = TTLCache<String, String?>(
+        ttl: const Duration(seconds: 10),
+        clock: clock,
+      );
+
+      await cache.set('present', null);
+      now = now.add(const Duration(seconds: 10));
+
+      expect(await cache.containsKey('present'), isFalse);
+    });
+
+    test('SimpleTTLCache treats an entry as expired at the exact instant '
+        'its TTL elapses (now == expiry)', () {
+      final cache = SimpleTTLCache<String, String?>(
+        ttl: const Duration(seconds: 10),
+        clock: clock,
+      );
+
+      cache.set('present', null);
+      now = now.add(const Duration(seconds: 10));
+
+      expect(cache.containsKey('present'), isFalse);
+    });
   });
 }

@@ -1,17 +1,19 @@
 import 'dart:async';
-import 'dart:collection';
 
-import 'package:synchronized/synchronized.dart';
-
+import '../interfaces/disposable.dart';
+import '../interfaces/periodic_sweeper.dart';
+import '../interfaces/thread_safe_cache.dart';
 import '../monitorings/cache_alert_manager.dart';
 import '../monitorings/cache_monitoring.dart';
-import '../interfaces/disposable.dart';
-import '../interfaces/thread_safe_cache.dart';
+import '../monitorings/eviction_reason.dart';
+import '../stores/ephemeral_fifo_store.dart';
+import 'async_cache.dart';
+import 'cache.dart';
 
 /// **Async-safe Ephemeral FIFO (First In, First Out) Cache with Monitoring**
 ///
-/// This class extends [ThreadSafeCache] and serializes concurrent async calls
-/// on the same cache instance within the same isolate using `Lock`.
+/// This class serializes concurrent async calls on the same cache instance
+/// within the same isolate using `Lock`.
 ///
 /// Additionally, by utilizing the [CacheMonitoring] mixin, it automatically **monitors cache performance**.
 /// It records the following metrics and triggers alerts via the [CacheAlertManager] if thresholds are exceeded:
@@ -28,16 +30,31 @@ import '../interfaces/thread_safe_cache.dart';
 /// ### **Note**:
 /// - **The retrieved data cannot be reused (it is removed from the cache upon retrieval)**
 /// - **If you need to preserve the key, use `MonitoredFIFOCache` instead.**
+///
+/// Wraps an [AsyncCache] configured with an [EphemeralFIFOStore] —
+/// internally a composed engine rather than a subclass of [MonitoredCache],
+/// so this class keeps its original `set`/`getOrCompute`/`update`/`setAll`
+/// signatures (no `weight`/`ttl` parameters) while still mixing in
+/// [CacheMonitoring]/[PeriodicSweeper] directly (matching
+/// [MonitoredTTLCache]) so `is CacheMonitoring<K, V>` and `is Disposable`
+/// keep holding for callers relying on them.
+///
+/// [setAll] is left to [ThreadSafeCache]'s default implementation, which
+/// calls this class's own (overridable) [set] — so a subclass override still
+/// sees every write. [getAll]/[removeWhere] are NOT left to their
+/// [ThreadSafeCache] defaults: those check presence and then separately
+/// read/peek, each independently acquiring the lock — but [get] here is
+/// destructive (an entry is removed on retrieval), so a second caller's
+/// concurrent [get] can land in the gap and consume the entry first, silently
+/// dropping it from [getAll]'s result (or, for [removeWhere], throwing when
+/// peeking then returns `null` for a non-nullable `V`). They read each key
+/// via a single atomic snapshot instead, recording the same hit/latency/
+/// manual-eviction metrics `doc/monitored_cache.md` documents for these bulk
+/// operations (matching [MonitoredTTLCache]'s equivalent overrides).
 class MonitoredEphemeralFIFOCache<K, V> extends ThreadSafeCache<K, V>
-    with CacheMonitoring<K, V>
+    with CacheMonitoring<K, V>, PeriodicSweeper
     implements Disposable {
-  final int maxSize;
-  final LinkedHashMap<K, V> _cache = LinkedHashMap();
-  final _lock = Lock();
-
-  /// Cache monitoring alert manager
-  ///
-  /// This manager triggers alerts when specified thresholds are exceeded.
+  final AsyncCache<K, V> _engine;
   late final CacheAlertManager _cacheAlertManager;
 
   /// **Creates a [MonitoredEphemeralFIFOCache] with a specified maximum size and alert configuration.**
@@ -49,12 +66,12 @@ class MonitoredEphemeralFIFOCache<K, V> extends ThreadSafeCache<K, V>
   ///
   /// **Throws an [ArgumentError] if [maxSize] is less than or equal to 0.**
   MonitoredEphemeralFIFOCache({
-    required this.maxSize,
+    required int maxSize,
     CacheAlertConfig? alertConfig,
-  }) {
-    if (maxSize <= 0) {
-      throw ArgumentError('maxSize must be greater than 0.');
-    }
+  }) : _engine = AsyncCache(
+         Cache(store: EphemeralFIFOStore<K, V>(), maxSize: maxSize),
+       ) {
+    _engine.engine.onEvict = metrics.recordEvictionReason;
     _cacheAlertManager = CacheAlertManager(
       metrics,
       alertConfig ?? CacheAlertConfig(),
@@ -62,127 +79,127 @@ class MonitoredEphemeralFIFOCache<K, V> extends ThreadSafeCache<K, V>
     _cacheAlertManager.monitor();
   }
 
-  /// Returns all the keys currently stored in the cache.
-  ///
-  /// **This method is async-safe**.
-  @override
-  Future<Iterable<K>> getKeys() async {
-    return await _lock.synchronized(() {
-      return Map<K, V>.of(_cache).keys;
-    });
-  }
+  /// The maximum number of entries in the cache.
+  int get maxSize => _engine.maxSize!;
 
-  /// Retrieves the value for the specified key and **removes the key from the cache**.
-  ///
-  /// - **Records cache hit/miss and measures request latency** via [CacheMonitoring].
-  /// - **Returns `null` if the key does not exist in the cache.**
-  ///
-  /// **This method is async-safe**.
+  @override
+  Future<Iterable<K>> getKeys() => _engine.getKeys();
+
   @override
   Future<V?> get(K key) async {
     var found = false;
     return await monitoredGet(key, () async {
-      return await _lock.synchronized(() {
-        found = _cache.containsKey(key);
-        return _cache.remove(key); // Remove after retrieval
+      return await _engine.lock.synchronized(() {
+        final (f, value) = _engine.engine.presentValue(key);
+        found = f;
+        return value;
       });
     }, found: () => found);
   }
 
-  /// Retrieves [key] without removing it or recording metrics.
-  ///
-  /// **This method is async-safe**.
   @override
-  Future<V?> peek(K key) async {
-    return await _lock.synchronized(() => _cache[key]);
-  }
+  Future<V?> peek(K key) => _engine.peek(key);
 
-  /// Checks whether [key] exists in the cache without removing it or recording metrics.
-  ///
-  /// **This method is async-safe**.
   @override
-  Future<bool> containsKey(K key) async {
-    return await _lock.synchronized(() => _cache.containsKey(key));
-  }
+  Future<bool> containsKey(K key) => _engine.containsKey(key);
 
-  /// Stores the specified key and value in the cache.
-  ///
-  /// - If the key already exists, `set()` will **update its value** without changing its position.
-  /// - If the cache size exceeds **[maxSize]**, the oldest element will be removed based on the FIFO policy.
-  ///
-  /// **This method is async-safe**.
   @override
-  Future<void> set(K key, V value) async {
-    await _lock.synchronized(() {
-      if (!_cache.containsKey(key) && _cache.length >= maxSize) {
-        _cache.remove(
-          _cache.keys.first,
-        ); // Remove the oldest element based on FIFO policy
-        metrics.recordEviction();
+  Future<void> set(K key, V value) => _engine.set(key, value);
+
+  /// Retrieves values for all currently present [keys], consuming each one
+  /// (per [get]'s "removed on retrieval" behavior) via a single atomic
+  /// snapshot per key — see the class doc comment for why this can't be left
+  /// to [ThreadSafeCache]'s default. Records the same hit/latency metrics as
+  /// an equivalent series of [get] calls (missing keys are omitted without
+  /// recording a miss, per `doc/monitored_cache.md`).
+  @override
+  Future<Map<K, V>> getAll(Iterable<K> keys) {
+    return _engine.lock.synchronized(() {
+      final values = <K, V>{};
+      for (final key in keys) {
+        final stopwatch = Stopwatch()..start();
+        final (found, value) = _engine.engine.presentValue(key);
+        stopwatch.stop();
+        if (found) {
+          metrics.recordHit(stopwatch.elapsed);
+          if (value != null || null is V) {
+            values[key] = value as V;
+          }
+        }
       }
-      _cache[key] = value; // Update value (position remains unchanged)
+      return values;
     });
   }
 
+  /// Removes all entries that match [test]. Reads each key via a single
+  /// atomic peek-based snapshot instead of [ThreadSafeCache]'s default — see
+  /// the class doc comment — and removes a match through [remove] (not the
+  /// unmonitored engine directly) so it still records the manual-eviction
+  /// metric [remove] documents. Peek-based, so testing an entry for removal
+  /// never consumes it as a side effect.
   @override
-  Future<V> getOrCompute(K key, FutureOr<V> Function() valueFactory) async {
-    var found = false;
-    return await monitoredGet(key, () async {
-          return await _lock.synchronized(() async {
-            if (_cache.containsKey(key)) {
-              found = true;
-              return _cache.remove(key) as V;
-            }
-            final value = await valueFactory();
-            if (_cache.length >= maxSize) {
-              _cache.remove(_cache.keys.first);
-              metrics.recordEviction();
-            }
-            _cache[key] = value;
-            return value;
-          });
-        }, found: () => found)
-        as V;
+  Future<void> removeWhere(FutureOr<bool> Function(K key, V value) test) {
+    return _engine.lock.synchronized(() async {
+      for (final key in _engine.engine.getKeys().toList()) {
+        final (found, value) = _engine.engine.presentPeek(key);
+        if (!found) continue;
+        if (await test(key, value as V)) {
+          await remove(key);
+        }
+      }
+    });
   }
 
-  /// Removes the entry with the given key from the cache.
+  /// Returns the existing value for [key], or computes, stores, and returns
+  /// a new one — recording the same hit/miss/latency metrics as [get].
   ///
-  /// - If the key existed, records a manual eviction via [CacheMonitoring].
-  /// - If the key does not exist, this call is a no-op.
+  /// Holds [AsyncCache.lock] across the whole check-compute-store sequence
+  /// (buying atomicity: no duplicate computation for a racing missing key,
+  /// same as [AsyncCache.getOrCompute]), but writes through this class's own
+  /// [set] instead of the engine directly — safe from deadlock because the
+  /// lock is reentrant — so a subclass override of [set] still runs.
+  @override
+  Future<V> getOrCompute(K key, FutureOr<V> Function() valueFactory) =>
+      monitoredGetOrCompute(key, _engine, containsKey, get, valueFactory, set);
+
+  /// Updates the value for [key] and returns the new value.
   ///
-  /// **This method is async-safe**.
+  /// Per `doc/monitored_cache.md` ("`update()` follows `getOrCompute()`
+  /// hit/miss semantics"), this records the same hit/miss/latency metrics as
+  /// an equivalent [getOrCompute] call, and — see [getOrCompute] — writes
+  /// through this class's own [set] under the same reentrant lock.
+  @override
+  Future<V> update(
+    K key,
+    FutureOr<V> Function(V value) update, {
+    FutureOr<V> Function()? ifAbsent,
+  }) => monitoredUpdate(
+    key,
+    _engine,
+    containsKey,
+    get,
+    update,
+    writeThrough: set,
+    ifAbsent: ifAbsent,
+  );
+
   @override
   Future<void> remove(K key) async {
-    await _lock.synchronized(() {
-      if (_cache.containsKey(key)) {
-        _cache.remove(key);
-        metrics.recordEviction();
-      }
-    });
-  }
-
-  /// Clears the cache and removes all data.
-  ///
-  /// - The monitoring function remains active even after the cache is cleared.
-  ///
-  /// **This method is async-safe**.
-  @override
-  Future<void> clear() async {
-    await _lock.synchronized(_cache.clear);
+    final removed = await _engine.lock.synchronized(
+      () => _engine.engine.removeIfPresent(key),
+    );
+    if (removed) metrics.recordEvictionReason(EvictionReason.manual);
   }
 
   @override
-  void dispose() => _cacheAlertManager.dispose();
+  Future<void> clear() => _engine.clear();
 
-  /// Returns a string representation of the current state of the cache.
-  ///
-  /// - Outputs the **key-value pairs** stored in the cache.
-  ///
-  /// **Note:** `toString()` is synchronous and does not acquire the internal
-  /// lock. Treat the result as diagnostic output for a point-in-time view.
   @override
-  String toString() {
-    final snapshot = Map.of(_cache); // Take a snapshot of the cache
-    return snapshot.toString();
+  void dispose() {
+    super.dispose(); // PeriodicSweeper: no-op here (this facade never sweeps).
+    _cacheAlertManager.dispose();
   }
+
+  @override
+  String toString() => _engine.toString();
 }
