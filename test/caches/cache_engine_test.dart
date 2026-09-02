@@ -59,7 +59,8 @@ class _KeysAccessCountingStore<K, V> implements CacheStore<K, V> {
   @override
   void put(K key, V value) => _inner.put(key, value);
   @override
-  K? selectVictim({K? excluding}) => _inner.selectVictim(excluding: excluding);
+  (K,)? selectVictim({K? excluding}) =>
+      _inner.selectVictim(excluding: excluding);
   @override
   (K, V)? evictOne({K? excluding}) => _inner.evictOne(excluding: excluding);
   @override
@@ -91,7 +92,7 @@ class _NeverEvictsStore<K, V> implements CacheStore<K, V> {
   @override
   void put(K key, V value) => _inner.put(key, value);
   @override
-  K? selectVictim({K? excluding}) => null;
+  (K,)? selectVictim({K? excluding}) => null;
   @override
   (K, V)? evictOne({K? excluding}) => null;
   @override
@@ -1774,6 +1775,48 @@ void main() {
       expect(cache.get('a'), equals(9));
       expect(cache.get('b'), isNull);
       expect(cache.currentWeight, equals(9));
+    });
+  });
+
+  group('Cache engine — null-keyed victim eviction', () {
+    // Regression coverage for
+    // https://github.com/yordgenome03/cacherine/pull/69#discussion_r3910691651:
+    // Cache._write's eviction loop used to break out of `while
+    // (exceedsCount() || exceedsWeight())` the moment `_store.evictOne()`
+    // returned `null` for a null-keyed victim, mistaking "found the null
+    // key" for "nothing left to evict" — leaving the cache over capacity
+    // instead of evicting it. `excluding` here is always the key currently
+    // being written (never left at its default), so this is squarely the
+    // path every store's evictOne() now handles correctly.
+    test('a maxSize-bounded cache evicts a pre-existing null-keyed entry '
+        'instead of silently exceeding maxSize', () {
+      final cache = Cache<int?, String>(
+        store: FIFOStore<int?, String>(),
+        maxSize: 1,
+      );
+
+      cache.set(null, 'a');
+      cache.set(1, 'b');
+
+      expect(cache.getKeys().length, equals(1));
+      expect(cache.containsKey(null), isFalse);
+      expect(cache.get(1), equals('b'));
+    });
+
+    test('a maxWeight-bounded cache evicts a pre-existing null-keyed entry '
+        'instead of silently exceeding maxWeight', () {
+      final cache = Cache<int?, String>(
+        store: LRUStore<int?, String>(),
+        weigher: (key, value) => value.length,
+        maxWeight: 3,
+      );
+
+      cache.set(null, 'aaa'); // weight 3, fills the cache
+      cache.set(1, 'bbb'); // weight 3, forces eviction of the null key
+
+      expect(cache.containsKey(null), isFalse);
+      expect(cache.get(1), equals('bbb'));
+      expect(cache.currentWeight, equals(3));
     });
   });
 }

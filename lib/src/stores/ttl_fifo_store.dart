@@ -42,19 +42,22 @@ class TTLFifoStore<K, V> implements CacheStore<K, V> {
   }
 
   @override
-  K? selectVictim({K? excluding}) {
+  (K,)? selectVictim({K? excluding}) {
     for (final k in _cache.keys) {
-      if (k != excluding) return k;
+      if (k != excluding) return (k,);
     }
     return null;
   }
 
   @override
   (K, V)? evictOne({K? excluding}) {
-    final victim = selectVictim(excluding: excluding);
-    if (victim == null) return null;
-    final value = _cache.remove(victim) as V;
-    return (victim, value);
+    for (final k in _cache.keys) {
+      if (k != excluding) {
+        final value = _cache.remove(k) as V;
+        return (k, value);
+      }
+    }
+    return null;
   }
 
   @override

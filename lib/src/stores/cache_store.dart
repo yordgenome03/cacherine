@@ -40,26 +40,38 @@ abstract interface class CacheStore<K, V> {
   /// Chooses (without removing) the key this store would evict next, or
   /// `null` if the store is empty or every remaining key is [excluding].
   ///
-  /// **Known limitation for nullable `K`:** `null` is used both as this
-  /// method's "no victim" result and as a valid value of `K` itself when `K`
-  /// is a nullable type. A store that has actually stored an entry under the
-  /// literal key `null` cannot be correctly selected as a victim by this
-  /// signature — eviction would perpetually report nothing evictable for it,
-  /// even though every implementation in this package handles `null` as an
-  /// ordinary map key otherwise. An unambiguous fix (e.g. a record-wrapped
-  /// result/exclusion type) was considered but not applied: it would need to
-  /// thread through every store plus [Cache]'s eviction loop, and — because
-  /// `SimpleTTLCacheInterface`/`ThreadSafeTTLCacheInterface` are pre-existing,
-  /// unbounded (`K` may be nullable) public interfaces this package cannot
-  /// change, [TTLFifoStore] can't adopt a `K extends Object`-bounded
-  /// alternative without splitting the store hierarchy in two. In practice,
-  /// using a nullable key type in a cache is unusual; this is documented
-  /// rather than fixed under that tradeoff.
-  K? selectVictim({K? excluding});
+  /// The result is wrapped in a single-field record rather than returned as
+  /// a bare `K?`: when `K` is a nullable type, an entry actually stored
+  /// under the literal key `null` is a legitimate victim, and a bare `K?`
+  /// return can't tell that apart from "no victim" (both would be `null`).
+  /// Wrapping moves the "found anything?" signal to the record's own
+  /// nullability, leaving the wrapped key free to be `null` on its own
+  /// account — so `(null,)` (found, victim key is `null`) and `null` (no
+  /// victim) are distinguishable regardless of `K`.
+  ///
+  /// **Remaining nullable-`K` limitation on [excluding]:** unlike the return
+  /// value above, [excluding] itself is not wrapped, so its own default
+  /// (`null`, meaning "exclude nothing") is indistinguishable from an
+  /// explicit request to exclude the literal key `null`. A store holding
+  /// *only* a `null`-keyed entry, queried with [excluding] left at its
+  /// default, therefore still reports "nothing evictable" — every
+  /// implementation's `k != excluding` eligibility check sees `null !=
+  /// null` (`false`) and treats that entry as excluded rather than as the
+  /// sole candidate. This doesn't affect [Cache]'s own eviction loop, which
+  /// always passes the key it is currently writing as [excluding] and so
+  /// never relies on the default; it only affects a caller driving this
+  /// interface directly. Fixing it too would need the same record-wrapping
+  /// treatment applied to [excluding], which isn't done here — use a
+  /// non-nullable key type if this matters for your use of a [CacheStore]
+  /// directly.
+  (K,)? selectVictim({K? excluding});
 
-  /// Removes and returns the selected victim as a `(key, value)` pair, or
-  /// `null` under the same conditions as [selectVictim] (including its
-  /// nullable-`K` limitation).
+  /// Removes and returns the selected victim as a `(key, value)` record, or
+  /// `null` under the same "nothing evictable" conditions as [selectVictim]
+  /// (including its remaining [excluding]-side limitation).
+  /// Like [selectVictim], the outer nullability alone signals "no victim" —
+  /// a `null` key wrapped in a non-`null` record (`(null, value)`) means a
+  /// victim *was* found and evicted, and its key happens to be `null`.
   (K, V)? evictOne({K? excluding});
 
   /// Removes [key] unconditionally. Returns `true` if it was present.

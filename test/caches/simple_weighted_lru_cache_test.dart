@@ -203,6 +203,28 @@ void main() {
     });
   });
 
+  group('SimpleWeightedLRUCache - nullable key eviction', () {
+    // Regression coverage for
+    // https://github.com/yordgenome03/cacherine/pull/69#discussion_r3910691651:
+    // the same "null victim mistaken for no victim" bug that broke maxSize
+    // capacity eviction also broke maxWeight eviction, since both drive the
+    // same Cache._write eviction loop.
+    test('a null key is evicted like any other key once maxWeight is '
+        'exceeded', () {
+      final cache = SimpleWeightedLRUCache<int?, String>(
+        maxWeight: 3,
+        weigher: (key, value) => value.length,
+      );
+
+      cache.set(null, 'aaa'); // weight 3, fills the cache
+      cache.set(1, 'bbb'); // weight 3, forces eviction of the null key
+
+      expect(cache.containsKey(null), isFalse);
+      expect(cache.get(1), equals('bbb'));
+      expect(cache.currentWeight, equals(3));
+    });
+  });
+
   group('SimpleWeightedLRUCache - Error Handling', () {
     test('Throws ArgumentError when maxWeight is 0 or less', () {
       expect(

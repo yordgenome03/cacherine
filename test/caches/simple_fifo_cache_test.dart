@@ -93,6 +93,23 @@ void main() {
       expect(cache.getKeys(), containsAll(['A', 'B', 'C']));
       expect(cache.get('B'), equals('newValueB'));
     });
+
+    // Regression coverage for
+    // https://github.com/yordgenome03/cacherine/pull/69#discussion_r3910691651:
+    // a literal `null` key used to be unevictable via maxSize capacity
+    // eviction — Cache._write's eviction loop mistook a legitimately-found
+    // null-keyed victim for "nothing evictable" and gave up, leaving the
+    // cache over capacity instead of evicting it.
+    test('a null key is evicted like any other key once maxSize is '
+        'exceeded', () {
+      final cache = SimpleFIFOCache<int?, String>(1);
+      cache.set(null, 'a');
+      cache.set(1, 'b');
+
+      expect(cache.getKeys().length, equals(1));
+      expect(cache.containsKey(null), isFalse);
+      expect(cache.get(1), equals('b'));
+    });
   });
 
   group('SimpleFIFOCache - Additional Behavior Validation', () {

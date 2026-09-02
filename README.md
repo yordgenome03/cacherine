@@ -311,7 +311,7 @@ all inserted entries.
 
 `size`, `isEmpty`, and `isNotEmpty` report the current cache occupancy. TTL caches count only live, non-expired entries. These APIs do not update cache eviction state and monitored caches do not record hit/miss/latency metrics for them.
 
-A nullable key type (`K?`) is not supported for eviction purposes: an entry actually stored under the literal key `null` can never be selected for eviction, since `null` also means "no candidate" internally. Use a non-nullable key type.
+A nullable key type (`K?`) is supported for capacity/weight eviction: an entry stored under the literal key `null` is evicted like any other. The one remaining gap is calling `CacheStore.selectVictim()`/`evictOne()` directly with `excluding` left at its default on a store holding *only* the `null` key — that specific case still reports nothing evictable, since the default `excluding` value (`null`, "exclude nothing") can't be told apart from "exclude the literal key `null`". This doesn't affect any cache class in this package, since none of them ever call those methods with `excluding` left at its default.
 
 ### TTL Expiry
 

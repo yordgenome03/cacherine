@@ -60,7 +60,10 @@ class MRUStore<K, V> implements CacheStore<K, V> {
   }
 
   @override
-  K? selectVictim({K? excluding}) => _findVictim(excluding)?.key;
+  (K,)? selectVictim({K? excluding}) {
+    final node = _findVictim(excluding);
+    return node == null ? null : (node.key,);
+  }
 
   @override
   (K, V)? evictOne({K? excluding}) {

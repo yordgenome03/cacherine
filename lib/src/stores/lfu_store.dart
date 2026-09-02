@@ -119,9 +119,9 @@ class LFUStore<K, V> implements CacheStore<K, V> {
   }
 
   @override
-  K? selectVictim({K? excluding}) {
+  (K,)? selectVictim({K? excluding}) {
     final node = _selectVictimNode(excluding: excluding);
-    return node?.key;
+    return node == null ? null : (node.key,);
   }
 
   @override

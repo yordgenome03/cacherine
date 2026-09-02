@@ -72,12 +72,12 @@ void main() {
         test('evictOne() removes and returns the selected victim', () {
           final store = make();
           store.put('a', '1');
-          final victimKey = store.selectVictim();
-          expect(victimKey, isNotNull);
+          final victim = store.selectVictim();
+          expect(victim, isNotNull);
           final evicted = store.evictOne();
           expect(evicted, isNotNull);
-          expect(evicted!.$1, equals(victimKey));
-          expect(store.containsKey(victimKey!), isFalse);
+          expect(evicted!.$1, equals(victim!.$1));
+          expect(store.containsKey(victim.$1), isFalse);
         });
 
         test('selectVictim(excluding:)/evictOne(excluding:) never choose the '
@@ -128,19 +128,70 @@ void main() {
     }
   });
 
-  // Regression coverage for the documented nullable-K limitation on
-  // CacheStore.selectVictim()/evictOne() (see cache_store.dart's doc
-  // comment): `null` is overloaded as both "no victim" and a legitimate
-  // literal key when K is nullable, so `k != excluding` — every
-  // implementation's actual eviction-candidate check — is `null != null`
-  // (false) whenever `excluding` is left at its default `null` and the only
-  // remaining key is the literal key `null`. The store therefore reports
-  // "nothing evictable" even though it demonstrably still holds an entry.
-  // This is documented as an accepted tradeoff, not fixed; these tests make
-  // sure that stays true (i.e. this doesn't crash, and it doesn't silently
-  // start working, which would mean the doc comment is now stale) across
-  // every store implementation.
-  group('CacheStore nullable-K limitation (documented)', () {
+  // Regression coverage for
+  // https://github.com/yordgenome03/cacherine/pull/69#discussion_r3910691651:
+  // selectVictim()/evictOne() used to return a bare `K?` and return early on
+  // `victim == null`, so a null-keyed entry that the store's own eviction
+  // scan had legitimately identified as the victim (i.e. `excluding` was
+  // set and didn't happen to equal the literal key `null`) was reported as
+  // "nothing evictable" instead — `null` was overloaded as both "no victim"
+  // and a legitimate literal key on the *return* side. This is exactly the
+  // shape of the capacity-eviction regression reported against the
+  // composable `Cache` engine (`Cache._write` always calls
+  // `evictOne(excluding: <the key just written>)`, so `excluding` is never
+  // left at its default there). Both methods now wrap "found" in the outer
+  // nullability of a record, leaving the wrapped key free to be `null` on
+  // its own account, so a null-keyed entry is found/evicted like any other
+  // once it is a genuine eviction candidate.
+  group('CacheStore selects/evicts a literal null key once it is a genuine '
+      'candidate (excluding set to something other than null)', () {
+    for (final entry in <String, CacheStore<String?, String> Function()>{
+      'LRUStore': LRUStore<String?, String>.new,
+      'MRUStore': MRUStore<String?, String>.new,
+      'FIFOStore': FIFOStore<String?, String>.new,
+      'EphemeralFIFOStore': EphemeralFIFOStore<String?, String>.new,
+      'LFUStore': LFUStore<String?, String>.new,
+      'TTLFifoStore': TTLFifoStore<String?, String>.new,
+    }.entries) {
+      final name = entry.key;
+      final make = entry.value;
+
+      test('$name: a store holding a null-keyed entry alongside others '
+          'selects/evicts the null key once every other key is excluded', () {
+        final store = make();
+        store.put(null, 'value');
+        store.put('a', '1');
+
+        final victim = store.selectVictim(excluding: 'a');
+        expect(victim, isNotNull);
+        expect(victim!.$1, isNull);
+
+        final evicted = store.evictOne(excluding: 'a');
+        expect(evicted, isNotNull);
+        expect(evicted!.$1, isNull);
+        expect(evicted.$2, equals('value'));
+        expect(store.containsKey(null), isFalse);
+        expect(store.containsKey('a'), isTrue);
+      });
+    }
+  });
+
+  // Regression coverage for the *other*, still-unresolved half of the
+  // documented nullable-K limitation (see cache_store.dart's doc comment on
+  // the `excluding` parameter): a store holding *only* the literal key
+  // `null`, queried with `excluding` left at its default, cannot be told
+  // apart from "excluding was explicitly set to null" — both make
+  // `k != excluding` compare `null != null` and treat the sole entry as
+  // excluded. Unlike the return-side ambiguity above, `Cache._write` never
+  // exercises this path (it always excludes the key it just wrote, which
+  // is only `null` when writing a `null` key onto an otherwise-empty
+  // store — a no-op eviction scenario in the first place), so it is left
+  // as a known limitation of the public `CacheStore` API for now rather
+  // than folded into this fix. These tests exist to confirm that stays
+  // true (i.e. this doesn't crash, and it doesn't silently start working,
+  // which would mean the doc comment is now stale).
+  group('CacheStore nullable-K limitation on `excluding` (documented, '
+      'unaffected by the return-type fix above)', () {
     for (final entry in <String, CacheStore<String?, String> Function()>{
       'LRUStore': LRUStore<String?, String>.new,
       'MRUStore': MRUStore<String?, String>.new,
@@ -180,7 +231,7 @@ void main() {
       store.put('b', '2');
       store.access('a');
       // 'b' is now the least-recently-used and should be selected first.
-      expect(store.selectVictim(), equals('b'));
+      expect(store.selectVictim(), equals(('b',)));
     });
 
     test('selectVictim() is the least-recently-used key', () {
@@ -188,7 +239,7 @@ void main() {
       store.put('a', '1');
       store.put('b', '2');
       store.put('c', '3');
-      expect(store.selectVictim(), equals('a'));
+      expect(store.selectVictim(), equals(('a',)));
     });
 
     test('selectVictim(excluding:) falls back to the next-least-recently-used '
@@ -197,7 +248,7 @@ void main() {
       store.put('a', '1');
       store.put('b', '2');
       store.put('c', '3');
-      expect(store.selectVictim(excluding: 'a'), equals('b'));
+      expect(store.selectVictim(excluding: 'a'), equals(('b',)));
     });
   });
 
@@ -207,7 +258,7 @@ void main() {
       store.put('a', '1');
       store.put('b', '2');
       store.put('c', '3');
-      expect(store.selectVictim(), equals('c'));
+      expect(store.selectVictim(), equals(('c',)));
     });
 
     test('selectVictim(excluding:) falls back to the next-most-recent key '
@@ -216,7 +267,7 @@ void main() {
       store.put('a', '1');
       store.put('b', '2');
       store.put('c', '3');
-      expect(store.selectVictim(excluding: 'c'), equals('b'));
+      expect(store.selectVictim(excluding: 'c'), equals(('b',)));
     });
   });
 
@@ -226,7 +277,7 @@ void main() {
       store.put('a', '1');
       store.put('b', '2');
       store.access('a');
-      expect(store.selectVictim(), equals('a'));
+      expect(store.selectVictim(), equals(('a',)));
     });
 
     test('put() on an existing key does not reorder', () {
@@ -234,7 +285,7 @@ void main() {
       store.put('a', '1');
       store.put('b', '2');
       store.put('a', 'updated');
-      expect(store.selectVictim(), equals('a'));
+      expect(store.selectVictim(), equals(('a',)));
     });
 
     test('selectVictim(excluding:) falls back to the next-oldest key when '
@@ -243,7 +294,7 @@ void main() {
       store.put('a', '1');
       store.put('b', '2');
       store.put('c', '3');
-      expect(store.selectVictim(excluding: 'a'), equals('b'));
+      expect(store.selectVictim(excluding: 'a'), equals(('b',)));
     });
   });
 
@@ -253,7 +304,7 @@ void main() {
       store.put('a', '1');
       store.put('b', '2');
       store.access('a');
-      expect(store.selectVictim(), equals('a'));
+      expect(store.selectVictim(), equals(('a',)));
     });
 
     test('put() on an existing key refreshes its position to the newest '
@@ -263,7 +314,7 @@ void main() {
       store.put('a', '1');
       store.put('b', '2');
       store.put('a', 'updated');
-      expect(store.selectVictim(), equals('b'));
+      expect(store.selectVictim(), equals(('b',)));
     });
   });
 
@@ -288,7 +339,7 @@ void main() {
       store.put('a', '1');
       store.put('b', '2');
       store.put('c', '3');
-      expect(store.selectVictim(excluding: 'a'), equals('b'));
+      expect(store.selectVictim(excluding: 'a'), equals(('b',)));
     });
 
     test('accessing the same key twice in a row is safe — the second access '
@@ -314,7 +365,7 @@ void main() {
       store.put('a', '1');
       store.put('b', '2');
       store.access('a'); // 'a' now has frequency 2; 'b' is still at 1
-      expect(store.selectVictim(), equals('b'));
+      expect(store.selectVictim(), equals(('b',)));
     });
 
     test('put() on an existing key preserves frequency', () {
@@ -324,7 +375,7 @@ void main() {
       store.put('b', '2'); // freq(b) = 1
       store.put('a', 'updated'); // should stay at freq 2, not reset to 1
       // 'b' (freq 1) should still be the victim, not 'a'.
-      expect(store.selectVictim(), equals('b'));
+      expect(store.selectVictim(), equals(('b',)));
     });
 
     test('selectVictim(excluding:) falls through to the next occupied '
@@ -337,7 +388,7 @@ void main() {
       // The min-freq (1) bucket contains only 'a', which is excluded, so
       // the store must fall through to the freq-2 bucket and return 'b'
       // rather than reporting "nothing to evict".
-      expect(store.selectVictim(excluding: 'a'), equals('b'));
+      expect(store.selectVictim(excluding: 'a'), equals(('b',)));
       final evicted = store.evictOne(excluding: 'a');
       expect(evicted, isNotNull);
       expect(evicted!.$1, equals('b'));
@@ -388,7 +439,7 @@ void main() {
       store.put('b', '2');
       // Both at frequency 1; 'a' was touched (via put) before 'b', so 'a'
       // is the least-recently-touched within that bucket.
-      expect(store.selectVictim(), equals('a'));
+      expect(store.selectVictim(), equals(('a',)));
     });
 
     // Regression coverage for the O(n) -> O(1) eviction rewrite (this
